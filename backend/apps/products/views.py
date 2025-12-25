@@ -1,11 +1,15 @@
 """
 Views for Product API
 """
-from rest_framework import viewsets, filters
+import logging
+from rest_framework import viewsets, filters, status
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -24,7 +28,25 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
         Override to use all_objects manager for public access
         Bypasses TenantManager filtering for kiosk mode
         """
-        return Category.all_objects.filter(is_active=True)
+        try:
+            qs = Category.all_objects.filter(is_active=True)
+            logger.info(f"CategoryViewSet queryset count: {qs.count()}")
+            return qs
+        except Exception as e:
+            logger.error(f"Error in CategoryViewSet.get_queryset: {e}")
+            raise
+    
+    def list(self, request, *args, **kwargs):
+        """Override list to add detailed logging"""
+        try:
+            logger.info(f"CategoryViewSet.list called - Request: {request.method} {request.path}")
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in CategoryViewSet.list: {e}", exc_info=True)
+            return Response(
+                {'error': str(e), 'detail': 'Failed to fetch categories'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
@@ -44,4 +66,22 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         Override to use all_objects manager for public access
         Bypasses TenantManager filtering for kiosk mode
         """
-        return Product.all_objects.filter(is_available=True).select_related('category').prefetch_related('modifiers')
+        try:
+            qs = Product.all_objects.filter(is_available=True).select_related('category').prefetch_related('modifiers')
+            logger.info(f"ProductViewSet queryset count: {qs.count()}")
+            return qs
+        except Exception as e:
+            logger.error(f"Error in ProductViewSet.get_queryset: {e}")
+            raise
+    
+    def list(self, request, *args, **kwargs):
+        """Override list to add detailed logging"""
+        try:
+            logger.info(f"ProductViewSet.list called - Request: {request.method} {request.path}")
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in ProductViewSet.list: {e}", exc_info=True)
+            return Response(
+                {'error': str(e), 'detail': 'Failed to fetch products'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
