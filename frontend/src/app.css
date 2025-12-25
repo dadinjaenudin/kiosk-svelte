@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Kiosk Mode Specific Styles */
+@layer base {
+	html, body {
+		@apply h-full overflow-hidden;
+	}
+	
+	/* Touch-friendly scrollbars */
+	::-webkit-scrollbar {
+		width: 12px;
+		height: 12px;
+	}
+	
+	::-webkit-scrollbar-track {
+		background: #f1f1f1;
+	}
+	
+	::-webkit-scrollbar-thumb {
+		background: #888;
+		border-radius: 6px;
+	}
+	
+	::-webkit-scrollbar-thumb:hover {
+		background: #555;
+	}
+}
+
+@layer components {
+	/* Kiosk Button Styles */
+	.btn-kiosk {
+		@apply min-h-touch min-w-touch text-kiosk-lg font-bold rounded-2xl 
+		       shadow-lg active:scale-95 transition-transform duration-150
+		       touch-manipulation select-none;
+	}
+	
+	.btn-kiosk-primary {
+		@apply btn-kiosk bg-primary text-white hover:bg-primary/90;
+	}
+	
+	.btn-kiosk-secondary {
+		@apply btn-kiosk bg-secondary text-white hover:bg-secondary/90;
+	}
+	
+	/* Product Card */
+	.product-card {
+		@apply bg-white rounded-2xl shadow-md overflow-hidden
+		       min-h-[200px] flex flex-col
+		       active:scale-95 transition-transform duration-150
+		       touch-manipulation cursor-pointer;
+	}
+	
+	.product-card-image {
+		@apply w-full h-32 object-cover bg-gray-200;
+	}
+	
+	.product-card-body {
+		@apply p-4 flex-1 flex flex-col justify-between;
+	}
+	
+	/* Category Pills */
+	.category-pill {
+		@apply inline-block px-6 py-3 rounded-full text-kiosk-base
+		       font-semibold whitespace-nowrap touch-manipulation
+		       transition-all duration-200;
+	}
+	
+	.category-pill-active {
+		@apply bg-primary text-white;
+	}
+	
+	.category-pill-inactive {
+		@apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+	}
+	
+	/* Cart Item */
+	.cart-item {
+		@apply bg-white rounded-xl p-4 mb-3 shadow-sm
+		       flex items-center justify-between;
+	}
+	
+	/* Modifier Badge */
+	.modifier-badge {
+		@apply inline-block px-3 py-1 rounded-full text-sm
+		       bg-blue-100 text-blue-800 mr-2 mb-2;
+	}
+	
+	/* Payment Method Card */
+	.payment-card {
+		@apply bg-white rounded-2xl p-6 shadow-md
+		       min-h-[120px] flex flex-col items-center justify-center
+		       active:scale-95 transition-transform duration-150
+		       touch-manipulation cursor-pointer border-4 border-transparent;
+	}
+	
+	.payment-card-active {
+		@apply border-primary bg-primary/5;
+	}
+	
+	/* Offline Indicator */
+	.offline-indicator {
+		@apply fixed top-4 right-4 bg-warning text-warning-content
+		       px-4 py-2 rounded-full shadow-lg z-50
+		       flex items-center gap-2 animate-pulse;
+	}
+	
+	/* Loading Spinner */
+	.spinner {
+		@apply animate-spin rounded-full border-4 border-gray-200
+		       border-t-primary;
+	}
+}
+
+@layer utilities {
+	/* Disable text selection for kiosk mode */
+	.no-select {
+		-webkit-user-select: none;
+		-moz-user-select: none;
+		-ms-user-select: none;
+		user-select: none;
+	}
+	
+	/* Full viewport height considering mobile address bar */
+	.h-screen-safe {
+		height: 100vh;
+		height: 100dvh;
+	}
+	
+	/* Touch-friendly tap highlights */
+	.tap-highlight-none {
+		-webkit-tap-highlight-color: transparent;
+	}
+	
+	/* Smooth kinetic scrolling */
+	.scroll-smooth-touch {
+		-webkit-overflow-scrolling: touch;
+		scroll-behavior: smooth;
+	}
+}
+
+/* Fullscreen API Support */
+.fullscreen-enabled {
+	width: 100vw !important;
+	height: 100vh !important;
+}
+
+/* Animation for cart badge */
+@keyframes bounce-in {
+	0% { transform: scale(0); }
+	50% { transform: scale(1.2); }
+	100% { transform: scale(1); }
+}
+
+.animate-bounce-in {
+	animation: bounce-in 0.3s ease-out;
+}
+
+/* Ripple Effect */
+.ripple {
+	position: relative;
+	overflow: hidden;
+}
+
+.ripple::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 0;
+	height: 0;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.5);
+	transform: translate(-50%, -50%);
+	transition: width 0.6s, height 0.6s;
+}
+
+.ripple:active::after {
+	width: 300px;
+	height: 300px;
+}
