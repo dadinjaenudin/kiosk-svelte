@@ -25,7 +25,9 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'users'
+        db_table = 'users_user'
+        verbose_name = 'User'
+        verbose_name_plural = 'Users'
         ordering = ['-created_at']
     
     def __str__(self):
