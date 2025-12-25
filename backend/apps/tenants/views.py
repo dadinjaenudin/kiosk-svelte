@@ -4,7 +4,7 @@ Views for Tenant API
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from apps.tenants.models import Tenant, Outlet
 from apps.tenants.serializers import (
     TenantSerializer,
@@ -14,6 +14,38 @@ from apps.tenants.serializers import (
 )
 from apps.core.permissions import has_permission, require_permission
 from apps.core.context import get_current_tenant
+
+
+class PublicTenantViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Public ViewSet for Tenant (Kiosk Mode)
+    
+    list: List all active tenants
+    retrieve: Get tenant details
+    outlets: Get outlets for a tenant
+    """
+    
+    queryset = Tenant.objects.filter(is_active=True)
+    serializer_class = TenantSerializer
+    permission_classes = [AllowAny]  # Public access for kiosk
+    
+    def get_serializer_class(self):
+        """Use detailed serializer for retrieve"""
+        if self.action == 'retrieve':
+            return TenantDetailSerializer
+        return TenantSerializer
+    
+    @action(detail=True, methods=['get'])
+    def outlets(self, request, pk=None):
+        """
+        Get outlets for a specific tenant
+        
+        GET /api/public/tenants/{id}/outlets/
+        """
+        tenant = self.get_object()
+        outlets = Outlet.objects.filter(tenant=tenant, is_active=True)
+        serializer = OutletSerializer(outlets, many=True)
+        return Response(serializer.data)
 
 
 class TenantViewSet(viewsets.ReadOnlyModelViewSet):

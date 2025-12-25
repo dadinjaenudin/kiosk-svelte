@@ -22,9 +22,21 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """
         Use all_objects manager to bypass TenantManager filtering
-        This allows public kiosk access without tenant context
+        Filter by X-Tenant-ID header if provided
         """
-        queryset = Category.all_objects.filter(is_active=True)
+        # Get tenant ID from header
+        tenant_id = self.request.headers.get('X-Tenant-ID')
+        
+        if tenant_id:
+            # Filter by specific tenant
+            queryset = Category.all_objects.filter(
+                tenant_id=tenant_id,
+                is_active=True
+            )
+        else:
+            # Return all if no tenant specified (backward compatible)
+            queryset = Category.all_objects.filter(is_active=True)
+        
         return queryset
 
 
@@ -43,9 +55,21 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """
         Use all_objects manager to bypass TenantManager filtering
-        This allows public kiosk access without tenant context
+        Filter by X-Tenant-ID header if provided
         """
-        queryset = Product.all_objects.filter(is_available=True) \
-            .select_related('category') \
-            .prefetch_related('modifiers')
+        # Get tenant ID from header
+        tenant_id = self.request.headers.get('X-Tenant-ID')
+        
+        if tenant_id:
+            # Filter by specific tenant
+            queryset = Product.all_objects.filter(
+                tenant_id=tenant_id,
+                is_available=True
+            ).select_related('category').prefetch_related('modifiers')
+        else:
+            # Return all if no tenant specified (backward compatible)
+            queryset = Product.all_objects.filter(
+                is_available=True
+            ).select_related('category').prefetch_related('modifiers')
+        
         return queryset

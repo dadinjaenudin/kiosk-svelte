@@ -33,6 +33,7 @@ class TenantMiddleware(MiddlewareMixin):
         '/api/auth/register/',
         '/api/auth/refresh/',
         '/api/health/',
+        '/api/public/',  # Public kiosk endpoints (tenants, etc)
         '/api/products/',  # Public kiosk API
         '/admin/',
         '/static/',
