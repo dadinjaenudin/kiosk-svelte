@@ -3,21 +3,16 @@
 	
 	const dispatch = createEventDispatcher();
 	
-	export let tenant = null;
-	export let outlets = [];
+	export let tenants = [];
 	export let loading = false;
 	
-	function selectOutlet(outlet) {
-		dispatch('select', outlet);
-	}
-	
-	function goBack() {
-		dispatch('back');
+	function selectTenant(tenant) {
+		dispatch('select', tenant);
 	}
 </script>
 
 <style>
-	.outlet-selection {
+	.tenant-selection {
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
@@ -27,7 +22,7 @@
 		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 	}
 	
-	.outlet-card {
+	.tenant-card {
 		background: white;
 		border-radius: 1.5rem;
 		padding: 3rem;
@@ -48,28 +43,6 @@
 		}
 	}
 	
-	.back-button {
-		margin-bottom: 1.5rem;
-		padding: 0.75rem 1.5rem;
-		border-radius: 0.75rem;
-		border: 2px solid #e2e8f0;
-		background: white;
-		cursor: pointer;
-		font-size: 1rem;
-		font-weight: 600;
-		color: #4a5568;
-		transition: all 0.2s;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	
-	.back-button:hover {
-		border-color: #cbd5e0;
-		background: #f7fafc;
-		transform: translateX(-2px);
-	}
-	
 	.title {
 		font-size: 2.5rem;
 		font-weight: 800;
@@ -85,40 +58,61 @@
 		font-size: 1.125rem;
 	}
 	
-	.outlet-list {
+	.tenant-list {
 		display: grid;
 		gap: 1rem;
 	}
 	
-	.outlet-item {
+	.tenant-item {
 		padding: 1.75rem;
 		border: 2px solid #e2e8f0;
 		border-radius: 1rem;
 		cursor: pointer;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		background: white;
+		position: relative;
+		overflow: hidden;
 	}
 	
-	.outlet-item:hover {
+	.tenant-item::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		opacity: 0;
+		transition: opacity 0.3s;
+		z-index: 0;
+	}
+	
+	.tenant-item:hover::before {
+		opacity: 0.05;
+	}
+	
+	.tenant-item:hover {
 		border-color: #667eea;
 		box-shadow: 0 8px 24px rgba(102, 126, 234, 0.25);
 		transform: translateY(-4px);
 	}
 	
-	.outlet-name {
+	.tenant-content {
+		position: relative;
+		z-index: 1;
+	}
+	
+	.tenant-name {
 		font-weight: 700;
 		font-size: 1.5rem;
 		margin-bottom: 0.5rem;
 		color: #2d3748;
 	}
 	
-	.outlet-address {
+	.tenant-description {
 		color: #718096;
 		font-size: 1rem;
 		line-height: 1.5;
-		display: flex;
-		align-items: start;
-		gap: 0.5rem;
 	}
 	
 	.loading-spinner {
@@ -140,30 +134,45 @@
 		0% { transform: rotate(0deg); }
 		100% { transform: rotate(360deg); }
 	}
+	
+	.empty-state {
+		text-align: center;
+		padding: 3rem;
+		color: #718096;
+	}
+	
+	.empty-icon {
+		font-size: 4rem;
+		margin-bottom: 1rem;
+		opacity: 0.5;
+	}
 </style>
 
-<div class="outlet-selection">
-	<div class="outlet-card">
-		<button class="back-button" on:click={goBack}>
-			← Back
-		</button>
-		
-		<h1 class="title">📍 Select Location</h1>
-		<p class="subtitle">{tenant?.name || 'Select your location'}</p>
+<div class="tenant-selection">
+	<div class="tenant-card">
+		<h1 class="title">🏪 Welcome!</h1>
+		<p class="subtitle">Select your restaurant to begin ordering</p>
 		
 		{#if loading}
 			<div class="loading-spinner">
 				<div class="spinner"></div>
-				<p style="margin-top: 1rem; color: #718096;">Loading locations...</p>
+				<p style="margin-top: 1rem; color: #718096;">Loading restaurants...</p>
+			</div>
+		{:else if tenants.length === 0}
+			<div class="empty-state">
+				<div class="empty-icon">🍽️</div>
+				<p style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">No restaurants available</p>
+				<p style="font-size: 0.875rem;">Please contact support</p>
 			</div>
 		{:else}
-			<div class="outlet-list">
-				{#each outlets as outlet}
-					<div class="outlet-item" on:click={() => selectOutlet(outlet)} on:keypress={() => selectOutlet(outlet)} role="button" tabindex="0">
-						<h3 class="outlet-name">{outlet.name}</h3>
-						<div class="outlet-address">
-							<span>📍</span>
-							<span>{outlet.address}, {outlet.city}</span>
+			<div class="tenant-list">
+				{#each tenants as tenant}
+					<div class="tenant-item" on:click={() => selectTenant(tenant)} on:keypress={() => selectTenant(tenant)} role="button" tabindex="0">
+						<div class="tenant-content">
+							<h3 class="tenant-name">{tenant.name}</h3>
+							{#if tenant.description}
+								<p class="tenant-description">{tenant.description}</p>
+							{/if}
 						</div>
 					</div>
 				{/each}
