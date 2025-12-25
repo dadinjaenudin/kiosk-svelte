@@ -7,6 +7,7 @@
 	
 	// SvelteKit props (suppress warnings)
 	export let data = undefined;
+	export let params = undefined;
 	
 	// State management
 	let products = [];
