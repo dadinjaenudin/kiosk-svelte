@@ -28,6 +28,8 @@ urlpatterns = [
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
     # App APIs
+    path('api/', include('apps.tenants.urls')),  # Tenant & Outlet management
+    path('api/', include('apps.users.urls')),    # User management
     path('api/products/', include('apps.products.urls')),
     # path('api/orders/', include('apps.orders.urls')),
     # path('api/payments/', include('apps.payments.urls')),

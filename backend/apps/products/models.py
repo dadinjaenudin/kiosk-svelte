@@ -2,10 +2,11 @@
 Product models untuk menu management
 """
 from django.db import models
+from apps.core.models import TenantModel
 from apps.tenants.models import Tenant, Outlet
 
 
-class Category(models.Model):
+class Category(TenantModel):
     """
     Product category
     """
@@ -27,7 +28,7 @@ class Category(models.Model):
         return f"{self.tenant.name} - {self.name}"
 
 
-class Product(models.Model):
+class Product(TenantModel):
     """
     Product/Menu item
     """
