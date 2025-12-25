@@ -134,7 +134,7 @@ services:
       - static_volume:/var/www/static
       - media_volume:/var/www/media
     ports:
-      - "8080:80"  # Changed from 80 to 8080 to avoid conflicts
+      - "8082:80"  # Changed from 8080 to 8082 to avoid conflicts
       - "8443:443"  # Changed from 443 to 8443 to avoid conflicts
     depends_on:
       - backend

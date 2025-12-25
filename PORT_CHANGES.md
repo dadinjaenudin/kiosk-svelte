@@ -10,7 +10,7 @@
 | **Redis** | 6379 | **6380** | 6379 |
 | **Backend API** | 8000 | **8001** | 8000 |
 | **Frontend** | 5173 | **5174** | 5173 |
-| **Nginx HTTP** | 80 | **8080** | 80 |
+| **Nginx HTTP** | 80 | **8082** | 80 |
 | **Nginx HTTPS** | 443 | **8443** | 443 |
 
 ### Container Names (Renamed)
@@ -35,7 +35,7 @@
 | **👤 Admin Panel** | `http://localhost:8001/admin` |
 | **📖 API Docs** | `http://localhost:8001/api/docs` |
 | **🔌 Backend API** | `http://localhost:8001/api` |
-| **🌐 Nginx Proxy** | `http://localhost:8080` |
+| **🌐 Nginx Proxy** | `http://localhost:8082` |
 
 ---
 
@@ -97,7 +97,7 @@ curl http://localhost:8001/api/health
 curl http://localhost:5174
 
 # Check Nginx
-curl http://localhost:8080/health
+curl http://localhost:8082/health
 ```
 
 ---
@@ -108,7 +108,7 @@ curl http://localhost:8080/health
 - **Port 6379** → **6380**: Redis default port may be in use
 - **Port 8000** → **8001**: Common Django dev server port conflict
 - **Port 5173** → **5174**: Vite dev server may be running elsewhere
-- **Port 80** → **8080**: Requires root privileges, 8080 is standard alternative
+- **Port 80** → **8082**: Requires root privileges, 8082 is standard alternative
 - **Port 443** → **8443**: Requires root privileges and SSL cert
 
 ---
@@ -170,7 +170,7 @@ lsof -i :5433  # PostgreSQL
 lsof -i :6380  # Redis
 lsof -i :8001  # Backend
 lsof -i :5174  # Frontend
-lsof -i :8080  # Nginx
+lsof -i :8082  # Nginx
 
 # Kill process using port
 kill -9 $(lsof -ti:5433)
