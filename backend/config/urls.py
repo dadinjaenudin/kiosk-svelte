@@ -27,8 +27,8 @@ urlpatterns = [
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
-    # App APIs (to be implemented)
-    # path('api/products/', include('apps.products.urls')),
+    # App APIs
+    path('api/products/', include('apps.products.urls')),
     # path('api/orders/', include('apps.orders.urls')),
     # path('api/payments/', include('apps.payments.urls')),
     # path('api/kitchen/', include('apps.kitchen.urls')),

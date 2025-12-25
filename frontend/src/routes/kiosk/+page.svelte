@@ -57,8 +57,27 @@
 	});
 	
 	async function syncWithServer() {
-		// TODO: Implement server sync
-		console.log('Syncing with server...');
+		try {
+			console.log('Syncing with server...');
+			
+			// Fetch categories from API
+			const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
+			
+			const categoriesRes = await fetch(`${apiUrl}/products/categories/`);
+			if (categoriesRes.ok) {
+				categories = await categoriesRes.json();
+				console.log('Categories loaded:', categories.length);
+			}
+			
+			// Fetch products from API
+			const productsRes = await fetch(`${apiUrl}/products/products/`);
+			if (productsRes.ok) {
+				products = await productsRes.json();
+				console.log('Products loaded:', products.length);
+			}
+		} catch (error) {
+			console.error('Error syncing with server:', error);
+		}
 	}
 	
 	function handleOnline() {
