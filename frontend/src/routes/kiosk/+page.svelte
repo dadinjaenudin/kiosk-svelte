@@ -20,7 +20,7 @@
 	
 	// Filtered products
 	$: filteredProducts = selectedCategory 
-		? products.filter(p => p.category_id === selectedCategory)
+		? products.filter(p => p.category === selectedCategory)
 		: products;
 	
 	// Load data on mount
@@ -82,6 +82,9 @@
 					console.warn('Unexpected categories response format');
 				}
 				console.log('Categories loaded:', categories.length);
+				if (categories.length > 0) {
+					console.log('First category:', categories[0]);
+				}
 			} else {
 				console.error('Categories API failed:', categoriesRes.status);
 			}
@@ -102,6 +105,10 @@
 					console.warn('Unexpected products response format');
 				}
 				console.log('Products loaded:', products.length);
+				if (products.length > 0) {
+					console.log('First product:', products[0]);
+					console.log('Product category field:', products[0].category);
+				}
 			} else {
 				console.error('Products API failed:', productsRes.status);
 			}
@@ -117,6 +124,12 @@
 	
 	function handleOffline() {
 		isOnline.set(false);
+	}
+	
+	function selectCategory(categoryId) {
+		selectedCategory = categoryId;
+		console.log('Category selected:', categoryId);
+		console.log('Filtered products:', filteredProducts.length);
 	}
 	
 	function handleKeyboard(e) {
@@ -224,14 +237,14 @@
 			<div class="bg-white px-8 py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
 				<div class="flex gap-4">
 					<button 
-						on:click={() => selectedCategory = null}
+						on:click={() => selectCategory(null)}
 						class="category-pill {selectedCategory === null ? 'category-pill-active' : 'category-pill-inactive'}"
 					>
 						All Items
 					</button>
 					{#each categories as category}
 						<button 
-							on:click={() => selectedCategory = category.id}
+							on:click={() => selectCategory(category.id)}
 							class="category-pill {selectedCategory === category.id ? 'category-pill-active' : 'category-pill-inactive'}"
 						>
 							{category.name}
