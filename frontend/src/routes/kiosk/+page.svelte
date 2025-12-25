@@ -69,15 +69,41 @@
 			
 			const categoriesRes = await fetch(`${apiUrl}/products/categories/`);
 			if (categoriesRes.ok) {
-				categories = await categoriesRes.json();
+				const categoriesData = await categoriesRes.json();
+				console.log('Categories API response:', categoriesData);
+				
+				// Handle both array and paginated response
+				if (Array.isArray(categoriesData)) {
+					categories = categoriesData;
+				} else if (categoriesData.results) {
+					categories = categoriesData.results; // Paginated response
+				} else {
+					categories = [];
+					console.warn('Unexpected categories response format');
+				}
 				console.log('Categories loaded:', categories.length);
+			} else {
+				console.error('Categories API failed:', categoriesRes.status);
 			}
 			
 			// Fetch products from API
 			const productsRes = await fetch(`${apiUrl}/products/products/`);
 			if (productsRes.ok) {
-				products = await productsRes.json();
+				const productsData = await productsRes.json();
+				console.log('Products API response:', productsData);
+				
+				// Handle both array and paginated response
+				if (Array.isArray(productsData)) {
+					products = productsData;
+				} else if (productsData.results) {
+					products = productsData.results; // Paginated response
+				} else {
+					products = [];
+					console.warn('Unexpected products response format');
+				}
 				console.log('Products loaded:', products.length);
+			} else {
+				console.error('Products API failed:', productsRes.status);
 			}
 		} catch (error) {
 			console.error('Error syncing with server:', error);
