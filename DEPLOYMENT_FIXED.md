@@ -1,9 +1,14 @@
 # 🚀 Deployment Guide - Fixed & Ready
 
-## ✅ Problem SOLVED - Docker Build Error Fixed
+## ✅ All Docker Build Errors SOLVED
 
-**Issue**: `xendit-python==2.14.0` tidak tersedia di PyPI  
-**Solution**: Implementasi **Custom REST API Clients** untuk Xendit & Midtrans (lebih reliable dan maintainable)
+**Issue 1**: `xendit-python==2.14.0` tidak tersedia di PyPI  
+**Solution**: Implementasi **Custom REST API Clients** untuk Xendit & Midtrans ✅
+
+**Issue 2**: Frontend build fails with `Could not load /app/src/lib/stores/cart`  
+**Solution**: Remove build step from dev Dockerfile, add explicit .js extensions ✅
+
+**Status**: 🎉 **FULLY FIXED - READY TO DEPLOY**
 
 ---
 
@@ -184,13 +189,24 @@ docker-compose up -d
 ### ❌ Frontend Build Error
 
 ```bash
+# Error: Could not load /app/src/lib/stores/cart
+# This is now FIXED in latest version
+
+# Make sure you have latest code
+git pull origin main
+
+# Rebuild frontend
+docker-compose build --no-cache frontend
+docker-compose up -d frontend
+
 # Check logs
 docker-compose logs frontend
-
-# Rebuild frontend container
-docker-compose build --no-cache frontend
-docker-compose up -d
 ```
+
+**What was fixed:**
+- Removed `npm run build` from dev Dockerfile (not needed for dev server)
+- Added explicit `.js` extensions in imports
+- Created separate `Dockerfile.prod` for production builds
 
 ### ❌ Database Connection Error
 
@@ -338,9 +354,9 @@ print(snap['redirect_url'])  # Payment page URL
 
 **GitHub Repository**: [https://github.com/dadinjaenudin/kiosk-svelte](https://github.com/dadinjaenudin/kiosk-svelte)
 
-**Latest Commit**: `d5d31e9` - Fix xendit SDK, implement REST API clients
+**Latest Commit**: `532c1ce` - Fix frontend Docker build for dev mode
 
-**Status**: ✅ **DOCKER BUILD FIXED - READY TO DEPLOY**
+**Status**: ✅ **ALL DOCKER BUILD ERRORS FIXED - READY TO DEPLOY**
 
 ---
 
