@@ -4,7 +4,6 @@ Views for Product API
 from rest_framework import viewsets, filters
 from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
-from apps.core.permissions import TenantPermission
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
 
