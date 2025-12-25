@@ -76,14 +76,14 @@ else
 fi
 
 # Check Backend API
-if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+if curl -f http://localhost:8001/api/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend API is responding${NC}"
 else
     echo -e "${YELLOW}⚠️  Backend API not responding yet (may need migration)${NC}"
 fi
 
 # Check Frontend
-if curl -f http://localhost:5173 > /dev/null 2>&1; then
+if curl -f http://localhost:5174 > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Frontend is responding${NC}"
 else
     echo -e "${YELLOW}⚠️  Frontend not responding yet${NC}"
@@ -115,12 +115,13 @@ echo "🎉 Deployment Complete!"
 echo ""
 echo "📍 Access Points:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${GREEN}🖥️  Kiosk Mode:${NC}     http://localhost:5173/kiosk"
-echo -e "${GREEN}👤 Admin Panel:${NC}    http://localhost:8000/admin"
+echo -e "${GREEN}🖥️  Kiosk Mode:${NC}     http://localhost:5174/kiosk"
+echo -e "${GREEN}👤 Admin Panel:${NC}    http://localhost:8001/admin"
 echo -e "                     ${YELLOW}Username: admin${NC}"
 echo -e "                     ${YELLOW}Password: admin123${NC}"
-echo -e "${GREEN}📖 API Docs:${NC}       http://localhost:8000/api/docs"
-echo -e "${GREEN}🔌 Backend API:${NC}    http://localhost:8000/api"
+echo -e "${GREEN}📖 API Docs:${NC}       http://localhost:8001/api/docs"
+echo -e "${GREEN}🔌 Backend API:${NC}    http://localhost:8001/api"
+echo -e "${GREEN}🌐 Nginx Proxy:${NC}   http://localhost:8080"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📊 View logs:"

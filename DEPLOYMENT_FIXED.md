@@ -134,17 +134,27 @@ curl http://localhost:5173
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **🖥️ Kiosk Mode** | `http://localhost:5173/kiosk` | - |
-| **👤 Admin Panel** | `http://localhost:8000/admin` | `admin` / `admin123` |
-| **📖 API Docs (Swagger)** | `http://localhost:8000/api/docs` | - |
-| **📋 API Schema** | `http://localhost:8000/api/schema` | - |
-| **🔌 Backend API** | `http://localhost:8000/api` | JWT Required |
+| **🖥️ Kiosk Mode** | `http://localhost:5174/kiosk` | - |
+| **👤 Admin Panel** | `http://localhost:8001/admin` | `admin` / `admin123` |
+| **📖 API Docs (Swagger)** | `http://localhost:8001/api/docs` | - |
+| **📋 API Schema** | `http://localhost:8001/api/schema` | - |
+| **🔌 Backend API** | `http://localhost:8001/api` | JWT Required |
+| **🌐 Nginx Proxy** | `http://localhost:8080` | - |
+
+**⚠️ Port Changes**: To avoid conflicts, ports have been updated:
+- Frontend: **5174** (was 5173)
+- Backend: **8001** (was 8000)  
+- PostgreSQL: **5433** (was 5432)
+- Redis: **6380** (was 6379)
+- Nginx: **8080** (was 80)
+
+See [PORT_CHANGES.md](./PORT_CHANGES.md) for details.
 
 ---
 
 ## 🧪 Testing Kiosk Mode
 
-1. **Buka Kiosk Mode**: `http://localhost:5173/kiosk`
+1. **Buka Kiosk Mode**: `http://localhost:5174/kiosk`
 2. **Tekan F11**: Untuk fullscreen mode
 3. **Browse Products**: 20 dummy products sudah tersedia
 4. **Filter by Category**: Tap kategori (Makanan Utama, Minuman, dll.)
