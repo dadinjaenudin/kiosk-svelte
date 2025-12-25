@@ -1,5 +1,6 @@
 /**
  * API Client for Backend Communication
+ * Enhanced with Multi-Tenant Support
  */
 
 const API_BASE_URL = typeof window !== 'undefined' 
@@ -11,10 +12,14 @@ class APIClient {
 		this.baseURL = baseURL;
 		this.accessToken = null;
 		this.refreshToken = null;
+		this.tenantId = null;
+		this.outletId = null;
 		
 		if (typeof window !== 'undefined') {
 			this.accessToken = localStorage.getItem('access_token');
 			this.refreshToken = localStorage.getItem('refresh_token');
+			this.tenantId = localStorage.getItem('tenant_id');
+			this.outletId = localStorage.getItem('outlet_id');
 		}
 	}
 	
@@ -32,20 +37,46 @@ class APIClient {
 	}
 	
 	/**
+	 * Set tenant context
+	 */
+	setTenantContext(tenantId, outletId = null) {
+		this.tenantId = tenantId;
+		this.outletId = outletId;
+		
+		if (typeof window !== 'undefined') {
+			if (tenantId) {
+				localStorage.setItem('tenant_id', tenantId);
+			} else {
+				localStorage.removeItem('tenant_id');
+			}
+			
+			if (outletId) {
+				localStorage.setItem('outlet_id', outletId);
+			} else {
+				localStorage.removeItem('outlet_id');
+			}
+		}
+	}
+	
+	/**
 	 * Clear authentication tokens
 	 */
 	clearTokens() {
 		this.accessToken = null;
 		this.refreshToken = null;
+		this.tenantId = null;
+		this.outletId = null;
 		
 		if (typeof window !== 'undefined') {
 			localStorage.removeItem('access_token');
 			localStorage.removeItem('refresh_token');
+			localStorage.removeItem('tenant_id');
+			localStorage.removeItem('outlet_id');
 		}
 	}
 	
 	/**
-	 * Get authorization headers
+	 * Get authorization headers (including tenant context)
 	 */
 	getAuthHeaders() {
 		const headers = {
@@ -54,6 +85,15 @@ class APIClient {
 		
 		if (this.accessToken) {
 			headers['Authorization'] = `Bearer ${this.accessToken}`;
+		}
+		
+		// Add tenant context headers
+		if (this.tenantId) {
+			headers['X-Tenant-ID'] = String(this.tenantId);
+		}
+		
+		if (this.outletId) {
+			headers['X-Outlet-ID'] = String(this.outletId);
 		}
 		
 		return headers;
