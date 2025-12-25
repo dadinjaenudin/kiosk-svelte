@@ -1,0 +1,131 @@
+"""
+Product models untuk menu management
+"""
+from django.db import models
+from apps.tenants.models import Tenant, Outlet
+
+
+class Category(models.Model):
+    """
+    Product category
+    """
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='categories')
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    image = models.ImageField(upload_to='categories/', null=True, blank=True)
+    sort_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'categories'
+        ordering = ['sort_order', 'name']
+        verbose_name_plural = 'Categories'
+    
+    def __str__(self):
+        return f"{self.tenant.name} - {self.name}"
+
+
+class Product(models.Model):
+    """
+    Product/Menu item
+    """
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='products')
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
+    
+    sku = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    image = models.ImageField(upload_to='products/', null=True, blank=True)
+    
+    # Pricing
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Stock
+    track_stock = models.BooleanField(default=False)
+    stock_quantity = models.IntegerField(default=0)
+    low_stock_alert = models.IntegerField(default=10)
+    
+    # Flags
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+    is_available = models.BooleanField(default=True)
+    
+    # Metadata
+    preparation_time = models.IntegerField(default=10, help_text='Preparation time in minutes')
+    calories = models.IntegerField(null=True, blank=True)
+    tags = models.CharField(max_length=500, blank=True, help_text='Comma-separated tags')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'products'
+        ordering = ['category', 'name']
+    
+    def __str__(self):
+        return f"{self.name} - Rp {self.price:,.0f}"
+    
+    @property
+    def is_low_stock(self):
+        if self.track_stock:
+            return self.stock_quantity <= self.low_stock_alert
+        return False
+
+
+class ProductModifier(models.Model):
+    """
+    Product modifiers (size, toppings, level pedas, etc)
+    """
+    MODIFIER_TYPES = (
+        ('size', 'Size'),
+        ('topping', 'Topping'),
+        ('spicy', 'Spicy Level'),
+        ('extra', 'Extra'),
+        ('sauce', 'Sauce'),
+    )
+    
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='modifiers')
+    name = models.CharField(max_length=200)
+    type = models.CharField(max_length=20, choices=MODIFIER_TYPES, default='extra')
+    price_adjustment = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    
+    class Meta:
+        db_table = 'product_modifiers'
+        ordering = ['sort_order', 'name']
+    
+    def __str__(self):
+        return f"{self.product.name} - {self.name} (+Rp {self.price_adjustment:,.0f})"
+
+
+class OutletProduct(models.Model):
+    """
+    Product availability and pricing per outlet
+    """
+    outlet = models.ForeignKey(Outlet, on_delete=models.CASCADE, related_name='outlet_products')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='outlet_products')
+    
+    # Outlet-specific pricing
+    price_override = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    is_available = models.BooleanField(default=True)
+    
+    # Outlet-specific stock
+    stock_quantity = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'outlet_products'
+        unique_together = [['outlet', 'product']]
+    
+    def __str__(self):
+        return f"{self.outlet.name} - {self.product.name}"
+    
+    @property
+    def effective_price(self):
+        return self.price_override or self.product.price
