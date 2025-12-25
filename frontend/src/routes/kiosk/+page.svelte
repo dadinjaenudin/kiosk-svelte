@@ -3,12 +3,13 @@
 	import { writable } from 'svelte/store';
 	import { cartItems, cartTotals, loadCart, addProductToCart, updateQuantity, removeCartItem, clearAllCart } from '$stores/cart.js';
 	import { getProducts, getCategories } from '$db/index.js';
+	import { browser } from '$app/environment';
 	
 	// State management
 	let products = [];
 	let categories = [];
 	let selectedCategory = null;
-	let isOnline = writable(navigator.onLine);
+	let isOnline = writable(browser ? navigator.onLine : true);
 	let showCart = false;
 	let isFullscreen = false;
 	let loading = true;
@@ -90,12 +91,13 @@
 	}
 	
 	function playHapticFeedback() {
-		if (navigator.vibrate) {
+		if (browser && navigator.vibrate) {
 			navigator.vibrate(50);
 		}
 	}
 	
 	function enterFullscreen() {
+		if (!browser) return;
 		const elem = document.documentElement;
 		if (elem.requestFullscreen) {
 			elem.requestFullscreen().catch(err => {
@@ -105,6 +107,7 @@
 	}
 	
 	function toggleFullscreen() {
+		if (!browser) return;
 		if (!document.fullscreenElement) {
 			enterFullscreen();
 			isFullscreen = true;
@@ -118,12 +121,12 @@
 	
 	async function handleCheckout() {
 		if ($cartItems.length === 0) {
-			alert('Cart is empty!');
+			if (browser) alert('Cart is empty!');
 			return;
 		}
 		
 		// Navigate to payment page
-		window.location.href = '/kiosk/payment';
+		if (browser) window.location.href = '/kiosk/payment';
 	}
 	
 	function formatPrice(price) {
