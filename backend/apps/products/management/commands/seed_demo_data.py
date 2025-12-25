@@ -7,6 +7,7 @@ from apps.tenants.models import Tenant, Outlet
 from apps.products.models import Category, Product, ProductModifier
 from apps.orders.models import Order, OrderItem
 from apps.payments.models import Payment
+from apps.core.context import set_current_tenant, clear_tenant_context
 from decimal import Decimal
 
 User = get_user_model()
@@ -16,6 +17,9 @@ class Command(BaseCommand):
     help = 'Seed dummy data untuk demo POS system'
 
     def handle(self, *args, **options):
+        # Clear any existing context
+        clear_tenant_context()
+        
         self.stdout.write(self.style.SUCCESS('🌱 Starting data seeding...'))
         
         # 1. Create Tenant
@@ -32,6 +36,9 @@ class Command(BaseCommand):
             }
         )
         self.stdout.write(self.style.SUCCESS(f'✓ Tenant: {tenant.name}'))
+        
+        # Set tenant context for the rest of the seeding
+        set_current_tenant(tenant)
         
         # 2. Create Outlets
         self.stdout.write('Creating outlets...')
@@ -277,3 +284,6 @@ class Command(BaseCommand):
         self.stdout.write('   Admin    - username: admin, password: admin123')
         self.stdout.write('   Cashier  - username: cashier, password: cashier123')
         self.stdout.write('\n🌐 Access the Kiosk Mode at: http://localhost:5173/kiosk')
+        
+        # Clear tenant context
+        clear_tenant_context()
