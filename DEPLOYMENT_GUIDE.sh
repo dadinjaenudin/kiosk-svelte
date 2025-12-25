@@ -1,0 +1,82 @@
+#!/bin/bash
+
+echo "🔧 PHASE 2 MIGRATION & DEPLOYMENT GUIDE"
+echo "========================================"
+echo ""
+
+echo "📋 Step 1: Pull Latest Code"
+echo "----------------------------"
+echo "cd D:\YOGYA-Kiosk\kiosk-svelte"
+echo "git pull origin main"
+echo ""
+
+echo "📋 Step 2: Stop All Containers"
+echo "------------------------------"
+echo "docker-compose down"
+echo ""
+
+echo "📋 Step 3: Remove Old Volumes (OPTIONAL - Only if schema changed)"
+echo "----------------------------------------------------------------"
+echo "⚠️  WARNING: This will delete all data!"
+echo "docker volume ls | grep kiosk"
+echo "docker volume rm kiosk-svelte_postgres_data"
+echo ""
+
+echo "📋 Step 4: Rebuild Containers"
+echo "----------------------------"
+echo "docker-compose build backend"
+echo ""
+
+echo "📋 Step 5: Start Database First"
+echo "------------------------------"
+echo "docker-compose up -d db"
+echo "sleep 10  # Wait for PostgreSQL to be ready"
+echo ""
+
+echo "📋 Step 6: Run Migrations"
+echo "------------------------"
+echo "docker-compose run --rm backend python manage.py makemigrations"
+echo "docker-compose run --rm backend python manage.py migrate"
+echo ""
+
+echo "📋 Step 7: Create Superuser (Optional)"
+echo "-------------------------------------"
+echo "docker-compose run --rm backend python manage.py createsuperuser"
+echo ""
+
+echo "📋 Step 8: Seed Demo Data"
+echo "-----------------------"
+echo "docker-compose run --rm backend python manage.py seed_demo_data"
+echo ""
+
+echo "📋 Step 9: Start All Services"
+echo "----------------------------"
+echo "docker-compose up -d"
+echo ""
+
+echo "📋 Step 10: Verify Services"
+echo "--------------------------"
+echo "docker-compose ps"
+echo "docker-compose logs backend | tail -20"
+echo ""
+
+echo "📋 Step 11: Test API"
+echo "------------------"
+echo "curl http://localhost:8001/api/health/"
+echo "curl http://localhost:8001/api/products/categories/"
+echo "curl http://localhost:8001/api/products/products/"
+echo ""
+
+echo "📋 Step 12: Open Frontend"
+echo "-----------------------"
+echo "http://localhost:5174/kiosk"
+echo ""
+
+echo "✅ Deployment Complete!"
+echo ""
+echo "📝 Quick Troubleshooting:"
+echo "  - Backend won't start: Check logs with 'docker-compose logs backend'"
+echo "  - Migration errors: Try 'docker-compose run --rm backend python manage.py migrate --fake-initial'"
+echo "  - No data: Run 'docker-compose exec backend python manage.py seed_demo_data'"
+echo "  - 400 errors: Restart backend 'docker-compose restart backend'"
+echo ""
