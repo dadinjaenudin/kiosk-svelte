@@ -12,11 +12,8 @@ RUN npm install
 # Copy project files
 COPY . .
 
-# Build the application
-RUN npm run build
-
 # Expose port
 EXPOSE 5173
 
-# Start development server
+# Start development server (no build needed for dev mode)
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

@@ -1,8 +1,8 @@
 <script>
 	import { onMount } from 'svelte';
 	import { writable } from 'svelte/store';
-	import { cartItems, cartTotals, loadCart, addProductToCart, updateQuantity, removeCartItem, clearAllCart } from '$stores/cart';
-	import { getProducts, getCategories } from '$db';
+	import { cartItems, cartTotals, loadCart, addProductToCart, updateQuantity, removeCartItem, clearAllCart } from '$stores/cart.js';
+	import { getProducts, getCategories } from '$db/index.js';
 	
 	// State management
 	let products = [];
