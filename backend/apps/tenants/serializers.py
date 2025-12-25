@@ -11,15 +11,15 @@ class TenantSerializer(serializers.ModelSerializer):
     """
     
     outlet_count = serializers.SerializerMethodField()
+    logo_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Tenant
         fields = [
             'id', 'slug', 'name', 'description',
             'phone', 'email', 'website',
-            'subscription_plan', 'subscription_status',
             'tax_rate', 'service_charge_rate',
-            'settings', 'logo_url', 'primary_color',
+            'logo_url', 'primary_color', 'secondary_color',
             'is_active', 'created_at', 'outlet_count'
         ]
         read_only_fields = ['id', 'created_at', 'outlet_count']
@@ -27,6 +27,15 @@ class TenantSerializer(serializers.ModelSerializer):
     def get_outlet_count(self, obj):
         """Get number of outlets for this tenant"""
         return obj.outlets.filter(is_active=True).count()
+    
+    def get_logo_url(self, obj):
+        """Get logo URL"""
+        if obj.logo:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.logo.url)
+            return obj.logo.url
+        return None
 
 
 class TenantDetailSerializer(TenantSerializer):
@@ -51,18 +60,25 @@ class OutletSerializer(serializers.ModelSerializer):
     """
     
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
+    operating_hours = serializers.SerializerMethodField()
     
     class Meta:
         model = Outlet
         fields = [
             'id', 'tenant', 'tenant_name', 'slug', 'name',
-            'address', 'city', 'province', 'postal_code', 'country',
+            'address', 'city', 'province', 'postal_code',
             'phone', 'email',
             'latitude', 'longitude',
-            'operating_hours',
+            'opening_time', 'closing_time', 'operating_hours',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'tenant_name', 'created_at']
+    
+    def get_operating_hours(self, obj):
+        """Get formatted operating hours"""
+        if obj.opening_time and obj.closing_time:
+            return f"{obj.opening_time.strftime('%H:%M')} - {obj.closing_time.strftime('%H:%M')}"
+        return None
     
     def validate(self, data):
         """
