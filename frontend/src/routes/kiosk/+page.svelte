@@ -5,6 +5,9 @@
 	import { getProducts, getCategories } from '$db/index.js';
 	import { browser } from '$app/environment';
 	
+	// SvelteKit props (suppress warnings)
+	export let data = undefined;
+	
 	// State management
 	let products = [];
 	let categories = [];

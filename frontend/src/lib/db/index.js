@@ -66,17 +66,21 @@ export async function incrementSyncRetry(id) {
  * Product Operations
  */
 export async function getProducts(categoryId = null, outletId = null) {
-	let query = db.products;
+	let products;
 	
-	if (categoryId) {
-		query = query.where('category_id').equals(categoryId);
+	if (categoryId && outletId) {
+		// Both filters - must use toArray() and manual filter
+		const allProducts = await db.products.where('category_id').equals(categoryId).toArray();
+		products = allProducts.filter(p => p.outlet_id === outletId);
+	} else if (categoryId) {
+		products = await db.products.where('category_id').equals(categoryId).toArray();
+	} else if (outletId) {
+		products = await db.products.where('outlet_id').equals(outletId).toArray();
+	} else {
+		products = await db.products.toArray();
 	}
 	
-	if (outletId) {
-		query = query.where('outlet_id').equals(outletId);
-	}
-	
-	return await query.toArray();
+	return products;
 }
 
 export async function getProductById(id) {
@@ -95,13 +99,14 @@ export async function saveProducts(products) {
  * Category Operations
  */
 export async function getCategories(outletId = null) {
-	let query = db.categories;
-	
 	if (outletId) {
-		query = query.where('outlet_id').equals(outletId);
+		// When filtering by outlet, get array first then sort
+		const categories = await db.categories.where('outlet_id').equals(outletId).toArray();
+		return categories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 	}
 	
-	return await query.sortBy('sort_order');
+	// When no filter, use sortBy directly on table
+	return await db.categories.orderBy('sort_order').toArray();
 }
 
 export async function saveCategories(categories) {
