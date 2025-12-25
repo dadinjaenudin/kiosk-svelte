@@ -22,8 +22,8 @@ django-extensions==3.2.3
 
 # Payment Gateways
 midtransclient==1.3.0
-xendit-python==2.1.0
 stripe==7.8.0
+requests==2.31.0  # For Xendit REST API direct integration
 
 # Utilities
 python-dateutil==2.8.2

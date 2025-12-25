@@ -49,10 +49,11 @@ Sistem POS F&B Enterprise dengan **Kiosk Mode** telah berhasil diimplementasikan
 - **Scalable**: Support ribuan tenant dalam satu database
 
 #### 7. **Payment Integration Ready** ✅
-- **Midtrans**: QRIS, GoPay, ShopeePay
-- **Xendit**: QRIS, E-wallet
-- **Stripe**: Credit card, international payments
-- **Webhook**: Payment confirmation callbacks
+- **Midtrans**: Custom REST API client (QRIS, GoPay, ShopeePay, Bank Transfer, Snap)
+- **Xendit**: Custom REST API client (QRIS, E-Wallet, Virtual Account)
+- **Stripe**: Official SDK (7.8.0) for international payments
+- **Direct Integration**: No dependency on unstable SDKs, pure REST API
+- **Webhook**: Payment confirmation callbacks ready
 
 #### 8. **DevOps & Deployment** ✅
 - **Docker Compose**: Multi-container orchestration
