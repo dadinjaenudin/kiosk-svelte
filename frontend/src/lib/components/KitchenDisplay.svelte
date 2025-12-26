@@ -34,23 +34,39 @@
 	
 	async function loadOrders() {
 		try {
+			console.log(`📋 Loading orders for tenant: ${tenantId} (${tenantName})`);
+			
 			const response = await fetch(`${apiUrl}/orders/kitchen_display/`, {
 				headers: {
 					'X-Tenant-ID': tenantId.toString()
 				}
 			});
 			
+			console.log(`📡 Response status: ${response.status}`);
+			
 			if (!response.ok) {
-				throw new Error('Failed to load orders');
+				const errorData = await response.json();
+				console.error('❌ API Error:', errorData);
+				throw new Error(errorData.error || 'Failed to load orders');
 			}
 			
 			orders = await response.json();
 			loading = false;
 			error = '';
 			
-			console.log(`🏪 ${tenantName}: ${orders.length} orders`);
+			console.log(`✅ Orders loaded:`, {
+				tenantName,
+				tenantId,
+				orderCount: orders.length,
+				orders: orders.map(o => ({
+					order_number: o.order_number,
+					status: o.status,
+					created_at: o.created_at,
+					items_count: o.items?.length || 0
+				}))
+			});
 		} catch (err) {
-			console.error('Error loading orders:', err);
+			console.error('❌ Error loading orders:', err);
 			error = err.message;
 			loading = false;
 		}

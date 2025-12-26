@@ -291,6 +291,14 @@
 			
 			const result = await response.json();
 			console.log('✅ Checkout successful:', result);
+			console.log('📦 Orders created:', result.orders?.map(o => ({
+				order_number: o.order_number,
+				tenant_id: o.tenant?.id || o.tenant_id,
+				tenant_name: o.tenant?.name || o.tenant_name,
+				status: o.status,
+				payment_status: o.payment_status,
+				items_count: o.items?.length || 0
+			})));
 			
 			// Clear cart
 			await clearAllCart();
