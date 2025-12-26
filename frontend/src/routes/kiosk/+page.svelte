@@ -246,7 +246,9 @@
 				items: $cartItems.map(item => ({
 					product_id: item.product_id,
 					quantity: item.quantity,
-					modifiers: item.modifiers || [],
+					modifiers: typeof item.modifiers === 'string' 
+						? JSON.parse(item.modifiers || '[]')
+						: (item.modifiers || []),
 					notes: item.notes || ''
 				})),
 				payment_method: paymentMethod,
