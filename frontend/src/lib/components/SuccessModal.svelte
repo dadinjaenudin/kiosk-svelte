@@ -1,5 +1,6 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
+	import { printReceipt, printAllReceipts, downloadReceipt } from '$lib/utils/print.js';
 	
 	export let orders = [];
 	export let payments = [];
@@ -27,16 +28,16 @@
 		}).format(date);
 	}
 	
-	function printReceipt(order) {
-		// TODO: Implement actual print functionality
-		console.log('Printing receipt for order:', order.order_number);
-		alert(`Print receipt: ${order.order_number}\n(Print functionality will be implemented)`);
+	function handlePrintReceipt(order) {
+		printReceipt(order);
 	}
 	
-	function printAllReceipts() {
-		orders.forEach(order => {
-			printReceipt(order);
-		});
+	function handlePrintAll() {
+		printAllReceipts({ orders });
+	}
+	
+	function handleDownloadReceipt(order) {
+		downloadReceipt(order);
 	}
 	
 	function handleClose() {
@@ -79,8 +80,11 @@
 					</div>
 					
 					<div class="order-footer">
-						<button class="btn-print" on:click={() => printReceipt(order)}>
+						<button class="btn-print" on:click={() => handlePrintReceipt(order)}>
 							🖨️ Print Struk
+						</button>
+						<button class="btn-download" on:click={() => handleDownloadReceipt(order)}>
+							💾 Download
 						</button>
 						<span class="order-status">
 							{#if order.status === 'confirmed'}
@@ -110,7 +114,7 @@
 		
 		<!-- Actions -->
 		<div class="modal-actions">
-			<button class="btn-print-all" on:click={printAllReceipts}>
+			<button class="btn-print-all" on:click={handlePrintAll}>
 				🖨️ Print Semua Struk
 			</button>
 			<button class="btn-done" on:click={handleClose}>
@@ -279,15 +283,16 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-top: 12px;
-		gap: 12px;
+		gap: 8px;
 	}
 	
-	.btn-print {
+	.btn-print,
+	.btn-download {
 		background: white;
 		border: 2px solid #E5E7EB;
-		padding: 8px 16px;
+		padding: 8px 12px;
 		border-radius: 8px;
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 600;
 		color: #374151;
 		cursor: pointer;
@@ -298,6 +303,12 @@
 		background: #F3F4F6;
 		border-color: #10B981;
 		color: #059669;
+	}
+	
+	.btn-download:hover {
+		background: #F3F4F6;
+		border-color: #3B82F6;
+		color: #2563EB;
 	}
 	
 	.order-status {
