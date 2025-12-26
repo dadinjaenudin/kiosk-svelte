@@ -10,7 +10,7 @@ from .serializers import CategorySerializer, ProductSerializer
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    API endpoint for categories (Public access for Kiosk Mode)
+    API endpoint for categories (Public access for Food Court Mode)
     """
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
@@ -21,21 +21,16 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         """
-        Use all_objects manager to bypass TenantManager filtering
-        Filter by X-Tenant-ID header if provided
+        FOOD COURT MODE: Show all categories from all tenants
+        Support optional filtering by tenant_id via query params
         """
-        # Get tenant ID from header
-        tenant_id = self.request.headers.get('X-Tenant-ID')
+        # Base queryset - ALL categories from ALL tenants
+        queryset = Category.all_objects.filter(is_active=True).select_related('tenant')
         
+        # Optional: Filter by tenant_id from query params
+        tenant_id = self.request.query_params.get('tenant_id')
         if tenant_id:
-            # Filter by specific tenant
-            queryset = Category.all_objects.filter(
-                tenant_id=tenant_id,
-                is_active=True
-            )
-        else:
-            # Return all if no tenant specified (backward compatible)
-            queryset = Category.all_objects.filter(is_active=True)
+            queryset = queryset.filter(tenant_id=tenant_id)
         
         return queryset
 
@@ -54,22 +49,22 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         """
-        Use all_objects manager to bypass TenantManager filtering
-        Filter by X-Tenant-ID header if provided
+        FOOD COURT MODE: Show all products from all tenants
+        Support optional filtering by tenant_id via query params
         """
-        # Get tenant ID from header
-        tenant_id = self.request.headers.get('X-Tenant-ID')
+        # Base queryset - ALL products from ALL tenants
+        queryset = Product.all_objects.filter(
+            is_available=True
+        ).select_related('category', 'tenant').prefetch_related('modifiers')
         
+        # Optional: Filter by tenant_id from query params (for food court filter tabs)
+        tenant_id = self.request.query_params.get('tenant_id')
         if tenant_id:
-            # Filter by specific tenant
-            queryset = Product.all_objects.filter(
-                tenant_id=tenant_id,
-                is_available=True
-            ).select_related('category').prefetch_related('modifiers')
-        else:
-            # Return all if no tenant specified (backward compatible)
-            queryset = Product.all_objects.filter(
-                is_available=True
-            ).select_related('category').prefetch_related('modifiers')
+            queryset = queryset.filter(tenant_id=tenant_id)
+        
+        # Optional: Filter by category
+        category_id = self.request.query_params.get('category_id')
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
         
         return queryset
