@@ -31,7 +31,7 @@ urlpatterns = [
     path('api/', include('apps.tenants.urls')),  # Tenant & Outlet management
     path('api/', include('apps.users.urls')),    # User management
     path('api/products/', include('apps.products.urls')),
-    # path('api/orders/', include('apps.orders.urls')),
+    path('api/', include('apps.orders.urls')),  # Order & Checkout
     # path('api/payments/', include('apps.payments.urls')),
     # path('api/kitchen/', include('apps.kitchen.urls')),
     

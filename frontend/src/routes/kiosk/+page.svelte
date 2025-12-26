@@ -4,6 +4,8 @@
 	import { cartItems, cartTotals, loadCart, addProductToCart, updateQuantity, removeCartItem, clearAllCart } from '$stores/cart.js';
 	import { getProducts, getCategories } from '$db/index.js';
 	import { browser } from '$app/environment';
+	import PaymentModal from '$lib/components/PaymentModal.svelte';
+	import SuccessModal from '$lib/components/SuccessModal.svelte';
 	
 	// SvelteKit props (suppress warnings)
 	export let data = undefined;
@@ -17,6 +19,9 @@
 	let selectedTenant = null;  // For filtering, not selection!
 	let isOnline = writable(browser ? navigator.onLine : true);
 	let showCart = false;
+	let showPaymentModal = false;
+	let showSuccessModal = false;
+	let checkoutResult = null;
 	let isFullscreen = false;
 	let loading = true;
 	
@@ -217,12 +222,74 @@
 	
 	async function handleCheckout() {
 		if ($cartItems.length === 0) {
-			if (browser) alert('Cart is empty!');
+			if (browser) alert('Keranjang kosong!');
 			return;
 		}
 		
-		// Navigate to payment page
-		if (browser) window.location.href = '/kiosk/payment';
+		// Show payment modal
+		showCart = false;
+		showPaymentModal = true;
+	}
+	
+	async function processCheckout(event) {
+		const { paymentMethod, customerName, customerPhone, tableNumber, notes } = event.detail;
+		
+		try {
+			// Prepare checkout data
+			const checkoutData = {
+				items: $cartItems.map(item => ({
+					product_id: item.product_id,
+					quantity: item.quantity,
+					modifiers: item.modifiers || [],
+					notes: item.notes || ''
+				})),
+				payment_method: paymentMethod,
+				customer_name: customerName,
+				customer_phone: customerPhone,
+				table_number: tableNumber,
+				notes: notes
+			};
+			
+			console.log('💳 Processing checkout:', checkoutData);
+			
+			// Call checkout API
+			const response = await fetch(`${apiUrl}/orders/checkout/`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(checkoutData)
+			});
+			
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.error || 'Checkout failed');
+			}
+			
+			const result = await response.json();
+			console.log('✅ Checkout successful:', result);
+			
+			// Clear cart
+			await clearAllCart();
+			
+			// Show success modal
+			checkoutResult = result;
+			showPaymentModal = false;
+			showSuccessModal = true;
+			
+		} catch (error) {
+			console.error('❌ Checkout error:', error);
+			alert(`Checkout gagal: ${error.message}`);
+		}
+	}
+	
+	function cancelPayment() {
+		showPaymentModal = false;
+	}
+	
+	function closeSuccessModal() {
+		showSuccessModal = false;
+		checkoutResult = null;
 	}
 	
 	function formatPrice(price) {
@@ -478,6 +545,27 @@
 			{/if}
 		</aside>
 	</div>
+	
+	<!-- Payment Modal -->
+	{#if showPaymentModal}
+		<PaymentModal
+			groupedCartItems={groupedCartItems}
+			grandTotal={$cartTotals.grandTotal}
+			on:checkout={processCheckout}
+			on:cancel={cancelPayment}
+		/>
+	{/if}
+	
+	<!-- Success Modal -->
+	{#if showSuccessModal && checkoutResult}
+		<SuccessModal
+			orders={checkoutResult.orders}
+			payments={checkoutResult.payments}
+			totalAmount={parseFloat(checkoutResult.total_amount)}
+			paymentMethod={checkoutResult.payment_method}
+			on:close={closeSuccessModal}
+		/>
+	{/if}
 </div>
 
 <style>
