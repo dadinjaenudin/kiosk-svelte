@@ -34,7 +34,8 @@ class TenantMiddleware(MiddlewareMixin):
         '/api/auth/refresh/',
         '/api/health/',
         '/api/public/',  # Public kiosk endpoints (tenants, etc)
-        '/api/products/',  # Public kiosk API
+        '/api/products/',  # Public kiosk API - browse all products
+        '/api/orders/',  # Public order API - multi-tenant checkout
         '/admin/',
         '/static/',
         '/media/',
