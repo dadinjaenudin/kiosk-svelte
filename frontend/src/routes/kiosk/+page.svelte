@@ -51,6 +51,9 @@
 		}, {})
 	);
 	
+	// Calculate grand total from grouped items
+	$: grandTotal = groupedCartItems.reduce((sum, group) => sum + group.total, 0);
+	
 	// API URL
 	const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
 	
@@ -550,7 +553,7 @@
 	{#if showPaymentModal}
 		<PaymentModal
 			groupedCartItems={groupedCartItems}
-			grandTotal={$cartTotals.grandTotal}
+			grandTotal={grandTotal}
 			on:checkout={processCheckout}
 			on:cancel={cancelPayment}
 		/>

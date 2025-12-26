@@ -125,6 +125,9 @@ export async function addToCart(product, quantity = 1, modifiers = []) {
 		product_id: product.id,
 		product_name: product.name,
 		product_price: product.price,
+		tenant_id: product.tenant_id,
+		tenant_name: product.tenant_name,
+		tenant_color: product.tenant_color,
 		quantity: quantity,
 		modifiers: JSON.stringify(modifiers),
 		created_at: new Date().toISOString()
