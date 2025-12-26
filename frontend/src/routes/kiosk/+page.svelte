@@ -270,7 +270,21 @@
 			if (!response.ok) {
 				const error = await response.json();
 				console.error('❌ Checkout error response:', error);
-				throw new Error(error.error || error.detail || 'Checkout failed');
+				console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+				
+				// Extract detailed error message
+				let errorMessage = 'Checkout failed';
+				if (error.error) {
+					errorMessage = error.error;
+				} else if (error.detail) {
+					errorMessage = error.detail;
+				} else if (error.items && Array.isArray(error.items)) {
+					errorMessage = error.items.join(', ');
+				} else if (typeof error === 'object') {
+					errorMessage = JSON.stringify(error);
+				}
+				
+				throw new Error(errorMessage);
 			}
 			
 			const result = await response.json();
