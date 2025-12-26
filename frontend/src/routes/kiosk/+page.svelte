@@ -93,11 +93,13 @@
 			if (productsRes.ok) {
 				const productsData = await productsRes.json();
 				products = productsData.results || productsData || [];
-				console.log('Products loaded:', products.length);
+				console.log('✅ Products loaded:', products.length);
+				console.log('📦 First product:', products[0]);  // Debug: show first product
 				
 				// Extract unique tenants from products
 				const tenantMap = new Map();
 				products.forEach(p => {
+					console.log(`Product: ${p.name}, Tenant ID: ${p.tenant_id}, Tenant Name: ${p.tenant_name}`);  // Debug each product
 					if (p.tenant_id && !tenantMap.has(p.tenant_id)) {
 						tenantMap.set(p.tenant_id, {
 							id: p.tenant_id,
@@ -108,7 +110,8 @@
 					}
 				});
 				tenants = Array.from(tenantMap.values());
-				console.log('Tenants extracted:', tenants.length);
+				console.log('✅ Tenants extracted:', tenants.length);
+				console.log('🏪 Tenants:', tenants);  // Debug: show all tenants
 			}
 			
 			// Load ALL categories
@@ -259,7 +262,7 @@
 		<!-- Left Panel: Filters & Products -->
 		<main class="flex-1 flex flex-col overflow-hidden">
 			<!-- Tenant Filter Tabs -->
-			{#if tenants.length > 1}
+			{#if tenants.length > 0}
 				<div class="bg-white px-8 py-4 shadow-sm border-b-2 border-gray-200">
 					<h3 class="text-sm font-semibold text-gray-600 mb-2">FILTER BY RESTAURANT:</h3>
 					<div class="flex gap-3 overflow-x-auto scroll-smooth-touch">
