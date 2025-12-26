@@ -112,8 +112,18 @@ class CheckoutSerializer(serializers.Serializer):
         products = {p.id: p for p in Product.all_objects.filter(id__in=product_ids)}
         
         for item_data in items_data:
-            product = products[item_data['product_id']]
+            product_id = item_data['product_id']
+            
+            # Check if product exists
+            if product_id not in products:
+                raise serializers.ValidationError(f"Product with ID {product_id} not found")
+            
+            product = products[product_id]
             tenant_id = product.tenant_id
+            
+            # Check if product has tenant
+            if not tenant_id:
+                raise serializers.ValidationError(f"Product '{product.name}' (ID: {product_id}) does not have a tenant assigned")
             
             if tenant_id not in tenant_items:
                 tenant_items[tenant_id] = []
@@ -124,6 +134,10 @@ class CheckoutSerializer(serializers.Serializer):
                 'modifiers': item_data.get('modifiers', []),
                 'notes': item_data.get('notes', '')
             })
+        
+        # Check if we have any items
+        if not tenant_items:
+            raise serializers.ValidationError("No valid items to checkout")
         
         # Create orders per tenant
         orders_and_payments = []

@@ -238,6 +238,9 @@
 		const { paymentMethod, customerName, customerPhone, tableNumber, notes } = event.detail;
 		
 		try {
+			// Debug: Log cart items
+			console.log('🛒 Cart items:', $cartItems);
+			
 			// Prepare checkout data
 			const checkoutData = {
 				items: $cartItems.map(item => ({
@@ -266,7 +269,8 @@
 			
 			if (!response.ok) {
 				const error = await response.json();
-				throw new Error(error.error || 'Checkout failed');
+				console.error('❌ Checkout error response:', error);
+				throw new Error(error.error || error.detail || 'Checkout failed');
 			}
 			
 			const result = await response.json();
