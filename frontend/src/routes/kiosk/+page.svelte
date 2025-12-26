@@ -149,7 +149,15 @@
 	
 	function selectTenant(tenantId) {
 		selectedTenant = tenantId;
-		console.log('Tenant filter:', tenantId);
+		console.log('🏪 Tenant filter changed:', tenantId);
+		console.log('📊 Products before filter:', products.length);
+		console.log('📊 Products after filter:', filteredProducts.length);
+		if (tenantId) {
+			const tenant = tenants.find(t => t.id === tenantId);
+			console.log('🏪 Selected tenant:', tenant?.name);
+		} else {
+			console.log('🏪 Showing all restaurants');
+		}
 	}
 	
 	function handleKeyboard(e) {
