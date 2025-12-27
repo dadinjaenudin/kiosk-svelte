@@ -44,7 +44,7 @@
 	function isModifierSelected(modifierId) {
 		const selected = selectedModifiers.some(m => m.id === modifierId);
 		if (selected) {
-			console.log(`✅ Modifier ${modifierId} IS SELECTED`);
+			console.log(`✅ Modifier ${modifierId} IS SELECTED - IDs in array:`, selectedModifiers.map(m => m.id));
 		}
 		return selected;
 	}
@@ -194,7 +194,11 @@
 											</span>
 										{/if}
 										{#if isModifierSelected(modifier.id)}
-											<span class="check-icon" class:inline-check={type === 'spicy'}>✓</span>
+											<span 
+												class="check-icon" 
+												class:inline-check={type === 'spicy'}
+												style={type === 'spicy' ? 'background: #10B981; color: white;' : ''}
+											>✓</span>
 										{/if}
 									</button>
 								{/each}
@@ -445,11 +449,17 @@
 	
 	.inline-check {
 		position: static !important;
+		display: flex !important;
 		width: 16px;
 		height: 16px;
 		font-size: 10px;
 		margin: 0;
 		flex-shrink: 0;
+		background: #10B981 !important;
+		color: white !important;
+		border-radius: 50%;
+		align-items: center;
+		justify-content: center;
 	}
 	
 	.no-modifiers {
