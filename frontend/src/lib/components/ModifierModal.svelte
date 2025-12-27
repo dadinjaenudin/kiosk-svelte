@@ -458,10 +458,6 @@
 		font-weight: 600;
 		margin: 0;
 	}
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
 	
 	.inline-option .modifier-name {
 		flex: none;
