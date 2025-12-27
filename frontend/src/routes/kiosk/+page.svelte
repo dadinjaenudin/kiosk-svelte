@@ -57,7 +57,20 @@
 					total: 0
 				};
 			}
-			groups[tenantId].items.push(item);
+			
+			// Parse modifiers if stored as JSON string
+			let parsedItem = { ...item };
+			if (typeof item.modifiers === 'string') {
+				try {
+					parsedItem.modifiers = JSON.parse(item.modifiers);
+				} catch (e) {
+					parsedItem.modifiers = [];
+				}
+			} else if (!Array.isArray(item.modifiers)) {
+				parsedItem.modifiers = [];
+			}
+			
+			groups[tenantId].items.push(parsedItem);
 			groups[tenantId].total += item.product_price * item.quantity;
 			return groups;
 		}, {})
@@ -558,6 +571,30 @@
 										<p class="text-primary font-semibold text-kiosk-lg">
 											{formatPrice(item.product_price)}
 										</p>
+										
+										<!-- Modifiers Display -->
+										{#if item.modifiers && item.modifiers.length > 0}
+											<div class="mt-2 space-y-1">
+												{#each item.modifiers as modifier}
+													<div class="flex items-center gap-2 text-sm text-gray-600">
+														<span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+														<span>{modifier.name}</span>
+														{#if modifier.price_adjustment > 0}
+															<span class="text-green-600 font-semibold">+{formatPrice(modifier.price_adjustment)}</span>
+														{:else if modifier.price_adjustment < 0}
+															<span class="text-red-600 font-semibold">{formatPrice(modifier.price_adjustment)}</span>
+														{/if}
+													</div>
+												{/each}
+											</div>
+										{/if}
+										
+										<!-- Notes Display -->
+										{#if item.notes}
+											<div class="mt-2 text-sm text-gray-500 italic">
+												📝 {item.notes}
+											</div>
+										{/if}
 									</div>
 									
 									<div class="flex items-center gap-3">
