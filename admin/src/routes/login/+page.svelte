@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { login } from '$lib/api/auth';
 	import { authError, isLoading } from '$lib/stores/auth';
-	import '../app.css';
 
 	let username = '';
 	let password = '';
