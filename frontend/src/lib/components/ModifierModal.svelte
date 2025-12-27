@@ -184,31 +184,31 @@
 					{#each Object.entries(groupedModifiers) as [type, modifiers] (type)}
 						<div class="modifier-group">
 							<h3>{getTypeLabel(type)}</h3>
-							<div class="modifiers-list" class:inline-list={type === 'spicy'}>
+							<div class="modifiers-list" class:inline-list={type === 'spicy' || type === 'topping' || type === 'extra'}>
 								{#each modifiers as modifier (modifier.id)}
 									<button
 										class="modifier-option"
 										class:selected={selectedIdsSet.has(modifier.id)}
-										class:inline-option={type === 'spicy'}
+										class:inline-option={type === 'spicy' || type === 'topping' || type === 'extra'}
 										on:click={() => toggleModifier(modifier, type)}
 									>
 										<span class="modifier-name">{modifier.name}</span>
-										{#if type !== 'spicy'}
+										
+										<!-- Show price for all types -->
+										{#if modifier.price_adjustment !== 0}
 											<span class="modifier-price">
 												{#if modifier.price_adjustment > 0}
 													+{formatCurrency(modifier.price_adjustment)}
-												{:else if modifier.price_adjustment < 0}
-													{formatCurrency(modifier.price_adjustment)}
 												{:else}
-													<span class="free-badge">Gratis</span>
+													{formatCurrency(modifier.price_adjustment)}
 												{/if}
 											</span>
 										{/if}
 										{#if selectedIdsSet.has(modifier.id)}
 											<span 
 												class="check-icon" 
-												class:inline-check={type === 'spicy'}
-												style={type === 'spicy' ? 'background: #10B981; color: white;' : ''}
+												class:inline-check={type === 'spicy' || type === 'topping' || type === 'extra'}
+												style={(type === 'spicy' || type === 'topping' || type === 'extra') ? 'background: #10B981; color: white;' : ''}
 											>✓</span>
 										{/if}
 									</button>
@@ -435,7 +435,7 @@
 		font-weight: 700;
 	}
 	
-	/* Inline Layout for Spicy Level */
+	/* Inline Layout for Spicy, Topping, Extra */
 	.inline-list {
 		flex-direction: row;
 		flex-wrap: wrap;
@@ -445,8 +445,19 @@
 	.inline-option {
 		flex: 0 0 auto;
 		min-width: fit-content;
-		padding: 8px 16px;
+		padding: 8px 12px;
 		justify-content: center;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	
+	/* For inline options, show price inside button */
+	.inline-option .modifier-price {
+		font-size: 12px;
+		font-weight: 600;
+		margin: 0;
+	}
 		display: flex;
 		align-items: center;
 		gap: 6px;
