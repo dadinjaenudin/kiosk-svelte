@@ -191,7 +191,10 @@
 					<button class="qty-btn" on:click={incrementQuantity}>+</button>
 				</div>
 				
-				<button class="add-to-cart-btn" on:click={handleAddToCart}>
+				<button class="add-to-cart-btn" on:click={() => {
+					console.log('🔵 Button clicked in ModifierModal');
+					handleAddToCart();
+				}}>
 					<span>Tambah ke Keranjang</span>
 					<span class="total-price">{formatCurrency(totalPrice)}</span>
 				</button>
