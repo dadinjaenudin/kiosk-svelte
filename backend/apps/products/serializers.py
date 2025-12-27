@@ -28,7 +28,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'price', 'category', 'category_name',
             'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color',  # Food court fields
             'is_available', 'is_featured', 
-            'preparation_time', 'modifiers'
+            'is_popular', 'has_promo', 'promo_price',  # Search filter fields
+            'preparation_time', 'modifiers', 'tags'
         ]
 
 
