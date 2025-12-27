@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { user } from '$lib/stores/auth';
 	import { getDashboardAnalytics } from '$lib/api/dashboard';
+	import RevenueChart from '$lib/components/RevenueChart.svelte';
 
 	let stats = {
 		today_revenue: 0,
@@ -14,6 +15,7 @@
 
 	let topProducts = [];
 	let recentOrders = [];
+	let revenueChartData = [];
 	let loading = true;
 	let error = null;
 	let selectedPeriod = 'today';
@@ -34,6 +36,9 @@
 				revenue_trend: data.metrics.revenue_trend,
 				orders_trend: data.metrics.orders_trend
 			};
+			
+			// Update revenue chart data
+			revenueChartData = data.revenue_chart || [];
 			
 			// Update top products
 			topProducts = data.top_products.map(p => ({
@@ -200,6 +205,22 @@
 					</div>
 				</div>
 			</div>
+		</div>
+
+		<!-- Revenue Chart -->
+		<div class="card">
+			<h3 class="text-lg font-semibold text-gray-900 mb-4">Revenue Trend</h3>
+			{#if revenueChartData.length > 0}
+				<RevenueChart 
+					data={revenueChartData} 
+					label="Revenue (IDR)" 
+					type="line" 
+				/>
+			{:else}
+				<div class="h-[300px] flex items-center justify-center text-gray-500">
+					<p>No revenue data available</p>
+				</div>
+			{/if}
 		</div>
 
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
