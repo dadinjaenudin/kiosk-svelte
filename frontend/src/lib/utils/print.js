@@ -197,7 +197,7 @@ function generateReceiptHTML(order) {
 					<div class="item-price">${formatCurrency(item.unit_price)}</div>
 				</div>
 				${item.modifiers && item.modifiers.length > 0 ? item.modifiers.map(mod => `
-					<div class="modifier">+ ${mod.name} ${mod.price > 0 ? formatCurrency(mod.price) : ''}</div>
+					<div class="modifier">+ ${mod.name} ${mod.price_adjustment && mod.price_adjustment !== 0 ? formatCurrency(mod.price_adjustment) : ''}</div>
 				`).join('') : ''}
 				<div class="item">
 					<div class="item-name"></div>
@@ -388,8 +388,8 @@ export function generateThermalReceipt(order) {
 		if (item.modifiers && item.modifiers.length > 0) {
 			item.modifiers.forEach(mod => {
 				const modText = `  + ${mod.name}`;
-				if (mod.price > 0) {
-					addPaddedLine(modText, formatCurrency(mod.price));
+				if (mod.price_adjustment && mod.price_adjustment !== 0) {
+					addPaddedLine(modText, formatCurrency(mod.price_adjustment));
 				} else {
 					addLine(modText);
 				}
@@ -548,7 +548,9 @@ export function downloadReceipt(order) {
 			if (item.modifiers && item.modifiers.length > 0) {
 				item.modifiers.forEach(mod => {
 					text += `  + ${mod.name}`;
-					if (mod.price > 0) text += ` ${formatCurrency(mod.price)}`;
+					if (mod.price_adjustment && mod.price_adjustment !== 0) {
+						text += ` ${formatCurrency(mod.price_adjustment)}`;
+					}
 					text += '\n';
 				});
 			}
