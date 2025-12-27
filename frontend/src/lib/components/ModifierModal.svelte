@@ -201,7 +201,7 @@
 					<textarea
 						bind:value={specialInstructions}
 						placeholder="Contoh: Tidak pakai kecap, tambah banyak sambal, dll"
-						rows="3"
+						rows="2"
 						class="special-instructions"
 					/>
 				</div>
@@ -275,19 +275,19 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
-		padding: 24px;
+		padding: 16px 20px;
 		border-bottom: 2px solid #E5E7EB;
 	}
 	
 	.product-info h2 {
-		font-size: 24px;
+		font-size: 20px;
 		font-weight: 800;
 		color: #1F2937;
-		margin: 0 0 8px 0;
+		margin: 0 0 4px 0;
 	}
 	
 	.base-price {
-		font-size: 18px;
+		font-size: 16px;
 		font-weight: 600;
 		color: #10B981;
 		margin: 0;
@@ -296,10 +296,10 @@
 	.close-btn {
 		background: #F3F4F6;
 		border: none;
-		width: 40px;
-		height: 40px;
+		width: 36px;
+		height: 36px;
 		border-radius: 50%;
-		font-size: 24px;
+		font-size: 20px;
 		color: #6B7280;
 		cursor: pointer;
 		transition: all 0.2s;
@@ -314,11 +314,11 @@
 	.modal-body {
 		flex: 1;
 		overflow-y: auto;
-		padding: 24px;
+		padding: 16px 20px;
 	}
 	
 	.modifier-group {
-		margin-bottom: 24px;
+		margin-bottom: 16px;
 	}
 	
 	.modifier-group:last-child {
@@ -326,16 +326,16 @@
 	}
 	
 	.modifier-group h3 {
-		font-size: 16px;
+		font-size: 14px;
 		font-weight: 700;
 		color: #374151;
-		margin: 0 0 12px 0;
+		margin: 0 0 8px 0;
 	}
 	
 	.modifiers-list {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 6px;
 	}
 	
 	.modifier-option {
@@ -343,10 +343,10 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 16px;
+		padding: 10px 12px;
 		background: #F9FAFB;
 		border: 2px solid #E5E7EB;
-		border-radius: 12px;
+		border-radius: 10px;
 		cursor: pointer;
 		transition: all 0.2s;
 		text-align: left;
@@ -364,7 +364,7 @@
 	}
 	
 	.modifier-name {
-		font-size: 15px;
+		font-size: 14px;
 		font-weight: 600;
 		color: #1F2937;
 		flex: 1;
@@ -388,32 +388,33 @@
 	
 	.check-icon {
 		position: absolute;
-		top: 8px;
-		right: 8px;
+		top: 6px;
+		right: 6px;
 		background: #10B981;
 		color: white;
-		width: 24px;
-		height: 24px;
+		width: 20px;
+		height: 20px;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 14px;
+		font-size: 12px;
 		font-weight: 700;
 	}
 	
 	.no-modifiers {
 		text-align: center;
-		padding: 40px 20px;
+		padding: 24px 20px;
 		color: #9CA3AF;
+		font-size: 14px;
 	}
 	
 	.special-instructions {
 		width: 100%;
-		padding: 12px;
+		padding: 10px 12px;
 		border: 2px solid #E5E7EB;
-		border-radius: 12px;
-		font-size: 14px;
+		border-radius: 10px;
+		font-size: 13px;
 		font-family: inherit;
 		resize: vertical;
 		transition: border-color 0.2s;
@@ -425,29 +426,29 @@
 	}
 	
 	.modal-footer {
-		padding: 24px;
+		padding: 16px 20px;
 		border-top: 2px solid #E5E7EB;
 		display: flex;
-		gap: 16px;
+		gap: 12px;
 		align-items: center;
 	}
 	
 	.quantity-selector {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 8px;
 		background: #F3F4F6;
-		padding: 8px;
-		border-radius: 12px;
+		padding: 6px;
+		border-radius: 10px;
 	}
 	
 	.qty-btn {
 		background: white;
 		border: 2px solid #E5E7EB;
-		width: 40px;
-		height: 40px;
-		border-radius: 10px;
-		font-size: 20px;
+		width: 36px;
+		height: 36px;
+		border-radius: 8px;
+		font-size: 18px;
 		font-weight: 700;
 		color: #374151;
 		cursor: pointer;
@@ -465,10 +466,10 @@
 	}
 	
 	.qty-display {
-		font-size: 20px;
+		font-size: 18px;
 		font-weight: 700;
 		color: #1F2937;
-		min-width: 32px;
+		min-width: 28px;
 		text-align: center;
 	}
 	
