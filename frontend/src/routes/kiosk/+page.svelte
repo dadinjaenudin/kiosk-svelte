@@ -29,6 +29,16 @@
 	
 	// Filtered products by tenant AND category
 	$: filteredProducts = products.filter(p => {
+		// Debug logging
+		if (selectedTenant && products.length > 0 && filteredProducts?.length === products.length) {
+			console.log('⚠️ Filter not working! Sample product:', {
+				name: products[0]?.name,
+				tenant_id: products[0]?.tenant_id,
+				selectedTenant: selectedTenant,
+				match: products[0]?.tenant_id === selectedTenant
+			});
+		}
+		
 		if (selectedTenant && p.tenant_id !== selectedTenant) return false;
 		if (selectedCategory && p.category !== selectedCategory) return false;
 		return true;
@@ -161,10 +171,26 @@
 		selectedTenant = tenantId;
 		console.log('🏪 Tenant filter changed:', tenantId);
 		console.log('📊 Products before filter:', products.length);
+		
+		// Debug: Check product tenant_id values
+		const sampleProducts = products.slice(0, 5);
+		console.log('🔍 Sample products tenant_id:', sampleProducts.map(p => ({
+			name: p.name,
+			tenant_id: p.tenant_id,
+			tenant_name: p.tenant_name
+		})));
+		
 		console.log('📊 Products after filter:', filteredProducts.length);
+		console.log('🔍 Filtered products:', filteredProducts.slice(0, 3).map(p => p.name));
+		
 		if (tenantId) {
 			const tenant = tenants.find(t => t.id === tenantId);
 			console.log('🏪 Selected tenant:', tenant?.name);
+			console.log('🔍 Looking for tenant_id:', tenantId);
+			
+			// Count products by tenant
+			const productsByTenant = products.filter(p => p.tenant_id === tenantId);
+			console.log(`📊 Products for tenant ${tenantId}:`, productsByTenant.length);
 		} else {
 			console.log('🏪 Showing all restaurants');
 		}
