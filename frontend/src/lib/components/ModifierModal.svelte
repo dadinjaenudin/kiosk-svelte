@@ -9,7 +9,8 @@
 	let specialInstructions = '';
 	let quantity = 1;
 	
-	$: totalPrice = product ? calculateTotalPrice() : 0;
+	// Reactive: recalculate when product, selectedModifiers, or quantity changes
+	$: totalPrice = calculateTotalPrice(product, selectedModifiers, quantity);
 	$: groupedModifiers = product?.modifiers ? groupModifiersByType(product.modifiers) : {};
 	
 	onMount(() => {
@@ -41,7 +42,9 @@
 	}
 	
 	function isModifierSelected(modifierId) {
-		return selectedModifiers.some(m => m.id === modifierId);
+		const selected = selectedModifiers.some(m => m.id === modifierId);
+		// console.log(`🔍 Check if ${modifierId} selected:`, selected, selectedModifiers.map(m => m.id));
+		return selected;
 	}
 	
 	function toggleModifier(modifier, type) {
@@ -72,15 +75,20 @@
 		console.log('💰 New total:', totalPrice);
 	}
 	
-	function calculateTotalPrice() {
+	function calculateTotalPrice(product, modifiers, qty) {
 		if (!product) return 0;
 		
-		let base = parseFloat(product.price);
-		let modifiersTotal = selectedModifiers.reduce((sum, mod) => {
-			return sum + parseFloat(mod.price_adjustment);
+		let base = parseFloat(product.price) || 0;
+		let modifiersTotal = modifiers.reduce((sum, mod) => {
+			const adjustment = parseFloat(mod.price_adjustment) || 0;
+			console.log(`  📊 Modifier: ${mod.name}, Price: ${adjustment}`);
+			return sum + adjustment;
 		}, 0);
 		
-		return (base + modifiersTotal) * quantity;
+		const total = (base + modifiersTotal) * qty;
+		console.log(`💵 Calculation: Base ${base} + Modifiers ${modifiersTotal} × Qty ${qty} = ${total}`);
+		
+		return total;
 	}
 	
 	function formatCurrency(amount) {
