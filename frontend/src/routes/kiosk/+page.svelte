@@ -578,7 +578,7 @@
 							{#each tenantGroup.items as item (item.id)}
 								{@const modifiersTotal = (item.modifiers || []).reduce((sum, mod) => sum + (parseFloat(mod.price_adjustment) || 0), 0)}
 								
-								<div class="cart-item">
+								<div class="flex gap-4 mb-4 pb-4 border-b border-gray-200 last:border-0">
 									<div class="flex-1">
 										<h4 class="font-bold text-kiosk-base truncate">{item.product_name}</h4>
 										<p class="text-primary font-semibold text-kiosk-lg">

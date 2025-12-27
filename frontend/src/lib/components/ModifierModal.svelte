@@ -71,7 +71,7 @@
 			}
 		}
 		
-		console.log('✅ Selected modifiers:', selectedModifiers.length, selectedModifiers.map(m => m.name));
+		console.log('✅ Selected modifiers:', selectedModifiers.length, selectedModifiers.map(m => `${m.name} (${m.price_adjustment})`));
 		console.log('💰 New total:', totalPrice);
 	}
 	
@@ -110,6 +110,12 @@
 		// Create a copy of modifiers to prevent reset before dispatch completes
 		const modifiersCopy = [...selectedModifiers];
 		const notesCopy = specialInstructions;
+		
+		console.log('📤 Dispatching modifiers:', modifiersCopy.map(m => ({
+			name: m.name,
+			price_adjustment: m.price_adjustment,
+			type: m.type
+		})));
 		
 		dispatch('addToCart', {
 			product,
