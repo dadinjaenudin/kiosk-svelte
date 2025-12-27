@@ -1,5 +1,5 @@
 <script>
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	
 	export let product = null;
 	export let show = false;
@@ -12,6 +12,12 @@
 	
 	$: totalPrice = product ? calculateTotalPrice() : 0;
 	$: groupedModifiers = product?.modifiers ? groupModifiersByType(product.modifiers) : {};
+	
+	onMount(() => {
+		console.log('🎨 ModifierModal mounted');
+		console.log('📦 Product:', product?.name);
+		console.log('🔧 Modifiers available:', product?.modifiers?.length || 0);
+	});
 	
 	function groupModifiersByType(modifiers) {
 		const groups = {};

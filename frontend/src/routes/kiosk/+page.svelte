@@ -207,8 +207,11 @@
 	
 	// Open modifier modal when product clicked
 	function handleProductClick(product) {
+		console.log('🎯 Product clicked:', product?.name);
+		console.log('📦 Product data:', product);
 		selectedProduct = product;
 		showModifierModal = true;
+		console.log('✅ Modal state:', { showModifierModal, selectedProduct: selectedProduct?.name });
 	}
 
 	// Add to cart with modifiers
