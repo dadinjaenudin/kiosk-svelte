@@ -164,25 +164,28 @@
 					{#each Object.entries(groupedModifiers) as [type, modifiers]}
 						<div class="modifier-group">
 							<h3>{getTypeLabel(type)}</h3>
-							<div class="modifiers-list">
+							<div class="modifiers-list" class:inline-list={type === 'spicy'}>
 								{#each modifiers as modifier}
 									<button
 										class="modifier-option"
 										class:selected={isModifierSelected(modifier.id)}
+										class:inline-option={type === 'spicy'}
 										on:click={() => toggleModifier(modifier, type)}
 									>
 										<span class="modifier-name">{modifier.name}</span>
-										<span class="modifier-price">
-											{#if modifier.price_adjustment > 0}
-												+{formatCurrency(modifier.price_adjustment)}
-											{:else if modifier.price_adjustment < 0}
-												{formatCurrency(modifier.price_adjustment)}
-											{:else}
-												<span class="free-badge">Gratis</span>
-											{/if}
-										</span>
+										{#if type !== 'spicy'}
+											<span class="modifier-price">
+												{#if modifier.price_adjustment > 0}
+													+{formatCurrency(modifier.price_adjustment)}
+												{:else if modifier.price_adjustment < 0}
+													{formatCurrency(modifier.price_adjustment)}
+												{:else}
+													<span class="free-badge">Gratis</span>
+												{/if}
+											</span>
+										{/if}
 										{#if isModifierSelected(modifier.id)}
-											<span class="check-icon">✓</span>
+											<span class="check-icon" class:inline-check={type === 'spicy'}>✓</span>
 										{/if}
 									</button>
 								{/each}
@@ -400,6 +403,33 @@
 		justify-content: center;
 		font-size: 12px;
 		font-weight: 700;
+	}
+	
+	/* Inline Layout for Spicy Level */
+	.inline-list {
+		flex-direction: row;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	
+	.inline-option {
+		flex: 0 0 auto;
+		min-width: fit-content;
+		padding: 8px 16px;
+		justify-content: center;
+	}
+	
+	.inline-option .modifier-name {
+		flex: none;
+		font-size: 13px;
+	}
+	
+	.inline-check {
+		position: static;
+		width: 16px;
+		height: 16px;
+		font-size: 10px;
+		margin-left: 6px;
 	}
 	
 	.no-modifiers {
