@@ -546,7 +546,7 @@
 		
 		<!-- Right Panel: Cart (Sliding) -->
 		<aside 
-			class="cart-panel w-full md:w-[480px] bg-white shadow-2xl transform transition-transform duration-300 {showCart ? 'translate-x-0' : 'translate-x-full'} fixed md:relative right-0 top-0 h-full z-40 flex flex-col"
+			class="cart-panel w-full md:w-[480px] bg-white shadow-2xl transform transition-transform duration-300 {showCart ? 'translate-x-0' : 'translate-x-full'} fixed md:relative right-0 top-0 h-full z-40 flex flex-col overflow-x-hidden"
 		>
 			<!-- Cart Header -->
 			<div class="bg-gradient-to-r from-primary to-secondary text-white px-6 py-6 flex items-center justify-between">
@@ -579,8 +579,17 @@
 								{@const modifiersTotal = (item.modifiers || []).reduce((sum, mod) => sum + (parseFloat(mod.price_adjustment) || 0), 0)}
 								
 								<div class="flex gap-4 mb-4 pb-4 border-b border-gray-200 last:border-0">
-									<div class="flex-1">
-										<h4 class="font-bold text-kiosk-base truncate">{item.product_name}</h4>
+									<div class="flex-1 min-w-0">
+										<div class="flex items-start justify-between gap-2 mb-1">
+											<h4 class="font-bold text-kiosk-base truncate flex-1">{item.product_name}</h4>
+											<button 
+												on:click={() => removeCartItem(item.id)}
+												class="flex-shrink-0 w-8 h-8 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 active:scale-95 transition-all"
+												title="Delete"
+											>
+												🗑️
+											</button>
+										</div>
 										<p class="text-primary font-semibold text-kiosk-lg">
 											{formatPrice(item.product_price)}
 										</p>
@@ -608,30 +617,25 @@
 												📝 {item.notes}
 											</div>
 										{/if}
-									</div>
-									
-									<div class="flex items-center gap-3">
-										<button 
-											on:click={() => updateQuantity(item.id, item.quantity - 1)}
-											class="w-14 h-14 bg-gray-200 rounded-lg text-kiosk-xl font-bold hover:bg-gray-300 active:scale-95 transition-all"
-										>
-											−
-										</button>
-										<span class="text-kiosk-xl font-bold min-w-[3rem] text-center">
-											{item.quantity}
-										</span>
-										<button 
-											on:click={() => updateQuantity(item.id, item.quantity + 1)}
-											class="w-14 h-14 bg-primary text-white rounded-lg text-kiosk-xl font-bold hover:bg-primary/90 active:scale-95 transition-all"
-										>
-											+
-										</button>
-										<button 
-											on:click={() => removeCartItem(item.id)}
-											class="w-14 h-14 bg-red-500 text-white rounded-lg text-kiosk-xl font-bold hover:bg-red-600 active:scale-95 transition-all ml-2"
-										>
-											🗑️
-										</button>
+										
+										<!-- Quantity Controls -->
+										<div class="flex items-center gap-2 mt-3">
+											<button 
+												on:click={() => updateQuantity(item.id, item.quantity - 1)}
+												class="w-10 h-10 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 active:scale-95 transition-all"
+											>
+												−
+											</button>
+											<span class="text-xl font-bold min-w-[2.5rem] text-center">
+												{item.quantity}
+											</span>
+											<button 
+												on:click={() => updateQuantity(item.id, item.quantity + 1)}
+												class="w-10 h-10 bg-primary text-white rounded-lg text-xl font-bold hover:bg-primary/90 active:scale-95 transition-all"
+											>
+												+
+											</button>
+										</div>
 									</div>
 								</div>
 							{/each}
