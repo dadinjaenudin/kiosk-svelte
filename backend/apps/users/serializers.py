@@ -14,7 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
     """
     
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
-    outlet_name = serializers.CharField(source='default_outlet.name', read_only=True)
+    outlet_name = serializers.CharField(source='outlet.name', read_only=True)
     permissions = serializers.SerializerMethodField()
     
     class Meta:
@@ -22,7 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'full_name', 'phone_number',
             'tenant', 'tenant_name',
-            'default_outlet', 'outlet_name',
+            'outlet', 'outlet_name',
             'role', 'permissions',
             'is_active', 'is_staff', 'is_superuser',
             'last_login', 'created_at'
