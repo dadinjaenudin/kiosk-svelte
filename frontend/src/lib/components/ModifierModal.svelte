@@ -82,7 +82,14 @@
 	}
 	
 	function handleAddToCart() {
-		dispatch('add', {
+		console.log('🛒 ModifierModal: Adding to cart', {
+			product: product?.name,
+			quantity,
+			modifiers: selectedModifiers.length,
+			notes: specialInstructions
+		});
+		
+		dispatch('addToCart', {
 			product,
 			quantity,
 			modifiers: selectedModifiers,

@@ -213,7 +213,17 @@
 
 	// Add to cart with modifiers
 	async function handleAddToCart(event) {
+		console.log('🎯 handleAddToCart called', event);
+		
 		const { product, quantity, modifiers, notes } = event.detail;
+		
+		console.log('📦 Adding to cart:', {
+			product: product?.name,
+			quantity,
+			modifiers: modifiers?.length || 0,
+			notes
+		});
+		
 		try {
 			// Add tenant info to product for cart grouping
 			const productWithTenant = {
@@ -222,12 +232,18 @@
 				tenant_name: product.tenant_name,
 				tenant_color: product.tenant_color
 			};
+			
+			console.log('✅ Product with tenant:', productWithTenant);
+			
 			await addProductToCart(productWithTenant, quantity, modifiers, notes);
+			
+			console.log('✅ Product added to cart successfully');
+			
 			playHapticFeedback();
 			showModifierModal = false;
 			selectedProduct = null;
 		} catch (error) {
-			console.error('Error adding to cart:', error);
+			console.error('❌ Error adding to cart:', error);
 			if (browser) alert('Failed to add item to cart');
 		}
 	}
