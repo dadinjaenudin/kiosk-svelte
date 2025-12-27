@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'apps.orders',
     'apps.payments',
     'apps.kitchen',
+    'apps.promotions',  # Promotion management
 ]
 
 MIDDLEWARE = [
