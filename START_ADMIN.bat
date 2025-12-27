@@ -144,7 +144,7 @@ echo ========================================
 echo.
 
 cd admin
-call npm run dev
+call npm run dev:local
 goto end
 
 :end
