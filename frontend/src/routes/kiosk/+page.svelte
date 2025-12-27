@@ -27,23 +27,38 @@
 	let isFullscreen = false;
 	let loading = true;
 	let showFilters = false; // Mobile filter menu
+	let searchQuery = '';
+	let showPopular = false;
+	let showPromo = false;
+	let showAvailable = true; // Default: show available only
 	
-	// Filtered products by tenant AND category
+	// Filtered products by tenant, category, search, and quick filters
 	$: filteredProducts = products.filter(p => {
-		// Debug logging
-		if (selectedTenant && products.length > 0 && filteredProducts?.length === products.length) {
-			console.log('⚠️ Filter not working! Sample product:', {
-				name: products[0]?.name,
-				tenant_id: products[0]?.tenant_id,
-				selectedTenant: selectedTenant,
-				match: products[0]?.tenant_id === selectedTenant
-			});
+		// Tenant filter
+		if (selectedTenant && p.tenant_id !== selectedTenant) return false;
+		
+		// Category filter
+		if (selectedCategory && p.category !== selectedCategory) return false;
+		
+		// Search filter
+		if (searchQuery) {
+			const query = searchQuery.toLowerCase();
+			const matchName = p.name?.toLowerCase().includes(query);
+			const matchDesc = p.description?.toLowerCase().includes(query);
+			const matchTenant = p.tenant_name?.toLowerCase().includes(query);
+			if (!matchName && !matchDesc && !matchTenant) return false;
 		}
 		
-		if (selectedTenant && p.tenant_id !== selectedTenant) return false;
-		if (selectedCategory && p.category !== selectedCategory) return false;
+		// Quick filters
+		if (showPopular && !p.is_popular) return false;
+		if (showPromo && !p.has_promo) return false;
+		if (showAvailable && !p.is_available) return false;
+		
 		return true;
 	});
+	
+	// Count filtered results
+	$: resultCount = filteredProducts.length;
 	
 	// Group cart items by tenant
 	$: groupedCartItems = Object.values(
@@ -588,6 +603,63 @@
 				</div>
 			</div>
 			
+			<!-- Search Bar & Quick Filters -->
+			<div class="bg-white px-4 md:px-8 py-4 shadow-sm border-b-2 border-gray-200">
+				<!-- Search Input -->
+				<div class="relative mb-3">
+					<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+						<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+						</svg>
+					</div>
+					<input 
+						type="text"
+						bind:value={searchQuery}
+						placeholder="🔍 Cari menu atau restoran..."
+						class="search-input w-full pl-10 pr-4 py-3 md:py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+					/>
+					{#if searchQuery}
+						<button 
+							on:click={() => searchQuery = ''}
+							class="absolute inset-y-0 right-0 pr-3 flex items-center"
+						>
+							<svg class="w-5 h-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+							</svg>
+						</button>
+					{/if}
+				</div>
+				
+				<!-- Quick Filters -->
+				<div class="flex gap-2 flex-wrap">
+					<button 
+						on:click={() => showPopular = !showPopular}
+						class="quick-filter {showPopular ? 'quick-filter-active' : 'quick-filter-inactive'}"
+					>
+						⭐ Populer
+					</button>
+					<button 
+						on:click={() => showPromo = !showPromo}
+						class="quick-filter {showPromo ? 'quick-filter-active' : 'quick-filter-inactive'}"
+					>
+						🔥 Promo
+					</button>
+					<button 
+						on:click={() => showAvailable = !showAvailable}
+						class="quick-filter {showAvailable ? 'quick-filter-active' : 'quick-filter-inactive'}"
+					>
+						✓ Tersedia
+					</button>
+				</div>
+				
+				<!-- Results Count -->
+				{#if searchQuery || showPopular || showPromo || !showAvailable}
+					<div class="mt-3 text-sm text-gray-600">
+						<span class="font-semibold">Results:</span> {resultCount} produk ditemukan
+					</div>
+				{/if}
+			</div>
+			
 			<!-- Products Grid -->
 			<div class="flex-1 overflow-y-auto scroll-smooth-touch p-4 md:p-8 bg-gray-50">
 				{#if loading}
@@ -1000,6 +1072,55 @@
 			background: rgba(var(--color-secondary-rgb), 0.9);
 			border-color: var(--color-secondary);
 		}
+	}
+	
+	/* Search Input */
+	.search-input {
+		font-size: 0.875rem;
+	}
+	
+	.search-input::placeholder {
+		color: #9ca3af;
+	}
+	
+	@media (min-width: 768px) {
+		.search-input {
+			font-size: 1rem;
+		}
+	}
+	
+	/* Quick Filter Buttons */
+	.quick-filter {
+		padding: 0.5rem 1rem;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		border: 2px solid;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+	}
+	
+	.quick-filter-active {
+		background: #10B981;
+		border-color: #10B981;
+		color: white;
+	}
+	
+	.quick-filter-inactive {
+		background: white;
+		border-color: #e5e7eb;
+		color: #4b5563;
+	}
+	
+	.quick-filter-inactive:hover {
+		border-color: #10B981;
+		background: #f0fdf4;
+		color: #10B981;
+	}
+	
+	.quick-filter-active:hover {
+		background: #059669;
 	}
 
 </style>
