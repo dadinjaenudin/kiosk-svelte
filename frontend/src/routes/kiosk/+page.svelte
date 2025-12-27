@@ -603,12 +603,12 @@
 										{/if}
 										
 										<!-- Line Total -->
+										{@const modifiersTotal = (item.modifiers || []).reduce((sum, mod) => sum + (parseFloat(mod.price_adjustment) || 0), 0)}
+										{@const lineTotal = (item.product_price + modifiersTotal) * item.quantity}
 										<div class="mt-3 pt-2 border-t border-gray-200">
 											<div class="flex justify-between items-center">
 												<span class="text-sm text-gray-600">Subtotal Item:</span>
 												<span class="text-lg font-bold text-primary">
-													{@const modifiersTotal = (item.modifiers || []).reduce((sum, mod) => sum + (parseFloat(mod.price_adjustment) || 0), 0)}
-													{@const lineTotal = (item.product_price + modifiersTotal) * item.quantity}
 													{formatPrice(lineTotal)}
 												</span>
 											</div>

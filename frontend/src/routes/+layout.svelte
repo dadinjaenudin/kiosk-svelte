@@ -4,10 +4,6 @@
 	import '../app.css';
 	import { initializeTenantContext, currentTenant, tenantReady } from '$lib/stores/tenant.js';
 	
-	// SvelteKit props (suppress warnings)
-	export let data = undefined;
-	export let params = undefined;
-	
 	let loading = true;
 	
 	onMount(async () => {
