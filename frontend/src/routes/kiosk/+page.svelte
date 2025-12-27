@@ -74,11 +74,11 @@
 			const modifiersTotal = parsedItem.modifiers.reduce((sum, mod) => {
 				return sum + (parseFloat(mod.price_adjustment) || 0);
 			}, 0);
-			const itemTotal = (item.product_price + modifiersTotal) * item.quantity;
+			const itemTotal = (parseFloat(item.product_price) + modifiersTotal) * item.quantity;
 			
 			// Debug logging
 			console.log(`💰 Cart Item: ${item.product_name}`);
-			console.log(`   Base: ${item.product_price}, Modifiers: ${modifiersTotal}, Qty: ${item.quantity}`);
+			console.log(`   Base: ${parseFloat(item.product_price)}, Modifiers: ${modifiersTotal}, Qty: ${item.quantity}`);
 			console.log(`   Item Total: ${itemTotal}`);
 			
 			groups[tenantId].items.push(parsedItem);
