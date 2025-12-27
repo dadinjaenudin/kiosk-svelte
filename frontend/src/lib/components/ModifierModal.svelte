@@ -12,6 +12,13 @@
 	// Reactive: recalculate when product, selectedModifiers, or quantity changes
 	$: totalPrice = calculateTotalPrice(product, selectedModifiers, quantity);
 	$: groupedModifiers = product?.modifiers ? groupModifiersByType(product.modifiers) : {};
+	// Force reactivity: create a derived value to trigger re-renders
+	$: selectedIds = selectedModifiers.map(m => m.id);
+	$: {
+		if (selectedIds.length > 0) {
+			console.log('🔄 Selected IDs changed:', selectedIds);
+		}
+	}
 	
 	onMount(() => {
 		console.log('🎨 ModifierModal mounted');
@@ -42,9 +49,10 @@
 	}
 	
 	function isModifierSelected(modifierId) {
-		const selected = selectedModifiers.some(m => m.id === modifierId);
+		// Use selectedIds to ensure reactivity
+		const selected = selectedIds.includes(modifierId);
 		if (selected) {
-			console.log(`✅ Modifier ${modifierId} IS SELECTED - IDs in array:`, selectedModifiers.map(m => m.id));
+			console.log(`✅ Modifier ${modifierId} IS SELECTED - IDs in array:`, selectedIds);
 		}
 		return selected;
 	}
