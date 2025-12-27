@@ -2,7 +2,6 @@
 	import { createEventDispatcher, onMount } from 'svelte';
 	
 	export let product = null;
-	export let show = false;
 	
 	const dispatch = createEventDispatcher();
 	
@@ -122,7 +121,7 @@
 	}
 </script>
 
-{#if show && product}
+{#if product}
 	<div class="modal-overlay" on:click={handleClose}>
 		<div class="modal-content" on:click|stopPropagation>
 			<!-- Header -->
