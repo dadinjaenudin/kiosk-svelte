@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     
     # Third party
     'rest_framework',
+    'rest_framework.authtoken',  # Token authentication for admin panel
     'rest_framework_simplejwt',
     'corsheaders',
     'django_filters',
@@ -129,6 +130,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',  # For admin panel
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -159,6 +161,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:5173',
     'http://localhost:5174',  # Kiosk frontend port
+    'http://localhost:5175',  # Admin panel port
     'http://localhost:3000',
     'http://localhost:8080',
     'http://localhost:8082',  # Nginx port
