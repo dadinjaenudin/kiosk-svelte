@@ -1,282 +1,244 @@
 """
-Management command to seed food court sample data with search features
-Usage: python manage.py seed_foodcourt
+Management command to seed food court demo data with 5 tenants
 """
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from apps.products.models import Product
+from django.contrib.auth import get_user_model
+from apps.tenants.models import Tenant, Outlet
+from apps.products.models import Category, Product, ProductModifier
+from apps.core.context import set_current_tenant, clear_tenant_context
 from decimal import Decimal
+
+User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = 'Seed food court sample data with search features (popular, promo, available)'
-
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '--clear',
-            action='store_true',
-            help='Clear existing data before seeding',
-        )
+    help = 'Seed food court data with 5 different tenants'
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('🌱 Starting seed process...'))
+        clear_tenant_context()
         
-        if options['clear']:
-            self.stdout.write('🗑️  Clearing existing search flags...')
-            Product.objects.all().update(
-                is_popular=False,
-                has_promo=False,
-                promo_price=None
+        self.stdout.write(self.style.SUCCESS('🏪 Creating Food Court with 5 Tenants...'))
+        
+        # Define 5 Food Court Tenants
+        tenants_data = [
+            {
+                'slug': 'warung-nasi-padang',
+                'name': 'Warung Nasi Padang',
+                'description': 'Masakan Padang Asli dengan bumbu rempah pilihan',
+                'color': '#FF6B35',
+                'categories': ['Nasi Padang', 'Sayur', 'Minuman'],
+                'products': [
+                    {'sku': 'NP-001', 'name': 'Rendang Sapi', 'category': 'Nasi Padang', 'price': 45000, 'is_popular': True, 'has_promo': False, 'tags': 'rendang,sapi,padang,populer'},
+                    {'sku': 'NP-002', 'name': 'Ayam Pop', 'category': 'Nasi Padang', 'price': 38000, 'is_popular': False, 'has_promo': True, 'promo_price': 32000, 'tags': 'ayam,pop,padang,promo'},
+                    {'sku': 'NP-003', 'name': 'Gulai Ikan', 'category': 'Nasi Padang', 'price': 42000, 'is_popular': True, 'has_promo': True, 'promo_price': 36000, 'tags': 'gulai,ikan,padang,promo,populer'},
+                    {'sku': 'NP-004', 'name': 'Dendeng Balado', 'category': 'Nasi Padang', 'price': 50000, 'is_popular': False, 'has_promo': False, 'tags': 'dendeng,balado,pedas,padang'},
+                    {'sku': 'NP-005', 'name': 'Gulai Tunjang', 'category': 'Nasi Padang', 'price': 40000, 'is_popular': False, 'has_promo': False, 'tags': 'gulai,tunjang,padang'},
+                    {'sku': 'NP-006', 'name': 'Sayur Nangka', 'category': 'Sayur', 'price': 15000, 'is_popular': False, 'has_promo': False, 'tags': 'sayur,nangka,vegetarian'},
+                    {'sku': 'NP-007', 'name': 'Teh Talua', 'category': 'Minuman', 'price': 12000, 'is_popular': False, 'has_promo': False, 'tags': 'minuman,teh,tradisional'},
+                ]
+            },
+            {
+                'slug': 'mie-ayam-bakso',
+                'name': 'Mie Ayam & Bakso',
+                'description': 'Mie ayam dan bakso sapi pilihan sejak 1990',
+                'color': '#F7931E',
+                'categories': ['Mie', 'Bakso', 'Minuman'],
+                'products': [
+                    {'sku': 'MB-001', 'name': 'Mie Ayam Spesial', 'category': 'Mie', 'price': 25000, 'is_popular': True, 'has_promo': False, 'tags': 'mie,ayam,bakso,populer'},
+                    {'sku': 'MB-002', 'name': 'Mie Ayam Jumbo', 'category': 'Mie', 'price': 32000, 'is_popular': True, 'has_promo': True, 'promo_price': 27000, 'tags': 'mie,ayam,jumbo,promo,populer'},
+                    {'sku': 'MB-003', 'name': 'Bakso Sapi', 'category': 'Bakso', 'price': 28000, 'is_popular': False, 'has_promo': False, 'tags': 'bakso,sapi,kuah'},
+                    {'sku': 'MB-004', 'name': 'Bakso Urat', 'category': 'Bakso', 'price': 35000, 'is_popular': False, 'has_promo': True, 'promo_price': 30000, 'tags': 'bakso,urat,promo'},
+                    {'sku': 'MB-005', 'name': 'Bakso Campur', 'category': 'Bakso', 'price': 40000, 'is_popular': False, 'has_promo': False, 'tags': 'bakso,campur,komplit'},
+                    {'sku': 'MB-006', 'name': 'Es Teh Manis', 'category': 'Minuman', 'price': 6000, 'is_popular': True, 'has_promo': False, 'tags': 'minuman,es,teh,populer'},
+                ]
+            },
+            {
+                'slug': 'ayam-geprek',
+                'name': 'Ayam Geprek Mantap',
+                'description': 'Ayam geprek crispy dengan level pedas pilihan',
+                'color': '#DC143C',
+                'categories': ['Ayam Geprek', 'Nasi', 'Minuman'],
+                'products': [
+                    {'sku': 'AG-001', 'name': 'Ayam Geprek Original', 'category': 'Ayam Geprek', 'price': 28000, 'is_popular': True, 'has_promo': False, 'tags': 'ayam,geprek,pedas,populer'},
+                    {'sku': 'AG-002', 'name': 'Ayam Geprek Keju', 'category': 'Ayam Geprek', 'price': 35000, 'is_popular': True, 'has_promo': True, 'promo_price': 30000, 'tags': 'ayam,geprek,keju,promo,populer'},
+                    {'sku': 'AG-003', 'name': 'Ayam Geprek Mozarella', 'category': 'Ayam Geprek', 'price': 40000, 'is_popular': False, 'has_promo': False, 'tags': 'ayam,geprek,mozarella,keju'},
+                    {'sku': 'AG-004', 'name': 'Ayam Geprek Jumbo', 'category': 'Ayam Geprek', 'price': 45000, 'is_popular': True, 'has_promo': False, 'tags': 'ayam,geprek,jumbo,besar,populer'},
+                    {'sku': 'AG-005', 'name': 'Nasi Putih', 'category': 'Nasi', 'price': 5000, 'is_popular': False, 'has_promo': False, 'tags': 'nasi,putih,tambahan'},
+                    {'sku': 'AG-006', 'name': 'Es Jeruk', 'category': 'Minuman', 'price': 8000, 'is_popular': False, 'has_promo': False, 'tags': 'minuman,es,jeruk,segar'},
+                ]
+            },
+            {
+                'slug': 'soto-betawi',
+                'name': 'Soto Betawi H. Mamat',
+                'description': 'Soto Betawi legendaris dengan kuah santan gurih',
+                'color': '#FFC300',
+                'categories': ['Soto', 'Tambahan', 'Minuman'],
+                'products': [
+                    {'sku': 'SB-001', 'name': 'Soto Betawi Daging', 'category': 'Soto', 'price': 38000, 'is_popular': True, 'has_promo': False, 'tags': 'soto,betawi,daging,populer'},
+                    {'sku': 'SB-002', 'name': 'Soto Betawi Babat', 'category': 'Soto', 'price': 35000, 'is_popular': True, 'has_promo': True, 'promo_price': 29000, 'tags': 'soto,betawi,babat,promo,populer'},
+                    {'sku': 'SB-003', 'name': 'Soto Betawi Paru', 'category': 'Soto', 'price': 35000, 'is_popular': False, 'has_promo': False, 'tags': 'soto,betawi,paru'},
+                    {'sku': 'SB-004', 'name': 'Soto Betawi Campur', 'category': 'Soto', 'price': 45000, 'is_popular': False, 'has_promo': False, 'tags': 'soto,betawi,campur,komplit'},
+                    {'sku': 'SB-005', 'name': 'Emping', 'category': 'Tambahan', 'price': 8000, 'is_popular': False, 'has_promo': False, 'tags': 'tambahan,emping,kerupuk'},
+                    {'sku': 'SB-006', 'name': 'Es Kelapa', 'category': 'Minuman', 'price': 12000, 'is_popular': False, 'has_promo': False, 'tags': 'minuman,es,kelapa,segar'},
+                ]
+            },
+            {
+                'slug': 'nasi-goreng',
+                'name': 'Nasi Goreng Abang',
+                'description': 'Nasi goreng enak dengan berbagai varian',
+                'color': '#28A745',
+                'categories': ['Nasi Goreng', 'Minuman', 'Snack'],
+                'products': [
+                    {'sku': 'NG-001', 'name': 'Nasi Goreng Biasa', 'category': 'Nasi Goreng', 'price': 20000, 'is_popular': True, 'has_promo': False, 'tags': 'nasi,goreng,populer'},
+                    {'sku': 'NG-002', 'name': 'Nasi Goreng Spesial', 'category': 'Nasi Goreng', 'price': 28000, 'is_popular': True, 'has_promo': True, 'promo_price': 23000, 'tags': 'nasi,goreng,spesial,promo,populer'},
+                    {'sku': 'NG-003', 'name': 'Nasi Goreng Seafood', 'category': 'Nasi Goreng', 'price': 40000, 'is_popular': False, 'has_promo': False, 'tags': 'nasi,goreng,seafood,udang'},
+                    {'sku': 'NG-004', 'name': 'Nasi Goreng Pete', 'category': 'Nasi Goreng', 'price': 32000, 'is_popular': False, 'has_promo': True, 'promo_price': 27000, 'tags': 'nasi,goreng,pete,promo'},
+                    {'sku': 'NG-005', 'name': 'Nasi Goreng Kambing', 'category': 'Nasi Goreng', 'price': 45000, 'is_popular': True, 'has_promo': False, 'tags': 'nasi,goreng,kambing,populer'},
+                    {'sku': 'NG-006', 'name': 'Kerupuk', 'category': 'Snack', 'price': 5000, 'is_popular': False, 'has_promo': False, 'tags': 'kerupuk,tambahan,snack'},
+                    {'sku': 'NG-007', 'name': 'Es Teh', 'category': 'Minuman', 'price': 6000, 'is_popular': False, 'has_promo': False, 'tags': 'minuman,es,teh'},
+                ]
+            }
+        ]
+        
+        # Create Food Court outlet (shared location)
+        self.stdout.write('Creating Food Court location...')
+        
+        # Create each tenant with products
+        for tenant_data in tenants_data:
+            self.stdout.write(f"\n{'='*60}")
+            self.stdout.write(self.style.SUCCESS(f"Creating Tenant: {tenant_data['name']}"))
+            self.stdout.write('='*60)
+            
+            # Create Tenant
+            tenant, created = Tenant.objects.get_or_create(
+                slug=tenant_data['slug'],
+                defaults={
+                    'name': tenant_data['name'],
+                    'description': tenant_data['description'],
+                    'primary_color': tenant_data['color'],
+                    'secondary_color': tenant_data['color'],
+                    'phone': '021-12345678',
+                    'tax_rate': Decimal('10.00'),
+                    'service_charge_rate': Decimal('5.00'),
+                }
+            )
+            
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'✓ Tenant created: {tenant.name}'))
+            else:
+                self.stdout.write(self.style.WARNING(f'⚠ Tenant exists: {tenant.name}'))
+            
+            # Set tenant context
+            set_current_tenant(tenant)
+            
+            # Create Outlet for this tenant in Food Court
+            outlet, _ = Outlet.objects.get_or_create(
+                tenant=tenant,
+                slug=f'foodcourt-{tenant.slug}',
+                defaults={
+                    'name': f'{tenant.name} - Food Court',
+                    'address': 'Food Court Mall Plaza Senayan Lt. 3',
+                    'city': 'Jakarta Pusat',
+                    'province': 'DKI Jakarta',
+                    'postal_code': '10270',
+                    'phone': '021-12345678',
+                }
+            )
+            self.stdout.write(self.style.SUCCESS(f'✓ Outlet: {outlet.name}'))
+            
+            # Create User for this tenant
+            username = tenant_data['slug']
+            user, created = User.objects.get_or_create(
+                username=username,
+                defaults={
+                    'email': f'{username}@foodcourt.com',
+                    'first_name': tenant.name.split()[0],
+                    'last_name': 'Owner',
+                    'role': 'cashier',
+                    'tenant': tenant,
+                    'outlet': outlet,
+                }
+            )
+            if created:
+                user.set_password('password123')
+                user.save()
+                self.stdout.write(self.style.SUCCESS(f'✓ User: {username} (password: password123)'))
+            
+            # Create Categories
+            self.stdout.write('Creating categories...')
+            categories = {}
+            for cat_name in tenant_data['categories']:
+                cat, _ = Category.objects.get_or_create(
+                    tenant=tenant,
+                    name=cat_name,
+                    defaults={'sort_order': len(categories) + 1}
+                )
+                categories[cat_name] = cat
+                self.stdout.write(f'  ✓ {cat.name}')
+            
+            # Create Products
+            self.stdout.write('Creating products...')
+            for prod_data in tenant_data['products']:
+                defaults = {
+                    'category': categories[prod_data['category']],
+                    'name': prod_data['name'],
+                    'description': f"{prod_data['name']} dari {tenant.name}",
+                    'price': Decimal(str(prod_data['price'])),
+                    'is_available': True,
+                    'is_active': True,
+                    'is_popular': prod_data.get('is_popular', False),
+                    'has_promo': prod_data.get('has_promo', False),
+                    'tags': prod_data.get('tags', ''),
+                }
+                
+                # Add promo_price if has_promo is True
+                if prod_data.get('has_promo') and 'promo_price' in prod_data:
+                    defaults['promo_price'] = Decimal(str(prod_data['promo_price']))
+                
+                prod, created = Product.objects.get_or_create(
+                    tenant=tenant,
+                    sku=prod_data['sku'],
+                    defaults=defaults
+                )
+                if created:
+                    promo_info = ''
+                    if prod.has_promo and prod.promo_price:
+                        promo_info = f' (Promo: Rp {prod.promo_price:,.0f})'
+                    popular_mark = ' ⭐' if prod.is_popular else ''
+                    self.stdout.write(f'  ✓ {prod.name} - Rp {prod.price:,.0f}{promo_info}{popular_mark}')
+            
+            # Clear context for next tenant
+            clear_tenant_context()
+        
+        # Summary
+        self.stdout.write(self.style.SUCCESS('\n' + '='*60))
+        self.stdout.write(self.style.SUCCESS('✅ Food Court Data Seeding Complete!'))
+        self.stdout.write(self.style.SUCCESS('='*60))
+        
+        total_tenants = Tenant.objects.count()
+        total_products = Product.all_objects.count()
+        total_categories = Category.all_objects.count()
+        total_popular = Product.all_objects.filter(is_popular=True).count()
+        total_promo = Product.all_objects.filter(has_promo=True).count()
+        total_popular_promo = Product.all_objects.filter(is_popular=True, has_promo=True).count()
+        
+        self.stdout.write(f'\n📊 Summary:')
+        self.stdout.write(f'   Tenants: {total_tenants}')
+        self.stdout.write(f'   Products: {total_products}')
+        self.stdout.write(f'   Categories: {total_categories}')
+        self.stdout.write(f'   ⭐ Popular: {total_popular}')
+        self.stdout.write(f'   🔥 Promo: {total_promo}')
+        self.stdout.write(f'   🌟 Popular + Promo: {total_popular_promo}')
+        
+        self.stdout.write('\n🏪 Tenants Created:')
+        for tenant in Tenant.objects.all():
+            product_count = Product.all_objects.filter(tenant=tenant).count()
+            popular_count = Product.all_objects.filter(tenant=tenant, is_popular=True).count()
+            promo_count = Product.all_objects.filter(tenant=tenant, has_promo=True).count()
+            self.stdout.write(
+                f'   • {tenant.name} ({product_count} products, {popular_count} popular, {promo_count} promo) - Color: {tenant.primary_color}'
             )
         
-        try:
-            with transaction.atomic():
-                self._seed_ayam_geprek()
-                self._seed_soto_house()
-                self._seed_nasi_padang()
-                self._seed_mie_ayam()
-                self._seed_minuman()
-                
-            self.stdout.write(self.style.SUCCESS('✅ Sample data seeded successfully!'))
-            self._print_summary()
-            
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'❌ Error: {str(e)}'))
-            raise
-    
-    def _seed_ayam_geprek(self):
-        """Seed Ayam Geprek Mantap products"""
-        self.stdout.write('🍗 Seeding Ayam Geprek Mantap...')
-        
-        updates = {
-            'AG-001': {  # Ayam Geprek Original
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'pedas,ayam,geprek,populer'
-            },
-            'AG-002': {  # Ayam Geprek Keju
-                'is_popular': True,
-                'has_promo': True,
-                'promo_price': Decimal('38000'),  # Original: 42000
-                'is_available': True,
-                'tags': 'pedas,ayam,geprek,keju,promo,populer'
-            },
-            'AG-003': {  # Ayam Geprek Sambal Matah
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'pedas,ayam,geprek,sambal matah'
-            },
-            'AG-004': {  # Ayam Geprek Jumbo
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'pedas,ayam,geprek,jumbo,besar,populer'
-            },
-            'AG-005': {  # Ayam Geprek Mozarella
-                'is_popular': False,
-                'has_promo': True,
-                'promo_price': Decimal('43000'),  # Original: 48000
-                'is_available': True,
-                'tags': 'pedas,ayam,geprek,keju,mozarella,promo'
-            },
-            'AG-006': {  # Ayam Geprek Pedas Gila
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': False,  # SOLD OUT
-                'tags': 'pedas,ayam,geprek,extra pedas,sold out'
-            },
-        }
-        
-        count = self._apply_updates(updates)
-        self.stdout.write(f'   ✓ Updated {count} Ayam Geprek products')
-    
-    def _seed_soto_house(self):
-        """Seed Soto House products"""
-        self.stdout.write('🍜 Seeding Soto House...')
-        
-        updates = {
-            'SH-001': {  # Soto Ayam
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'soto,ayam,berkuah,hangat,populer'
-            },
-            'SH-002': {  # Soto Betawi
-                'is_popular': True,
-                'has_promo': True,
-                'promo_price': Decimal('27000'),  # Original: 32000
-                'is_available': True,
-                'tags': 'soto,sapi,berkuah,betawi,promo,populer'
-            },
-            'SH-003': {  # Soto Kudus
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'soto,ayam,berkuah,kudus'
-            },
-            'SH-004': {  # Soto Daging
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'soto,sapi,daging,berkuah'
-            },
-        }
-        
-        count = self._apply_updates(updates)
-        self.stdout.write(f'   ✓ Updated {count} Soto House products')
-    
-    def _seed_nasi_padang(self):
-        """Seed Nasi Padang Sederhana products"""
-        self.stdout.write('🍛 Seeding Nasi Padang Sederhana...')
-        
-        updates = {
-            'NP-001': {  # Nasi Rendang
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'nasi,rendang,padang,populer'
-            },
-            'NP-002': {  # Nasi Gulai Ayam
-                'is_popular': False,
-                'has_promo': True,
-                'promo_price': Decimal('22000'),  # Original: 28000
-                'is_available': True,
-                'tags': 'nasi,gulai,ayam,padang,promo'
-            },
-            'NP-003': {  # Nasi Gulai Kambing
-                'is_popular': True,
-                'has_promo': True,
-                'promo_price': Decimal('38000'),  # Original: 45000
-                'is_available': True,
-                'tags': 'nasi,gulai,kambing,padang,promo,populer'
-            },
-            'NP-004': {  # Nasi Dendeng Balado
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'nasi,dendeng,balado,pedas,padang'
-            },
-            'NP-005': {  # Nasi Ayam Pop
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': False,  # SOLD OUT
-                'tags': 'nasi,ayam,pop,padang,sold out'
-            },
-        }
-        
-        count = self._apply_updates(updates)
-        self.stdout.write(f'   ✓ Updated {count} Nasi Padang products')
-    
-    def _seed_mie_ayam(self):
-        """Seed Mie Ayam Barokah products"""
-        self.stdout.write('🍝 Seeding Mie Ayam Barokah...')
-        
-        updates = {
-            'MA-001': {  # Mie Ayam Original
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'mie,ayam,bakso,populer'
-            },
-            'MA-002': {  # Mie Ayam Bakso
-                'is_popular': True,
-                'has_promo': True,
-                'promo_price': Decimal('18000'),  # Original: 22000
-                'is_available': True,
-                'tags': 'mie,ayam,bakso,promo,populer'
-            },
-            'MA-003': {  # Mie Ayam Jumbo
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'mie,ayam,jumbo,besar'
-            },
-            'MA-004': {  # Mie Ayam Pangsit
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'mie,ayam,pangsit,wonton'
-            },
-        }
-        
-        count = self._apply_updates(updates)
-        self.stdout.write(f'   ✓ Updated {count} Mie Ayam products')
-    
-    def _seed_minuman(self):
-        """Seed Minuman & Dessert products"""
-        self.stdout.write('🥤 Seeding Minuman & Dessert...')
-        
-        updates = {
-            'BV-001': {  # Es Teh Manis
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'minuman,es,teh,manis,populer'
-            },
-            'BV-002': {  # Es Jeruk
-                'is_popular': False,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'minuman,es,jeruk,segar'
-            },
-            'BV-003': {  # Jus Alpukat
-                'is_popular': False,
-                'has_promo': True,
-                'promo_price': Decimal('12000'),  # Original: 15000
-                'is_available': True,
-                'tags': 'minuman,jus,alpukat,sehat,promo'
-            },
-            'DS-001': {  # Es Campur
-                'is_popular': True,
-                'has_promo': False,
-                'is_available': True,
-                'tags': 'dessert,es campur,manis,segar,populer'
-            },
-        }
-        
-        count = self._apply_updates(updates)
-        self.stdout.write(f'   ✓ Updated {count} Minuman products')
-    
-    def _apply_updates(self, updates):
-        """Apply updates to products"""
-        count = 0
-        for sku, data in updates.items():
-            try:
-                product = Product.objects.get(sku=sku)
-                for key, value in data.items():
-                    setattr(product, key, value)
-                product.save()
-                count += 1
-            except Product.DoesNotExist:
-                self.stdout.write(
-                    self.style.WARNING(f'   ⚠️  Product {sku} not found, skipping...')
-                )
-        return count
-    
-    def _print_summary(self):
-        """Print summary statistics"""
-        total = Product.objects.count()
-        popular = Product.objects.filter(is_popular=True).count()
-        promo = Product.objects.filter(has_promo=True).count()
-        available = Product.objects.filter(is_available=True).count()
-        sold_out = Product.objects.filter(is_available=False).count()
-        popular_promo = Product.objects.filter(is_popular=True, has_promo=True).count()
-        
-        self.stdout.write('')
-        self.stdout.write(self.style.SUCCESS('📊 Summary:'))
-        self.stdout.write(f'   Total Products: {total}')
-        self.stdout.write(f'   ⭐ Popular: {popular} products')
-        self.stdout.write(f'   🔥 Promo: {promo} products')
-        self.stdout.write(f'   ✓ Available: {available} products')
-        self.stdout.write(f'   ❌ Sold Out: {sold_out} products')
-        self.stdout.write(f'   🌟 Popular + Promo: {popular_promo} products')
-        self.stdout.write('')
-        self.stdout.write(self.style.SUCCESS('🎉 Ready to test search features!'))
-        self.stdout.write('   Open: http://localhost:5174/kiosk')
-        self.stdout.write('   Try:')
-        self.stdout.write('     - 🔍 Search for "nasi", "ayam", "pedas"')
-        self.stdout.write('     - ⭐ Click [Populer] filter')
-        self.stdout.write('     - 🔥 Click [Promo] filter')
-        self.stdout.write('     - ✓ Toggle [Tersedia] filter')
+        self.stdout.write('\n🌐 Access Food Court Kiosk:')
+        self.stdout.write('   http://localhost:5174/kiosk')
+        self.stdout.write('\n💡 Users can browse ALL menus and filter by tenant!')
