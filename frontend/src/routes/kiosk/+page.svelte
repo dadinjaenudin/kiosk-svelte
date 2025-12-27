@@ -80,8 +80,8 @@
 			
 			loading = false;
 			
-			// Request fullscreen on kiosk devices
-			enterFullscreen();
+			// Note: Fullscreen must be triggered by user gesture (F11 key or button click)
+			// Auto-fullscreen on mount is not allowed by browsers
 			
 			// Listen for online/offline events
 			window.addEventListener('online', handleOnline);
@@ -243,7 +243,8 @@
 		const elem = document.documentElement;
 		if (elem.requestFullscreen) {
 			elem.requestFullscreen().catch(err => {
-				console.log('Fullscreen request failed:', err);
+				// Silent fail - fullscreen requires user gesture
+				// Users can press F11 or use fullscreen button
 			});
 		}
 	}
