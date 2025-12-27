@@ -16,7 +16,14 @@ environ.Env.read_env(os.path.join(BASE_DIR.parent, '.env'))
 # Security
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-dev-key-change-in-production')
 DEBUG = env('DEBUG', default=True)
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    'backend',  # Docker internal hostname
+    'kiosk_pos_backend',  # Docker container name
+    '*'  # Allow all in development (remove in production!)
+])
 
 # Application definition
 INSTALLED_APPS = [
