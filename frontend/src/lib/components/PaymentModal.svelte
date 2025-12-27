@@ -6,9 +6,9 @@
 	
 	const dispatch = createEventDispatcher();
 	
-	// Payment methods
+	// Payment methods (all available)
 	const paymentMethods = [
-		{ id: 'cash', name: 'Cash', icon: '💵', color: '#10B981' },
+		{ id: 'cash', name: 'Cash / Tunai', icon: '💵', color: '#10B981' },
 		{ id: 'qris', name: 'QRIS', icon: '📱', color: '#8B5CF6' },
 		{ id: 'gopay', name: 'GoPay', icon: '🟢', color: '#00AA5B' },
 		{ id: 'ovo', name: 'OVO', icon: '🟣', color: '#4F3BE8' },
@@ -18,7 +18,7 @@
 		{ id: 'credit_card', name: 'Credit Card', icon: '💳', color: '#3B82F6' }
 	];
 	
-	let selectedPaymentMethod = 'cash';
+	let selectedPaymentMethod = 'cash'; // Default to cash
 	let customerName = '';
 	let customerPhone = '';
 	let tableNumber = '';
@@ -100,20 +100,45 @@
 		<!-- Payment Methods -->
 		<div class="payment-methods">
 			<h3>💳 Pilih Metode Pembayaran</h3>
+			
+			<!-- Quick Cash Button (Development Mode) -->
+			<div class="quick-cash-section">
+				<button
+					class="quick-cash-btn"
+					class:selected={selectedPaymentMethod === 'cash'}
+					on:click={() => selectPaymentMethod('cash')}
+				>
+					<span class="cash-icon">💵</span>
+					<span class="cash-text">
+						<strong>BAYAR TUNAI / CASH</strong>
+						<small>Pembayaran langsung di kasir</small>
+					</span>
+					{#if selectedPaymentMethod === 'cash'}
+						<span class="check-badge">✓ Dipilih</span>
+					{/if}
+				</button>
+			</div>
+			
+			<div class="payment-divider">
+				<span>Atau pilih metode lain</span>
+			</div>
+			
 			<div class="methods-grid">
 				{#each paymentMethods as method}
-					<button
-						class="method-btn"
-						class:selected={selectedPaymentMethod === method.id}
-						style="border-color: {selectedPaymentMethod === method.id ? method.color : '#E5E7EB'}"
-						on:click={() => selectPaymentMethod(method.id)}
-					>
-						<span class="method-icon">{method.icon}</span>
-						<span class="method-name">{method.name}</span>
-						{#if selectedPaymentMethod === method.id}
-							<span class="check-icon">✓</span>
-						{/if}
-					</button>
+					{#if method.id !== 'cash'}
+						<button
+							class="method-btn"
+							class:selected={selectedPaymentMethod === method.id}
+							style="border-color: {selectedPaymentMethod === method.id ? method.color : '#E5E7EB'}"
+							on:click={() => selectPaymentMethod(method.id)}
+						>
+							<span class="method-icon">{method.icon}</span>
+							<span class="method-name">{method.name}</span>
+							{#if selectedPaymentMethod === method.id}
+								<span class="check-icon">✓</span>
+							{/if}
+						</button>
+					{/if}
 				{/each}
 			</div>
 		</div>
@@ -313,6 +338,106 @@
 		font-weight: 600;
 		color: #374151;
 		margin: 0 0 16px 0;
+	}
+	
+	/* Quick Cash Button */
+	.quick-cash-section {
+		margin-bottom: 20px;
+	}
+	
+	.quick-cash-btn {
+		width: 100%;
+		background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+		border: 3px solid #10B981;
+		border-radius: 16px;
+		padding: 20px 24px;
+		cursor: pointer;
+		transition: all 0.3s;
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		position: relative;
+		overflow: hidden;
+	}
+	
+	.quick-cash-btn:hover {
+		transform: translateY(-4px);
+		box-shadow: 0 12px 24px rgba(16, 185, 129, 0.3);
+	}
+	
+	.quick-cash-btn.selected {
+		background: linear-gradient(135deg, #059669 0%, #047857 100%);
+		border-color: #047857;
+		box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+	}
+	
+	.cash-icon {
+		font-size: 48px;
+		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+	}
+	
+	.cash-text {
+		flex: 1;
+		text-align: left;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	
+	.cash-text strong {
+		font-size: 20px;
+		font-weight: 800;
+		color: white;
+		letter-spacing: 0.5px;
+	}
+	
+	.cash-text small {
+		font-size: 14px;
+		color: rgba(255, 255, 255, 0.9);
+		font-weight: 500;
+	}
+	
+	.check-badge {
+		background: white;
+		color: #059669;
+		padding: 8px 16px;
+		border-radius: 20px;
+		font-size: 14px;
+		font-weight: 700;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+	
+	.payment-divider {
+		text-align: center;
+		margin: 24px 0;
+		position: relative;
+	}
+	
+	.payment-divider::before,
+	.payment-divider::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 40%;
+		height: 1px;
+		background: #E5E7EB;
+	}
+	
+	.payment-divider::before {
+		left: 0;
+	}
+	
+	.payment-divider::after {
+		right: 0;
+	}
+	
+	.payment-divider span {
+		font-size: 14px;
+		color: #9CA3AF;
+		font-weight: 500;
+		background: white;
+		padding: 0 16px;
+		position: relative;
 	}
 	
 	.methods-grid {
