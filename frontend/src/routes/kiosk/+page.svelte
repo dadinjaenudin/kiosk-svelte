@@ -76,6 +76,11 @@
 			}, 0);
 			const itemTotal = (item.product_price + modifiersTotal) * item.quantity;
 			
+			// Debug logging
+			console.log(`💰 Cart Item: ${item.product_name}`);
+			console.log(`   Base: ${item.product_price}, Modifiers: ${modifiersTotal}, Qty: ${item.quantity}`);
+			console.log(`   Item Total: ${itemTotal}`);
+			
 			groups[tenantId].items.push(parsedItem);
 			groups[tenantId].total += itemTotal;
 			return groups;
@@ -575,7 +580,7 @@
 								
 								<div class="cart-item">
 									<div class="flex-1">
-										<h4 class="font-bold text-kiosk-base">{item.product_name}</h4>
+										<h4 class="font-bold text-kiosk-base truncate">{item.product_name}</h4>
 										<p class="text-primary font-semibold text-kiosk-lg">
 											{formatPrice(item.product_price)}
 										</p>
