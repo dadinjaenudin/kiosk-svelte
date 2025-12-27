@@ -1,48 +1,73 @@
 <script>
 	import { onMount } from 'svelte';
 	import { user } from '$lib/stores/auth';
+	import { getDashboardAnalytics } from '$lib/api/dashboard';
 
 	let stats = {
 		today_revenue: 0,
 		today_orders: 0,
 		pending_orders: 0,
-		completed_orders: 0
+		completed_orders: 0,
+		revenue_trend: 0,
+		orders_trend: 0
 	};
 
 	let topProducts = [];
 	let recentOrders = [];
 	let loading = true;
+	let error = null;
+	let selectedPeriod = 'today';
 
-	onMount(async () => {
-		// TODO: Fetch dashboard data from API
-		// For now, using mock data
-		setTimeout(() => {
+	async function loadDashboard() {
+		loading = true;
+		error = null;
+		
+		try {
+			const data = await getDashboardAnalytics({ period: selectedPeriod });
+			
+			// Update stats
 			stats = {
-				today_revenue: 15750000,
-				today_orders: 127,
-				pending_orders: 8,
-				completed_orders: 119
+				today_revenue: data.metrics.total_revenue,
+				today_orders: data.metrics.total_orders,
+				pending_orders: data.metrics.pending_orders,
+				completed_orders: data.metrics.completed_orders,
+				revenue_trend: data.metrics.revenue_trend,
+				orders_trend: data.metrics.orders_trend
 			};
-
-			topProducts = [
-				{ name: 'Ayam Geprek Keju', sold: 45, revenue: 1575000 },
-				{ name: 'Nasi Goreng Spesial', sold: 38, revenue: 1064000 },
-				{ name: 'Rendang Sapi', sold: 32, revenue: 1440000 },
-				{ name: 'Mie Ayam Jumbo', sold: 28, revenue: 896000 },
-				{ name: 'Soto Betawi', sold: 25, revenue: 950000 }
-			];
-
-			recentOrders = [
-				{ id: 1, order_number: 'ORD-001', customer: 'John Doe', total: 125000, status: 'completed', time: '5 min ago' },
-				{ id: 2, order_number: 'ORD-002', customer: 'Jane Smith', total: 85000, status: 'preparing', time: '8 min ago' },
-				{ id: 3, order_number: 'ORD-003', customer: 'Bob Wilson', total: 150000, status: 'ready', time: '12 min ago' },
-				{ id: 4, order_number: 'ORD-004', customer: 'Alice Brown', total: 95000, status: 'pending', time: '15 min ago' },
-				{ id: 5, order_number: 'ORD-005', customer: 'Charlie Davis', total: 110000, status: 'completed', time: '18 min ago' }
-			];
-
+			
+			// Update top products
+			topProducts = data.top_products.map(p => ({
+				name: p.product_name,
+				sold: p.total_sold,
+				revenue: p.total_revenue
+			}));
+			
+			// Update recent orders
+			recentOrders = data.recent_orders.map(o => ({
+				id: o.id,
+				order_number: o.order_number,
+				customer: o.customer_name,
+				total: o.total_amount,
+				status: o.status,
+				time: o.time_ago
+			}));
+			
 			loading = false;
-		}, 500);
+		} catch (err) {
+			console.error('Failed to load dashboard:', err);
+			error = err.message;
+			loading = false;
+		}
+	}
+
+	onMount(() => {
+		loadDashboard();
 	});
+
+	function changePeriod(period) {
+		selectedPeriod = period;
+		loadDashboard();
+	}
 
 	function formatCurrency(amount) {
 		return new Intl.NumberFormat('id-ID', {
@@ -69,10 +94,41 @@
 
 <div class="space-y-6">
 	<!-- Welcome message -->
-	<div>
-		<h2 class="text-2xl font-bold text-gray-900">Welcome back, {$user?.username || 'Admin'}! 👋</h2>
-		<p class="text-gray-600 mt-1">Here's what's happening with your food court today.</p>
+	<div class="flex items-center justify-between">
+		<div>
+			<h2 class="text-2xl font-bold text-gray-900">Welcome back, {$user?.username || 'Admin'}! 👋</h2>
+			<p class="text-gray-600 mt-1">Here's what's happening with your food court today.</p>
+		</div>
+		
+		<!-- Period selector -->
+		<div class="flex gap-2">
+			<button
+				class="btn {selectedPeriod === 'today' ? 'btn-primary' : 'btn-secondary'}"
+				on:click={() => changePeriod('today')}
+			>
+				Today
+			</button>
+			<button
+				class="btn {selectedPeriod === 'week' ? 'btn-primary' : 'btn-secondary'}"
+				on:click={() => changePeriod('week')}
+			>
+				Week
+			</button>
+			<button
+				class="btn {selectedPeriod === 'month' ? 'btn-primary' : 'btn-secondary'}"
+				on:click={() => changePeriod('month')}
+			>
+				Month
+			</button>
+		</div>
 	</div>
+
+	{#if error}
+		<div class="bg-red-50 border border-red-200 rounded-lg p-4">
+			<p class="text-red-800">Error loading dashboard: {error}</p>
+			<button class="btn btn-secondary mt-2" on:click={loadDashboard}>Retry</button>
+		</div>
+	{/if}
 
 	{#if loading}
 		<div class="flex items-center justify-center py-12">
@@ -85,12 +141,13 @@
 			<div class="card">
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm text-gray-600">Today's Revenue</p>
+						<p class="text-sm text-gray-600">Revenue</p>
 						<p class="text-2xl font-bold text-gray-900 mt-2">
 							{formatCurrency(stats.today_revenue)}
 						</p>
-						<p class="text-sm text-green-600 mt-2 flex items-center">
-							<span class="mr-1">↑</span> 12.5% from yesterday
+						<p class="text-sm mt-2 flex items-center {stats.revenue_trend >= 0 ? 'text-green-600' : 'text-red-600'}">
+							<span class="mr-1">{stats.revenue_trend >= 0 ? '↑' : '↓'}</span> 
+							{Math.abs(stats.revenue_trend).toFixed(1)}% from previous period
 						</p>
 					</div>
 					<div class="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-2xl">
@@ -103,10 +160,11 @@
 			<div class="card">
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm text-gray-600">Today's Orders</p>
+						<p class="text-sm text-gray-600">Orders</p>
 						<p class="text-2xl font-bold text-gray-900 mt-2">{stats.today_orders}</p>
-						<p class="text-sm text-green-600 mt-2 flex items-center">
-							<span class="mr-1">↑</span> 8.3% from yesterday
+						<p class="text-sm mt-2 flex items-center {stats.orders_trend >= 0 ? 'text-green-600' : 'text-red-600'}">
+							<span class="mr-1">{stats.orders_trend >= 0 ? '↑' : '↓'}</span> 
+							{Math.abs(stats.orders_trend).toFixed(1)}% from previous period
 						</p>
 					</div>
 					<div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-2xl">
@@ -135,7 +193,7 @@
 					<div>
 						<p class="text-sm text-gray-600">Completed Orders</p>
 						<p class="text-2xl font-bold text-gray-900 mt-2">{stats.completed_orders}</p>
-						<p class="text-sm text-green-600 mt-2">Today's success</p>
+						<p class="text-sm text-green-600 mt-2">Success rate: {stats.today_orders > 0 ? ((stats.completed_orders / stats.today_orders) * 100).toFixed(1) : 0}%</p>
 					</div>
 					<div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-2xl">
 						✅
