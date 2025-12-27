@@ -27,30 +27,7 @@ docker-compose exec backend python manage.py showmigrations authtoken
 echo.
 
 echo [3/5] Creating/resetting admin user...
-docker-compose exec backend python manage.py shell << EOF
-from apps.users.models import User
-from rest_framework.authtoken.models import Token
-
-# Delete old admin if exists
-User.objects.filter(username='admin').delete()
-
-# Create new admin
-admin = User.objects.create_superuser(
-    username='admin',
-    email='admin@example.com',
-    password='admin123',
-    first_name='Super',
-    last_name='Admin',
-    role='admin'
-)
-print(f"✅ Admin created: {admin.username}")
-
-# Create token for admin
-token, created = Token.objects.get_or_create(user=admin)
-print(f"✅ Token created: {token.key[:20]}...")
-
-exit()
-EOF
+docker-compose exec backend python create_admin.py
 echo.
 
 echo [4/5] Restarting backend...
@@ -71,8 +48,8 @@ echo.
 echo If you see JSON with "token":
 echo   ✅ FIXED! Try browser login
 echo.
-echo If still error:
-echo   Run: CHECK_BACKEND_LOGS.bat
-echo   Share the output
+echo If still HTML error:
+echo   Check backend logs:
+echo   docker-compose logs backend --tail=50
 echo.
 pause
