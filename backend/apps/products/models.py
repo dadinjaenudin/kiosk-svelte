@@ -53,6 +53,9 @@ class Product(TenantModel):
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     is_available = models.BooleanField(default=True)
+    is_popular = models.BooleanField(default=False, help_text='Popular/Bestseller item')
+    has_promo = models.BooleanField(default=False, help_text='Item has active promotion')
+    promo_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text='Promotional price')
     
     # Metadata
     preparation_time = models.IntegerField(default=10, help_text='Preparation time in minutes')
