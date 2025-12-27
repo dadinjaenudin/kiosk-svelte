@@ -6,7 +6,61 @@ REM ===================================================================
 
 echo.
 echo ========================================
-echo    🚀 Starting Admin Panel
+echo    🚀 Admin Panel Startup
+echo ========================================
+echo.
+echo Select startup method:
+echo.
+echo [1] Docker (Recommended for production-like environment)
+echo [2] Local NPM (Faster for development)
+echo.
+set /p choice="Enter your choice (1 or 2): "
+
+if "%choice%"=="1" goto docker
+if "%choice%"=="2" goto local
+
+echo ❌ Invalid choice. Exiting.
+pause
+exit /b 1
+
+:docker
+echo.
+echo ========================================
+echo    🐳 Starting Admin with Docker
+echo ========================================
+echo.
+
+REM Check Docker
+echo [1/3] 🐳 Checking Docker...
+docker-compose ps >nul 2>&1
+if errorlevel 1 (
+    echo ❌ Docker is not running or docker-compose not found
+    echo    Please start Docker Desktop first
+    pause
+    exit /b 1
+)
+echo ✅ Docker is running
+
+REM Build and start admin service
+echo.
+echo [2/3] 🔨 Building admin service...
+docker-compose build admin
+if errorlevel 1 (
+    echo ❌ Build failed
+    pause
+    exit /b 1
+)
+echo ✅ Build complete
+
+echo.
+echo [3/3] 🚀 Starting admin service...
+docker-compose up admin
+goto end
+
+:local
+echo.
+echo ========================================
+echo    💻 Starting Admin Locally
 echo ========================================
 echo.
 
@@ -91,8 +145,9 @@ echo.
 
 cd admin
 call npm run dev
+goto end
 
-REM If server stops
+:end
 echo.
 echo ⚠️  Admin server stopped
 pause
