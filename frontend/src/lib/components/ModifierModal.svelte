@@ -1,5 +1,5 @@
 <script>
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher, onMount, tick } from 'svelte';
 	
 	export let product = null;
 	
@@ -43,11 +43,13 @@
 	
 	function isModifierSelected(modifierId) {
 		const selected = selectedModifiers.some(m => m.id === modifierId);
-		// console.log(`🔍 Check if ${modifierId} selected:`, selected, selectedModifiers.map(m => m.id));
+		if (selected) {
+			console.log(`✅ Modifier ${modifierId} IS SELECTED`);
+		}
 		return selected;
 	}
 	
-	function toggleModifier(modifier, type) {
+	async function toggleModifier(modifier, type) {
 		console.log('🔘 Modifier clicked:', modifier.name, 'Type:', type);
 		console.log('🆔 Modifier ID:', modifier.id);
 		
@@ -73,7 +75,12 @@
 			}
 		}
 		
+		// Force reactivity update
+		selectedModifiers = selectedModifiers;
+		await tick();
+		
 		console.log('✅ Selected modifiers:', selectedModifiers.length, selectedModifiers.map(m => `${m.name} (${m.price_adjustment})`));
+		console.log('🔄 Forcing UI update...');
 		console.log('💰 New total:', totalPrice);
 	}
 	
@@ -163,11 +170,11 @@
 			<!-- Modifiers -->
 			<div class="modal-body">
 				{#if Object.keys(groupedModifiers).length > 0}
-					{#each Object.entries(groupedModifiers) as [type, modifiers]}
+					{#each Object.entries(groupedModifiers) as [type, modifiers] (type)}
 						<div class="modifier-group">
 							<h3>{getTypeLabel(type)}</h3>
 							<div class="modifiers-list" class:inline-list={type === 'spicy'}>
-								{#each modifiers as modifier}
+								{#each modifiers as modifier (modifier.id)}
 									<button
 										class="modifier-option"
 										class:selected={isModifierSelected(modifier.id)}
