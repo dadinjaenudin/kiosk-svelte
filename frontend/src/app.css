@@ -46,18 +46,18 @@
 	
 	/* Product Card */
 	.product-card {
-		@apply bg-white rounded-2xl shadow-md overflow-hidden
-		       min-h-[200px] flex flex-col
+		@apply bg-white rounded-xl md:rounded-2xl shadow-md overflow-hidden
+		       min-h-[180px] md:min-h-[200px] flex flex-col
 		       active:scale-95 transition-transform duration-150
-		       touch-manipulation cursor-pointer;
+		       touch-manipulation cursor-pointer relative;
 	}
 	
 	.product-card-image {
-		@apply w-full h-32 object-cover bg-gray-200;
+		@apply w-full h-24 md:h-32 object-cover bg-gray-200;
 	}
 	
 	.product-card-body {
-		@apply p-4 flex-1 flex flex-col justify-between;
+		@apply p-2 md:p-4 flex-1 flex flex-col justify-between;
 	}
 	
 	/* Category Pills */

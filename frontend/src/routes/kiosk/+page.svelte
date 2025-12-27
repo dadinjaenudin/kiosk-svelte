@@ -420,10 +420,13 @@
 
 <div class="h-screen-safe flex flex-col bg-gray-50 no-select tap-highlight-none">
 	<!-- Header -->
-	<header class="bg-primary text-white px-8 py-6 shadow-lg">
+	<header class="bg-primary text-white px-4 md:px-8 py-4 md:py-6 shadow-lg">
 		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-4">
-				<h1 class="text-kiosk-3xl font-bold">🍽️ Food Court Kiosk</h1>
+			<div class="flex items-center gap-2 md:gap-4">
+				<h1 class="text-2xl md:text-kiosk-3xl font-bold">
+					<span class="hidden md:inline">🍽️ Food Court Kiosk</span>
+					<span class="md:hidden">🍽️ Food<br>Court<br>Kiosk</span>
+				</h1>
 				{#if !$isOnline}
 					<span class="offline-indicator text-kiosk-base">
 						📴 Offline Mode
@@ -433,11 +436,11 @@
 			
 			<button 
 				on:click={() => showCart = !showCart}
-				class="btn-kiosk-secondary relative px-8"
+				class="btn-kiosk-secondary relative px-4 md:px-8 min-w-[100px]"
 			>
-				<span class="text-kiosk-xl">🛒 Cart</span>
+				<span class="text-lg md:text-kiosk-xl">🛒 <span class="hidden sm:inline">Cart</span></span>
 				{#if $cartTotals.itemCount > 0}
-					<span class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-12 h-12 flex items-center justify-center text-kiosk-base font-bold animate-bounce-in">
+					<span class="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-500 text-white rounded-full w-6 h-6 md:w-12 md:h-12 flex items-center justify-center text-xs md:text-kiosk-base font-bold animate-bounce-in">
 						{$cartTotals.itemCount}
 					</span>
 				{/if}
@@ -451,8 +454,8 @@
 		<main class="flex-1 flex flex-col overflow-hidden">
 			<!-- Tenant Filter Tabs -->
 			{#if tenants.length > 0}
-				<div class="bg-white px-8 py-4 shadow-sm border-b-2 border-gray-200">
-					<h3 class="text-sm font-semibold text-gray-600 mb-2">FILTER BY RESTAURANT:</h3>
+				<div class="bg-white px-4 md:px-8 py-3 md:py-4 shadow-sm border-b-2 border-gray-200">
+					<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY RESTAURANT:</h3>
 					<div class="flex gap-3 overflow-x-auto scroll-smooth-touch">
 						<button 
 							on:click={() => selectTenant(null)}
@@ -475,8 +478,8 @@
 			{/if}
 			
 			<!-- Category Tabs -->
-			<div class="bg-white px-8 py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
-				<h3 class="text-sm font-semibold text-gray-600 mb-2">FILTER BY CATEGORY:</h3>
+			<div class="bg-white px-4 md:px-8 py-4 md:py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
+				<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY CATEGORY:</h3>
 				<div class="flex gap-4">
 					<button 
 						on:click={() => selectCategory(null)}
@@ -496,7 +499,7 @@
 			</div>
 			
 			<!-- Products Grid -->
-			<div class="flex-1 overflow-y-auto scroll-smooth-touch p-8 bg-gray-50">
+			<div class="flex-1 overflow-y-auto scroll-smooth-touch p-4 md:p-8 bg-gray-50">
 				{#if loading}
 					<div class="flex items-center justify-center h-full">
 						<div class="spinner w-24 h-24"></div>
@@ -508,7 +511,7 @@
 						<p class="text-kiosk-lg mt-2">Try different filters</p>
 					</div>
 				{:else}
-					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
 						{#each filteredProducts as product (product.id)}
 							<button 
 								on:click={() => handleProductClick(product)}
@@ -530,10 +533,10 @@
 								</div>
 								<div class="product-card-body">
 									<div>
-										<h3 class="font-bold text-kiosk-lg mb-1">{product.name}</h3>
-										<p class="text-gray-600 text-kiosk-sm line-clamp-2">{product.description || 'Delicious food item'}</p>
+										<h3 class="font-bold text-sm md:text-kiosk-lg mb-1 line-clamp-1">{product.name}</h3>
+										<p class="text-gray-600 text-xs md:text-kiosk-sm line-clamp-1 md:line-clamp-2 hidden md:block">{product.description || 'Delicious food item'}</p>
 									</div>
-									<p class="text-primary font-bold text-kiosk-xl mt-3">
+									<p class="text-primary font-bold text-base md:text-kiosk-xl mt-2 md:mt-3">
 										{formatPrice(product.price)}
 									</p>
 								</div>
@@ -761,15 +764,25 @@
 	
 	.tenant-badge {
 		position: absolute;
-		top: 0.5rem;
-		left: 0.5rem;
-		padding: 0.25rem 0.75rem;
-		border-radius: 0.5rem;
-		font-size: 0.75rem;
+		top: 0.25rem;
+		left: 0.25rem;
+		padding: 0.125rem 0.5rem;
+		border-radius: 0.375rem;
+		font-size: 0.625rem;
 		font-weight: 700;
 		color: white;
 		z-index: 10;
 		box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+	}
+	
+	@media (min-width: 768px) {
+		.tenant-badge {
+			top: 0.5rem;
+			left: 0.5rem;
+			padding: 0.25rem 0.75rem;
+			border-radius: 0.5rem;
+			font-size: 0.75rem;
+		}
 	}
 	
 	.tenant-badge-dot {
