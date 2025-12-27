@@ -107,13 +107,19 @@
 			notes: specialInstructions
 		});
 		
+		// Create a copy of modifiers to prevent reset before dispatch completes
+		const modifiersCopy = [...selectedModifiers];
+		const notesCopy = specialInstructions;
+		
 		dispatch('addToCart', {
 			product,
 			quantity,
-			modifiers: selectedModifiers,
-			notes: specialInstructions
+			modifiers: modifiersCopy,
+			notes: notesCopy
 		});
-		handleClose();
+		
+		// Don't call handleClose() here - let parent handle it after successful add
+		// handleClose();
 	}
 	
 	function handleClose() {
