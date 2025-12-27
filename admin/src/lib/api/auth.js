@@ -11,6 +11,8 @@ export async function login(username, password) {
 	authError.set(null);
 
 	try {
+		console.log('🔐 Attempting login:', { username });
+		
 		const response = await fetch(`${API_BASE}/auth/login/`, {
 			method: 'POST',
 			headers: {
@@ -20,12 +22,25 @@ export async function login(username, password) {
 			credentials: 'include'
 		});
 
+		console.log('📡 Login response status:', response.status);
+
 		if (!response.ok) {
-			const error = await response.json();
-			throw new Error(error.message || 'Login failed');
+			const errorText = await response.text();
+			console.error('❌ Login error response:', errorText);
+			
+			let errorMessage = 'Login failed';
+			try {
+				const error = JSON.parse(errorText);
+				errorMessage = error.message || error.error || error.detail || errorMessage;
+			} catch (e) {
+				errorMessage = errorText || errorMessage;
+			}
+			
+			throw new Error(errorMessage);
 		}
 
 		const data = await response.json();
+		console.log('✅ Login successful:', { username: data.user?.username, role: data.user?.role });
 
 		// Store user data
 		user.set({
@@ -41,6 +56,7 @@ export async function login(username, password) {
 
 		return data;
 	} catch (error) {
+		console.error('❌ Login failed:', error.message);
 		authError.set(error.message);
 		throw error;
 	} finally {
