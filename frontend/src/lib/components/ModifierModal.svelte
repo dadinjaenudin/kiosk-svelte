@@ -14,9 +14,12 @@
 	$: groupedModifiers = product?.modifiers ? groupModifiersByType(product.modifiers) : {};
 	// Force reactivity: create a derived value to trigger re-renders
 	$: selectedIds = selectedModifiers.map(m => m.id);
+	// Create a Set for faster lookup and guaranteed reactivity
+	$: selectedIdsSet = new Set(selectedIds);
 	$: {
 		if (selectedIds.length > 0) {
 			console.log('🔄 Selected IDs changed:', selectedIds);
+			console.log('🔍 Checking selection for render...');
 		}
 	}
 	
@@ -185,7 +188,7 @@
 								{#each modifiers as modifier (modifier.id)}
 									<button
 										class="modifier-option"
-										class:selected={isModifierSelected(modifier.id)}
+										class:selected={selectedIdsSet.has(modifier.id)}
 										class:inline-option={type === 'spicy'}
 										on:click={() => toggleModifier(modifier, type)}
 									>
@@ -201,7 +204,7 @@
 												{/if}
 											</span>
 										{/if}
-										{#if isModifierSelected(modifier.id)}
+										{#if selectedIdsSet.has(modifier.id)}
 											<span 
 												class="check-icon" 
 												class:inline-check={type === 'spicy'}
