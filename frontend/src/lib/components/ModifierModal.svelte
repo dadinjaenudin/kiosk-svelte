@@ -49,6 +49,7 @@
 	
 	function toggleModifier(modifier, type) {
 		console.log('🔘 Modifier clicked:', modifier.name, 'Type:', type);
+		console.log('🆔 Modifier ID:', modifier.id);
 		
 		// For size and sauce, only one can be selected (radio behavior)
 		if (type === 'size' || type === 'sauce') {
@@ -61,6 +62,7 @@
 		else if (type === 'spicy') {
 			selectedModifiers = selectedModifiers.filter(m => m.type !== 'spicy');
 			selectedModifiers = [...selectedModifiers, modifier];
+			console.log('🌶️ Spicy selected! New selection:', selectedModifiers.map(m => m.name));
 		}
 		// For toppings and extras, multiple can be selected (checkbox behavior)
 		else {
@@ -361,9 +363,15 @@
 	}
 	
 	.modifier-option.selected {
-		border-color: #10B981;
-		background: #D1FAE5;
-		border-width: 3px;
+		border-color: #10B981 !important;
+		background: #D1FAE5 !important;
+		border-width: 3px !important;
+	}
+	
+	.modifier-option.inline-option.selected {
+		border-color: #10B981 !important;
+		background: #D1FAE5 !important;
+		box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 	}
 	
 	.modifier-name {
@@ -417,19 +425,24 @@
 		min-width: fit-content;
 		padding: 8px 16px;
 		justify-content: center;
+		display: flex;
+		align-items: center;
+		gap: 6px;
 	}
 	
 	.inline-option .modifier-name {
 		flex: none;
 		font-size: 13px;
+		margin: 0;
 	}
 	
 	.inline-check {
-		position: static;
+		position: static !important;
 		width: 16px;
 		height: 16px;
 		font-size: 10px;
-		margin-left: 6px;
+		margin: 0;
+		flex-shrink: 0;
 	}
 	
 	.no-modifiers {
