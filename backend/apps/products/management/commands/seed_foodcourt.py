@@ -178,6 +178,7 @@ class Command(BaseCommand):
             
             # Create Products
             self.stdout.write('Creating products...')
+            product_objects = {}
             for prod_data in tenant_data['products']:
                 prod, created = Product.objects.get_or_create(
                     tenant=tenant,
@@ -191,8 +192,13 @@ class Command(BaseCommand):
                         'is_active': True,
                     }
                 )
+                product_objects[prod_data['sku']] = prod
                 if created:
                     self.stdout.write(f'  ✓ {prod.name} - Rp {prod.price:,.0f}')
+            
+            # Create Product Modifiers based on tenant
+            self.stdout.write('Creating modifiers...')
+            self._create_modifiers(tenant, product_objects, tenant_data['slug'])
             
             # Clear context for next tenant
             clear_tenant_context()
@@ -205,11 +211,13 @@ class Command(BaseCommand):
         total_tenants = Tenant.objects.count()
         total_products = Product.all_objects.count()
         total_categories = Category.all_objects.count()
+        total_modifiers = ProductModifier.objects.count()
         
         self.stdout.write(f'\n📊 Summary:')
         self.stdout.write(f'   Tenants: {total_tenants}')
         self.stdout.write(f'   Products: {total_products}')
         self.stdout.write(f'   Categories: {total_categories}')
+        self.stdout.write(f'   Modifiers: {total_modifiers}')
         
         self.stdout.write('\n🏪 Tenants Created:')
         for tenant in Tenant.objects.all():
@@ -219,3 +227,106 @@ class Command(BaseCommand):
         self.stdout.write('\n🌐 Access Food Court Kiosk:')
         self.stdout.write('   http://localhost:5174/kiosk')
         self.stdout.write('\n💡 Users can browse ALL menus and filter by tenant!')
+    
+    def _create_modifiers(self, tenant, products, tenant_slug):
+        """Create product modifiers based on tenant type"""
+        
+        modifiers_config = {
+            'warung-nasi-padang': [
+                # Rendang, Ayam Pop, etc - portion size
+                {
+                    'products': ['NP-001', 'NP-002', 'NP-003', 'NP-004', 'NP-005'],
+                    'modifiers': [
+                        {'name': 'Porsi Kecil', 'type': 'size', 'price': -5000, 'sort': 1},
+                        {'name': 'Porsi Sedang', 'type': 'size', 'price': 0, 'sort': 2},
+                        {'name': 'Porsi Besar', 'type': 'size', 'price': 8000, 'sort': 3},
+                        {'name': 'Extra Sambal', 'type': 'extra', 'price': 2000, 'sort': 4},
+                        {'name': 'Extra Nasi', 'type': 'extra', 'price': 5000, 'sort': 5},
+                    ]
+                },
+            ],
+            'mie-ayam-bakso': [
+                {
+                    'products': ['MB-001', 'MB-002'],  # Mie ayam
+                    'modifiers': [
+                        {'name': 'Pangsit Goreng', 'type': 'extra', 'price': 3000, 'sort': 1},
+                        {'name': 'Extra Ayam', 'type': 'extra', 'price': 8000, 'sort': 2},
+                        {'name': 'Extra Mie', 'type': 'extra', 'price': 5000, 'sort': 3},
+                        {'name': 'Tidak Pakai Sawi', 'type': 'extra', 'price': 0, 'sort': 4},
+                    ]
+                },
+                {
+                    'products': ['MB-003', 'MB-004', 'MB-005'],  # Bakso
+                    'modifiers': [
+                        {'name': 'Extra Bakso (2 pcs)', 'type': 'extra', 'price': 10000, 'sort': 1},
+                        {'name': 'Extra Mie', 'type': 'extra', 'price': 5000, 'sort': 2},
+                        {'name': 'Kuah Pedas', 'type': 'spicy', 'price': 0, 'sort': 3},
+                        {'name': 'Kuah Ekstra', 'type': 'extra', 'price': 3000, 'sort': 4},
+                    ]
+                },
+            ],
+            'ayam-geprek': [
+                {
+                    'products': ['AG-001', 'AG-002', 'AG-003', 'AG-004'],  # All ayam geprek
+                    'modifiers': [
+                        {'name': 'Level 1 (Tidak Pedas)', 'type': 'spicy', 'price': 0, 'sort': 1},
+                        {'name': 'Level 2 (Sedang)', 'type': 'spicy', 'price': 0, 'sort': 2},
+                        {'name': 'Level 3 (Pedas)', 'type': 'spicy', 'price': 0, 'sort': 3},
+                        {'name': 'Level 4 (Sangat Pedas)', 'type': 'spicy', 'price': 0, 'sort': 4},
+                        {'name': 'Level 5 (Extra Pedas)', 'type': 'spicy', 'price': 0, 'sort': 5},
+                        {'name': 'Extra Keju', 'type': 'topping', 'price': 7000, 'sort': 6},
+                        {'name': 'Extra Nasi', 'type': 'extra', 'price': 5000, 'sort': 7},
+                        {'name': 'Tanpa Nasi', 'type': 'extra', 'price': -5000, 'sort': 8},
+                    ]
+                },
+            ],
+            'soto-betawi': [
+                {
+                    'products': ['SB-001', 'SB-002', 'SB-003', 'SB-004'],  # All soto
+                    'modifiers': [
+                        {'name': 'Kuah Santan', 'type': 'sauce', 'price': 0, 'sort': 1},
+                        {'name': 'Kuah Bening', 'type': 'sauce', 'price': 0, 'sort': 2},
+                        {'name': 'Emping', 'type': 'topping', 'price': 5000, 'sort': 3},
+                        {'name': 'Jeruk Limau', 'type': 'extra', 'price': 2000, 'sort': 4},
+                        {'name': 'Extra Daging', 'type': 'extra', 'price': 12000, 'sort': 5},
+                        {'name': 'Sambal Rawit', 'type': 'spicy', 'price': 0, 'sort': 6},
+                    ]
+                },
+            ],
+            'nasi-goreng': [
+                {
+                    'products': ['NG-001', 'NG-002', 'NG-003', 'NG-004', 'NG-005'],  # All nasi goreng
+                    'modifiers': [
+                        {'name': 'Telur Mata Sapi', 'type': 'topping', 'price': 5000, 'sort': 1},
+                        {'name': 'Telur Dadar', 'type': 'topping', 'price': 4000, 'sort': 2},
+                        {'name': 'Extra Ayam', 'type': 'extra', 'price': 10000, 'sort': 3},
+                        {'name': 'Extra Seafood', 'type': 'extra', 'price': 15000, 'sort': 4},
+                        {'name': 'Kerupuk', 'type': 'extra', 'price': 3000, 'sort': 5},
+                        {'name': 'Acar', 'type': 'extra', 'price': 2000, 'sort': 6},
+                        {'name': 'Level Pedas (1-5)', 'type': 'spicy', 'price': 0, 'sort': 7},
+                    ]
+                },
+            ],
+        }
+        
+        if tenant_slug in modifiers_config:
+            for config in modifiers_config[tenant_slug]:
+                for sku in config['products']:
+                    if sku in products:
+                        product = products[sku]
+                        for mod_data in config['modifiers']:
+                            modifier, created = ProductModifier.objects.get_or_create(
+                                product=product,
+                                name=mod_data['name'],
+                                defaults={
+                                    'type': mod_data['type'],
+                                    'price_adjustment': Decimal(str(mod_data['price'])),
+                                    'is_active': True,
+                                    'sort_order': mod_data['sort']
+                                }
+                            )
+                            if created:
+                                price_str = f"+Rp {abs(mod_data['price']):,.0f}" if mod_data['price'] > 0 else (
+                                    f"-Rp {abs(mod_data['price']):,.0f}" if mod_data['price'] < 0 else "Rp 0"
+                                )
+                                self.stdout.write(f"    ✓ {product.name}: {modifier.name} ({price_str})")
