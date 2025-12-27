@@ -62,7 +62,8 @@
 	
 	/* Category Pills */
 	.category-pill {
-		@apply inline-block px-6 py-3 rounded-full text-kiosk-base
+		@apply inline-block px-4 py-2 md:px-6 md:py-3 rounded-full 
+		       text-xs md:text-kiosk-base
 		       font-semibold whitespace-nowrap touch-manipulation
 		       transition-all duration-200;
 	}

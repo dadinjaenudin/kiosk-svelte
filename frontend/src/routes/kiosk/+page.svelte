@@ -420,12 +420,12 @@
 
 <div class="h-screen-safe flex flex-col bg-gray-50 no-select tap-highlight-none">
 	<!-- Header -->
-	<header class="bg-primary text-white px-4 md:px-8 py-4 md:py-6 shadow-lg">
-		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-2 md:gap-4">
-				<h1 class="text-2xl md:text-kiosk-3xl font-bold">
+	<header class="bg-primary text-white px-4 md:px-8 py-3 md:py-6 shadow-lg">
+		<div class="flex items-center justify-between gap-2">
+			<div class="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
+				<h1 class="text-lg md:text-kiosk-3xl font-bold leading-tight">
 					<span class="hidden md:inline">🍽️ Food Court Kiosk</span>
-					<span class="md:hidden">🍽️ Food<br>Court<br>Kiosk</span>
+					<span class="md:hidden">🍽️ Food Court Kiosk</span>
 				</h1>
 				{#if !$isOnline}
 					<span class="offline-indicator text-kiosk-base">
@@ -436,11 +436,14 @@
 			
 			<button 
 				on:click={() => showCart = !showCart}
-				class="btn-kiosk-secondary relative px-4 md:px-8 min-w-[100px]"
+				class="btn-kiosk-secondary relative px-3 py-2 md:px-8 md:py-3 flex-shrink-0"
 			>
-				<span class="text-lg md:text-kiosk-xl">🛒 <span class="hidden sm:inline">Cart</span></span>
+				<span class="text-base md:text-kiosk-xl flex items-center gap-1">
+					🛒 
+					<span class="hidden md:inline">Cart</span>
+				</span>
 				{#if $cartTotals.itemCount > 0}
-					<span class="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-500 text-white rounded-full w-6 h-6 md:w-12 md:h-12 flex items-center justify-center text-xs md:text-kiosk-base font-bold animate-bounce-in">
+					<span class="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-500 text-white rounded-full w-5 h-5 md:w-12 md:h-12 flex items-center justify-center text-xs md:text-kiosk-base font-bold">
 						{$cartTotals.itemCount}
 					</span>
 				{/if}
@@ -456,7 +459,7 @@
 			{#if tenants.length > 0}
 				<div class="bg-white px-4 md:px-8 py-3 md:py-4 shadow-sm border-b-2 border-gray-200">
 					<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY RESTAURANT:</h3>
-					<div class="flex gap-3 overflow-x-auto scroll-smooth-touch">
+					<div class="flex gap-2 md:gap-3 overflow-x-auto scroll-smooth-touch pb-1">
 						<button 
 							on:click={() => selectTenant(null)}
 							class="tenant-filter {selectedTenant === null ? 'tenant-filter-active' : 'tenant-filter-inactive'}"
@@ -478,9 +481,9 @@
 			{/if}
 			
 			<!-- Category Tabs -->
-			<div class="bg-white px-4 md:px-8 py-4 md:py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
+			<div class="bg-white px-4 md:px-8 py-3 md:py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
 				<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY CATEGORY:</h3>
-				<div class="flex gap-4">
+				<div class="flex gap-2 md:gap-4 pb-1">
 					<button 
 						on:click={() => selectCategory(null)}
 						class="category-pill {selectedCategory === null ? 'category-pill-active' : 'category-pill-inactive'}"
@@ -732,17 +735,26 @@
 	}
 	
 	.tenant-filter {
-		padding: 0.75rem 1.5rem;
-		border-radius: 0.75rem;
+		padding: 0.5rem 1rem;
+		border-radius: 0.5rem;
 		border: 2px solid;
-		font-size: 0.875rem;
+		font-size: 0.75rem;
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.2s;
 		white-space: nowrap;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.375rem;
+	}
+	
+	@media (min-width: 768px) {
+		.tenant-filter {
+			padding: 0.75rem 1.5rem;
+			border-radius: 0.75rem;
+			font-size: 0.875rem;
+			gap: 0.5rem;
+		}
 	}
 	
 	.tenant-filter-active {
@@ -787,10 +799,17 @@
 	
 	.tenant-badge-dot {
 		display: inline-block;
-		width: 0.75rem;
-		height: 0.75rem;
+		width: 0.5rem;
+		height: 0.5rem;
 		border-radius: 50%;
 		margin-right: 0.25rem;
+	}
+	
+	@media (min-width: 768px) {
+		.tenant-badge-dot {
+			width: 0.75rem;
+			height: 0.75rem;
+		}
 	}
 	
 	.tenant-group {
