@@ -6,6 +6,7 @@
 	import { browser } from '$app/environment';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import SuccessModal from '$lib/components/SuccessModal.svelte';
+	import ModifierModal from '$lib/components/ModifierModal.svelte';
 	
 	// SvelteKit props (suppress warnings)
 	export let data = undefined;
@@ -20,6 +21,8 @@
 	let showCart = false;
 	let showPaymentModal = false;
 	let showSuccessModal = false;
+	let showModifierModal = false;
+	let selectedProduct = null;
 	let checkoutResult = null;
 	let isFullscreen = false;
 	let loading = true;
@@ -176,7 +179,15 @@
 		}
 	}
 	
-	async function handleAddToCart(product) {
+	// Open modifier modal when product clicked
+	function handleProductClick(product) {
+		selectedProduct = product;
+		showModifierModal = true;
+	}
+
+	// Add to cart with modifiers
+	async function handleAddToCart(event) {
+		const { product, quantity, modifiers, notes } = event.detail;
 		try {
 			// Add tenant info to product for cart grouping
 			const productWithTenant = {
@@ -185,8 +196,10 @@
 				tenant_name: product.tenant_name,
 				tenant_color: product.tenant_color
 			};
-			await addProductToCart(productWithTenant, 1, []);
+			await addProductToCart(productWithTenant, quantity, modifiers, notes);
 			playHapticFeedback();
+			showModifierModal = false;
+			selectedProduct = null;
 		} catch (error) {
 			console.error('Error adding to cart:', error);
 			if (browser) alert('Failed to add item to cart');
@@ -428,7 +441,7 @@
 					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
 						{#each filteredProducts as product (product.id)}
 							<button 
-								on:click={() => handleAddToCart(product)}
+								on:click={() => handleProductClick(product)}
 								class="product-card ripple"
 							>
 								<!-- Tenant Badge -->
@@ -575,6 +588,15 @@
 			{/if}
 		</aside>
 	</div>
+	
+	<!-- Modifier Modal -->
+	{#if showModifierModal && selectedProduct}
+		<ModifierModal
+			product={selectedProduct}
+			on:close={() => { showModifierModal = false; selectedProduct = null; }}
+			on:addToCart={handleAddToCart}
+		/>
+	{/if}
 	
 	<!-- Payment Modal -->
 	{#if showPaymentModal}
