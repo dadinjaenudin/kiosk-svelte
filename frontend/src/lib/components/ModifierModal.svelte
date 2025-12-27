@@ -45,6 +45,8 @@
 	}
 	
 	function toggleModifier(modifier, type) {
+		console.log('🔘 Modifier clicked:', modifier.name, 'Type:', type);
+		
 		// For size and sauce, only one can be selected (radio behavior)
 		if (type === 'size' || type === 'sauce') {
 			selectedModifiers = selectedModifiers.filter(m => m.type !== type);
@@ -65,6 +67,9 @@
 				selectedModifiers = [...selectedModifiers, modifier];
 			}
 		}
+		
+		console.log('✅ Selected modifiers:', selectedModifiers.length, selectedModifiers.map(m => m.name));
+		console.log('💰 New total:', totalPrice);
 	}
 	
 	function calculateTotalPrice() {
