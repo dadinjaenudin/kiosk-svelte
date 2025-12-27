@@ -459,12 +459,13 @@
 			{#if tenants.length > 0}
 				<div class="bg-white px-4 md:px-8 py-3 md:py-4 shadow-sm border-b-2 border-gray-200">
 					<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY RESTAURANT:</h3>
-					<div class="flex gap-2 md:gap-3 overflow-x-auto scroll-smooth-touch pb-1">
+					<div class="flex gap-2 md:gap-3 overflow-x-auto pb-1 scrollbar-thin">
 						<button 
 							on:click={() => selectTenant(null)}
 							class="tenant-filter {selectedTenant === null ? 'tenant-filter-active' : 'tenant-filter-inactive'}"
 						>
-							All Restaurants
+							<span class="hidden md:inline">All Restaurants</span>
+							<span class="md:hidden">All</span>
 						</button>
 						{#each tenants as tenant}
 							<button 
@@ -473,7 +474,8 @@
 								style="border-color: {selectedTenant === tenant.id ? tenant.color : '#e2e8f0'}; background: {selectedTenant === tenant.id ? tenant.color + '15' : 'white'}"
 							>
 								<span class="tenant-badge-dot" style="background: {tenant.color}"></span>
-								{tenant.name}
+								<span class="hidden md:inline">{tenant.name}</span>
+								<span class="md:hidden">{tenant.name.split(' ')[0]}</span>
 							</button>
 						{/each}
 					</div>
@@ -735,17 +737,18 @@
 	}
 	
 	.tenant-filter {
-		padding: 0.5rem 1rem;
+		padding: 0.5rem 0.875rem;
 		border-radius: 0.5rem;
 		border: 2px solid;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.2s;
 		white-space: nowrap;
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
+		gap: 0.25rem;
+		flex-shrink: 0;
 	}
 	
 	@media (min-width: 768px) {
@@ -838,4 +841,46 @@
 		font-weight: 600;
 		color: #4a5568;
 	}
+	
+	/* Scrollbar styling for horizontal scroll */
+	.scrollbar-thin {
+		scrollbar-width: thin;
+		scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+	}
+	
+	.scrollbar-thin::-webkit-scrollbar {
+		height: 4px;
+	}
+	
+	.scrollbar-thin::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	
+	.scrollbar-thin::-webkit-scrollbar-thumb {
+		background: rgba(156, 163, 175, 0.5);
+		border-radius: 2px;
+	}
+	
+	.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+		background: rgba(156, 163, 175, 0.7);
+	}
+	
+	/* Mobile: Show scroll indicator shadow */
+	@media (max-width: 767px) {
+		.scrollbar-thin {
+			position: relative;
+		}
+		
+		.scrollbar-thin::after {
+			content: '';
+			position: absolute;
+			right: 0;
+			top: 0;
+			bottom: 0;
+			width: 40px;
+			background: linear-gradient(to right, transparent, rgba(255,255,255,0.9));
+			pointer-events: none;
+		}
+	}
+
 </style>
