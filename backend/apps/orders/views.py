@@ -6,6 +6,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.db import transaction
+from django.db.models import Sum, Count, Q, F
+from django.utils import timezone
+from datetime import timedelta, datetime
+from decimal import Decimal
 from apps.orders.models import Order, OrderItem
 from apps.payments.models import Payment
 from apps.orders.serializers import (
@@ -180,3 +184,230 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         
         serializer = self.get_serializer(order)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    def dashboard_analytics(self, request):
+        """
+        Dashboard analytics endpoint
+        Returns sales metrics, revenue charts, top products, and recent orders
+        
+        Query params:
+        - period: today/week/month/custom (default: today)
+        - start_date: for custom period (YYYY-MM-DD)
+        - end_date: for custom period (YYYY-MM-DD)
+        - tenant_id: filter by specific tenant (optional, defaults to all)
+        """
+        # Get filter parameters
+        period = request.query_params.get('period', 'today')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        tenant_id = request.query_params.get('tenant_id') or request.headers.get('X-Tenant-ID')
+        
+        # Calculate date range
+        now = timezone.now()
+        
+        if period == 'today':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = now
+        elif period == 'week':
+            start_date = now - timedelta(days=7)
+            end_date = now
+        elif period == 'month':
+            start_date = now - timedelta(days=30)
+            end_date = now
+        elif period == 'custom' and start_date_str and end_date_str:
+            try:
+                start_date = timezone.make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
+                end_date = timezone.make_aware(datetime.strptime(end_date_str, '%Y-%m-%d'))
+                end_date = end_date.replace(hour=23, minute=59, second=59)
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = now
+        
+        # Base queryset
+        orders_queryset = Order.objects.filter(
+            created_at__range=[start_date, end_date]
+        )
+        
+        # Filter by tenant if provided
+        if tenant_id:
+            orders_queryset = orders_queryset.filter(tenant_id=tenant_id)
+        
+        # Sales Metrics
+        total_revenue = orders_queryset.filter(
+            payment_status='paid'
+        ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0')
+        
+        total_orders = orders_queryset.count()
+        
+        pending_orders = orders_queryset.filter(
+            status__in=['pending', 'confirmed', 'preparing']
+        ).count()
+        
+        completed_orders = orders_queryset.filter(
+            status__in=['completed', 'served']
+        ).count()
+        
+        # Calculate previous period for trends
+        period_duration = end_date - start_date
+        prev_start = start_date - period_duration
+        prev_end = start_date
+        
+        prev_orders_queryset = Order.objects.filter(
+            created_at__range=[prev_start, prev_end]
+        )
+        if tenant_id:
+            prev_orders_queryset = prev_orders_queryset.filter(tenant_id=tenant_id)
+        
+        prev_revenue = prev_orders_queryset.filter(
+            payment_status='paid'
+        ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0')
+        
+        prev_total_orders = prev_orders_queryset.count()
+        
+        # Calculate trends
+        revenue_trend = self._calculate_trend(float(total_revenue), float(prev_revenue))
+        orders_trend = self._calculate_trend(total_orders, prev_total_orders)
+        
+        # Revenue Chart Data (daily breakdown)
+        revenue_chart = self._get_revenue_chart_data(orders_queryset, start_date, end_date, period)
+        
+        # Top Products
+        top_products = OrderItem.objects.filter(
+            order__in=orders_queryset,
+            order__payment_status='paid'
+        ).values(
+            'product_id',
+            'product_name'
+        ).annotate(
+            total_sold=Sum('quantity'),
+            total_revenue=Sum('total_price')
+        ).order_by('-total_revenue')[:10]
+        
+        # Recent Orders
+        recent_orders = orders_queryset.select_related(
+            'tenant', 'outlet'
+        ).order_by('-created_at')[:10]
+        
+        recent_orders_data = []
+        for order in recent_orders:
+            time_diff = now - order.created_at
+            minutes_ago = int(time_diff.total_seconds() / 60)
+            
+            if minutes_ago < 60:
+                time_ago = f"{minutes_ago} min ago"
+            elif minutes_ago < 1440:  # less than a day
+                hours_ago = minutes_ago // 60
+                time_ago = f"{hours_ago} hour{'s' if hours_ago > 1 else ''} ago"
+            else:
+                days_ago = minutes_ago // 1440
+                time_ago = f"{days_ago} day{'s' if days_ago > 1 else ''} ago"
+            
+            recent_orders_data.append({
+                'id': order.id,
+                'order_number': order.order_number,
+                'customer_name': order.customer_name or 'Walk-in Customer',
+                'total_amount': float(order.total_amount),
+                'status': order.status,
+                'time_ago': time_ago,
+                'created_at': order.created_at.isoformat()
+            })
+        
+        # Response
+        response_data = {
+            'period': period,
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'metrics': {
+                'total_revenue': float(total_revenue),
+                'revenue_trend': revenue_trend,
+                'total_orders': total_orders,
+                'orders_trend': orders_trend,
+                'pending_orders': pending_orders,
+                'completed_orders': completed_orders,
+            },
+            'revenue_chart': revenue_chart,
+            'top_products': [
+                {
+                    'product_id': item['product_id'],
+                    'product_name': item['product_name'],
+                    'total_sold': item['total_sold'],
+                    'total_revenue': float(item['total_revenue'])
+                }
+                for item in top_products
+            ],
+            'recent_orders': recent_orders_data
+        }
+        
+        return Response(response_data)
+    
+    def _calculate_trend(self, current, previous):
+        """Calculate percentage trend"""
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 2)
+    
+    def _get_revenue_chart_data(self, queryset, start_date, end_date, period):
+        """Generate revenue chart data based on period"""
+        chart_data = []
+        
+        if period == 'today':
+            # Hourly breakdown for today
+            for hour in range(24):
+                hour_start = start_date.replace(hour=hour, minute=0, second=0)
+                hour_end = hour_start + timedelta(hours=1)
+                
+                revenue = queryset.filter(
+                    created_at__range=[hour_start, hour_end],
+                    payment_status='paid'
+                ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0')
+                
+                chart_data.append({
+                    'label': f"{hour:02d}:00",
+                    'value': float(revenue)
+                })
+        
+        elif period in ['week', 'month']:
+            # Daily breakdown
+            current_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            while current_date <= end_date:
+                day_end = current_date + timedelta(days=1)
+                
+                revenue = queryset.filter(
+                    created_at__range=[current_date, day_end],
+                    payment_status='paid'
+                ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0')
+                
+                chart_data.append({
+                    'label': current_date.strftime('%d %b'),
+                    'value': float(revenue)
+                })
+                
+                current_date = day_end
+        
+        else:
+            # Custom period - daily breakdown
+            current_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            while current_date <= end_date:
+                day_end = current_date + timedelta(days=1)
+                
+                revenue = queryset.filter(
+                    created_at__range=[current_date, day_end],
+                    payment_status='paid'
+                ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0')
+                
+                chart_data.append({
+                    'label': current_date.strftime('%d %b'),
+                    'value': float(revenue)
+                })
+                
+                current_date = day_end
+        
+        return chart_data
