@@ -79,10 +79,12 @@ abc123def456...               @{id=1; username=admin; ...}
 Invoke-RestMethod: The remote server returned an error: (400) Bad Request.
 ```
 
-### CMD (curl - One-liner):
+### CMD with curl.exe (One-liner - USE THIS!):
 ```cmd
-curl -s -X POST http://localhost:8001/api/auth/login/ -H "Content-Type: application/json" -H "Host: backend" -d "{\"username\":\"admin\",\"password\":\"admin123\"}"
+curl.exe -s -X POST http://localhost:8001/api/auth/login/ -H "Content-Type: application/json" -H "Host: backend" -d "{\"username\":\"admin\",\"password\":\"admin123\"}"
 ```
+
+**Note**: Use `curl.exe` (not `curl`) in PowerShell to use real curl, not the PowerShell alias!
 
 **Expected** (FIXED):
 ```json
@@ -145,11 +147,27 @@ Write-Host "`n✅ If all 3 tests show 'token', backend is fixed!" -ForegroundCol
 
 ## 🔧 Troubleshooting
 
-### PowerShell Error: "Cannot bind parameter 'Headers'"
-**Solution**: Make sure Headers is a hashtable:
+### PowerShell: `curl` is actually `Invoke-WebRequest` alias
+**Problem**: PowerShell has `curl` as alias for `Invoke-WebRequest`, not real curl  
+**Solution**: Use `curl.exe` to use real curl:
 ```powershell
--Headers @{"Content-Type"="application/json"; "Host"="backend"}
-# Note the @ symbol and semicolon separator
+# ❌ Wrong (uses PowerShell alias with different syntax)
+curl -H "Header: value"
+
+# ✅ Correct (uses real curl)
+curl.exe -H "Header: value"
+```
+
+### PowerShell Error: "Cannot bind parameter 'Headers'"
+**Cause**: Using `curl` instead of `curl.exe` in PowerShell  
+**Solution**: Add `.exe` to use real curl:
+```powershell
+curl.exe -s -X POST http://localhost:8001/api/auth/login/ -H "Content-Type: application/json" -d "{\"username\":\"admin\",\"password\":\"admin123\"}"
+```
+
+Or use native PowerShell:
+```powershell
+Invoke-RestMethod -Uri http://localhost:8001/api/auth/login/ -Method Post -Headers @{"Content-Type"="application/json"} -Body '{"username":"admin","password":"admin123"}'
 ```
 
 ### CMD Error: "curl: command not found"
