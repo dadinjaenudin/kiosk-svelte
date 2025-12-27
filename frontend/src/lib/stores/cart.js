@@ -48,9 +48,9 @@ export async function loadCart() {
 /**
  * Add product to cart
  */
-export async function addProductToCart(product, quantity = 1, modifiers = []) {
+export async function addProductToCart(product, quantity = 1, modifiers = [], notes = '') {
 	try {
-		const id = await dbAddToCart(product, quantity, modifiers);
+		const id = await dbAddToCart(product, quantity, modifiers, notes);
 		await loadCart();
 		return id;
 	} catch (error) {

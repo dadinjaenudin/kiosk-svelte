@@ -19,6 +19,19 @@ db.version(1).stores({
 	app_settings: 'key, value'
 });
 
+// Version 2: Add notes and tenant fields to cart
+db.version(2).stores({
+	cart: '++id, product_id, tenant_id, quantity, modifiers, notes, created_at'
+}).upgrade(tx => {
+	// Migration: Add notes field to existing cart items
+	return tx.table('cart').toCollection().modify(item => {
+		if (!item.notes) item.notes = '';
+		if (!item.tenant_id && item.product_id) {
+			// Keep tenant_id from product if available
+		}
+	});
+});
+
 /**
  * Sync Queue Management
  */
@@ -120,7 +133,7 @@ export async function getCartItems() {
 	return await db.cart.toArray();
 }
 
-export async function addToCart(product, quantity = 1, modifiers = []) {
+export async function addToCart(product, quantity = 1, modifiers = [], notes = '') {
 	return await db.cart.add({
 		product_id: product.id,
 		product_name: product.name,
@@ -130,6 +143,7 @@ export async function addToCart(product, quantity = 1, modifiers = []) {
 		tenant_color: product.tenant_color,
 		quantity: quantity,
 		modifiers: JSON.stringify(modifiers),
+		notes: notes || '',
 		created_at: new Date().toISOString()
 	});
 }
