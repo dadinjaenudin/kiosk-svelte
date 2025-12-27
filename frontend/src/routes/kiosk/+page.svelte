@@ -452,14 +452,17 @@
 			
 			<button 
 				on:click={() => showCart = !showCart}
-				class="btn-kiosk-secondary relative px-3 py-2 md:px-8 md:py-3 flex-shrink-0"
+				class="cart-button relative px-3 py-2 md:px-8 md:py-3 flex-shrink-0"
 			>
-				<span class="text-base md:text-kiosk-xl flex items-center gap-1">
-					🛒 
+				<span class="text-base md:text-kiosk-xl flex items-center gap-2">
+					<!-- Cart Icon SVG -->
+					<svg class="w-6 h-6 md:w-7 md:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+					</svg>
 					<span class="hidden md:inline">Cart</span>
 				</span>
 				{#if $cartTotals.itemCount > 0}
-					<span class="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-500 text-white rounded-full w-5 h-5 md:w-12 md:h-12 flex items-center justify-center text-xs md:text-kiosk-base font-bold">
+					<span class="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-500 text-white rounded-full w-6 h-6 md:w-12 md:h-12 flex items-center justify-center text-xs md:text-kiosk-base font-bold shadow-lg">
 						{$cartTotals.itemCount}
 					</span>
 				{/if}
@@ -962,6 +965,40 @@
 			width: 40px;
 			background: linear-gradient(to right, transparent, rgba(255,255,255,0.9));
 			pointer-events: none;
+		}
+	}
+	
+	/* Cart Button - More prominent on mobile */
+	.cart-button {
+		background: rgba(255, 255, 255, 0.25);
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		border-radius: 0.75rem;
+		color: white;
+		font-weight: 600;
+		transition: all 0.2s;
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+	}
+	
+	.cart-button:hover {
+		background: rgba(255, 255, 255, 0.35);
+		border-color: rgba(255, 255, 255, 0.6);
+		transform: scale(1.05);
+	}
+	
+	.cart-button:active {
+		transform: scale(0.95);
+	}
+	
+	@media (min-width: 768px) {
+		.cart-button {
+			background: var(--color-secondary);
+			border-color: var(--color-secondary);
+		}
+		
+		.cart-button:hover {
+			background: rgba(var(--color-secondary-rgb), 0.9);
+			border-color: var(--color-secondary);
 		}
 	}
 
