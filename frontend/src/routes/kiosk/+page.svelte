@@ -26,6 +26,7 @@
 	let checkoutResult = null;
 	let isFullscreen = false;
 	let loading = true;
+	let showFilters = false; // Mobile filter menu
 	
 	// Filtered products by tenant AND category
 	$: filteredProducts = products.filter(p => {
@@ -423,6 +424,21 @@
 	<header class="bg-primary text-white px-4 md:px-8 py-3 md:py-6 shadow-lg">
 		<div class="flex items-center justify-between gap-2">
 			<div class="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
+				<!-- Mobile: Filter Burger Button -->
+				<button 
+					on:click={() => showFilters = !showFilters}
+					class="md:hidden btn-kiosk-secondary px-2 py-2 flex-shrink-0 relative"
+					aria-label="Toggle filters"
+				>
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+					</svg>
+					<!-- Active filter indicator -->
+					{#if selectedTenant || selectedCategory}
+						<span class="absolute -top-1 -right-1 bg-yellow-400 w-3 h-3 rounded-full"></span>
+					{/if}
+				</button>
+				
 				<h1 class="text-lg md:text-kiosk-3xl font-bold leading-tight">
 					<span class="hidden md:inline">🍽️ Food Court Kiosk</span>
 					<span class="md:hidden">🍽️ Food Court Kiosk</span>
@@ -455,9 +471,75 @@
 	<div class="flex-1 flex overflow-hidden">
 		<!-- Left Panel: Filters & Products -->
 		<main class="flex-1 flex flex-col overflow-hidden">
-			<!-- Tenant Filter Tabs -->
+			<!-- Mobile Filter Panel (Slide Down) -->
+			{#if showFilters}
+				<div class="md:hidden fixed inset-0 z-50 bg-black bg-opacity-50" on:click={() => showFilters = false}>
+					<div class="bg-white max-h-[70vh] overflow-y-auto" on:click|stopPropagation>
+						<!-- Close button -->
+						<div class="sticky top-0 bg-white border-b-2 border-gray-200 px-4 py-3 flex items-center justify-between">
+							<h2 class="text-lg font-bold text-gray-800">Filters</h2>
+							<button 
+								on:click={() => showFilters = false}
+								class="p-2 hover:bg-gray-100 rounded-lg"
+							>
+								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+								</svg>
+							</button>
+						</div>
+						
+						<!-- Tenant Filters -->
+						{#if tenants.length > 0}
+							<div class="px-4 py-4 border-b-2 border-gray-200">
+								<h3 class="text-sm font-semibold text-gray-600 mb-3">FILTER BY RESTAURANT:</h3>
+								<div class="flex flex-wrap gap-2">
+									<button 
+										on:click={() => { selectTenant(null); showFilters = false; }}
+										class="tenant-filter {selectedTenant === null ? 'tenant-filter-active' : 'tenant-filter-inactive'}"
+									>
+										All Restaurants
+									</button>
+									{#each tenants as tenant}
+										<button 
+											on:click={() => { selectTenant(tenant.id); showFilters = false; }}
+											class="tenant-filter {selectedTenant === tenant.id ? 'tenant-filter-active' : 'tenant-filter-inactive'}"
+											style="border-color: {selectedTenant === tenant.id ? tenant.color : '#e2e8f0'}; background: {selectedTenant === tenant.id ? tenant.color + '15' : 'white'}"
+										>
+											<span class="tenant-badge-dot" style="background: {tenant.color}"></span>
+											{tenant.name}
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						
+						<!-- Category Filters -->
+						<div class="px-4 py-4">
+							<h3 class="text-sm font-semibold text-gray-600 mb-3">FILTER BY CATEGORY:</h3>
+							<div class="flex flex-wrap gap-2">
+								<button 
+									on:click={() => { selectCategory(null); showFilters = false; }}
+									class="category-pill {selectedCategory === null ? 'category-pill-active' : 'category-pill-inactive'}"
+								>
+									All Items
+								</button>
+								{#each categories as category}
+									<button 
+										on:click={() => { selectCategory(category.id); showFilters = false; }}
+										class="category-pill {selectedCategory === category.id ? 'category-pill-active' : 'category-pill-inactive'}"
+									>
+										{category.name}
+									</button>
+								{/each}
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
+			
+			<!-- Desktop: Tenant Filter Tabs -->
 			{#if tenants.length > 0}
-				<div class="bg-white px-4 md:px-8 py-3 md:py-4 shadow-sm border-b-2 border-gray-200">
+				<div class="hidden md:block bg-white px-4 md:px-8 py-3 md:py-4 shadow-sm border-b-2 border-gray-200">
 					<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY RESTAURANT:</h3>
 					<div class="flex gap-2 md:gap-3 overflow-x-auto pb-1 scrollbar-thin">
 						<button 
@@ -482,8 +564,8 @@
 				</div>
 			{/if}
 			
-			<!-- Category Tabs -->
-			<div class="bg-white px-4 md:px-8 py-3 md:py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
+			<!-- Desktop: Category Tabs -->
+			<div class="hidden md:block bg-white px-4 md:px-8 py-3 md:py-6 shadow-sm overflow-x-auto scroll-smooth-touch">
 				<h3 class="text-xs md:text-sm font-semibold text-gray-600 mb-2">FILTER BY CATEGORY:</h3>
 				<div class="flex gap-2 md:gap-4 pb-1">
 					<button 
