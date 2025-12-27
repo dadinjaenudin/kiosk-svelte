@@ -70,8 +70,14 @@
 				parsedItem.modifiers = [];
 			}
 			
+			// Calculate item total including modifiers
+			const modifiersTotal = parsedItem.modifiers.reduce((sum, mod) => {
+				return sum + (parseFloat(mod.price_adjustment) || 0);
+			}, 0);
+			const itemTotal = (item.product_price + modifiersTotal) * item.quantity;
+			
 			groups[tenantId].items.push(parsedItem);
-			groups[tenantId].total += item.product_price * item.quantity;
+			groups[tenantId].total += itemTotal;
 			return groups;
 		}, {})
 	);

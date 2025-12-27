@@ -31,7 +31,7 @@ export const cartTotals = derived(cartItems, ($cartItems) => {
 function calculateModifiersTotal(modifiersJson) {
 	try {
 		const modifiers = typeof modifiersJson === 'string' ? JSON.parse(modifiersJson) : modifiersJson;
-		return modifiers.reduce((sum, mod) => sum + (mod.price || 0), 0);
+		return modifiers.reduce((sum, mod) => sum + (parseFloat(mod.price_adjustment) || 0), 0);
 	} catch (e) {
 		return 0;
 	}
