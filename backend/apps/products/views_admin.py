@@ -15,7 +15,7 @@ from django.db import models
 import os
 
 from apps.products.models import Product, Category, ProductModifier
-from apps.products.serializers import ProductSerializer, CategorySerializer
+from apps.products.serializers import ProductSerializer, CategorySerializer, ProductModifierSerializer
 from apps.core.permissions import IsAdminOrTenantOwnerOrManager
 
 logger = logging.getLogger(__name__)
@@ -371,3 +371,143 @@ class ProductManagementViewSet(viewsets.ModelViewSet):
             'message': f'{updated_count} products updated successfully',
             'updated_count': updated_count
         })
+
+
+class ProductModifierAdminSerializer(ProductModifierSerializer):
+    """Extended modifier serializer for admin with product info"""
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_id = serializers.IntegerField(source='product.id', read_only=True)
+    
+    class Meta(ProductModifierSerializer.Meta):
+        fields = ProductModifierSerializer.Meta.fields + ['product_name', 'product_id']
+        read_only_fields = []
+
+
+class ProductModifierManagementViewSet(viewsets.ModelViewSet):
+    """
+    Admin API for Product Modifier Management (Toppings & Additions)
+    
+    Endpoints:
+    - GET /api/admin/modifiers/ - List all modifiers
+    - POST /api/admin/modifiers/ - Create modifier
+    - GET /api/admin/modifiers/{id}/ - Get modifier detail
+    - PUT /api/admin/modifiers/{id}/ - Update modifier
+    - PATCH /api/admin/modifiers/{id}/ - Partial update
+    - DELETE /api/admin/modifiers/{id}/ - Delete modifier
+    - GET /api/admin/modifiers/stats/ - Get modifier statistics
+    """
+    serializer_class = ProductModifierAdminSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrTenantOwnerOrManager]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['type', 'is_active', 'product']
+    search_fields = ['name', 'product__name']
+    ordering_fields = ['name', 'type', 'price_adjustment', 'sort_order']
+    ordering = ['sort_order', 'name']
+    
+    def get_queryset(self):
+        """
+        Filter modifiers based on user role
+        - Admin: sees all modifiers
+        - Tenant: sees modifiers for their products only
+        """
+        user = self.request.user
+        
+        if user.role == 'admin':
+            # Admin sees all
+            return ProductModifier.objects.select_related('product', 'product__tenant').all()
+        elif hasattr(user, 'tenant') and user.tenant:
+            # Tenant sees modifiers for their products
+            return ProductModifier.objects.filter(
+                product__tenant=user.tenant
+            ).select_related('product', 'product__tenant')
+        else:
+            return ProductModifier.objects.none()
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Get modifier statistics
+        
+        GET /api/admin/modifiers/stats/
+        """
+        queryset = self.get_queryset()
+        
+        stats = {
+            'total': queryset.count(),
+            'active': queryset.filter(is_active=True).count(),
+            'inactive': queryset.filter(is_active=False).count(),
+            'by_type': {}
+        }
+        
+        # Count by type
+        type_counts = queryset.values('type').annotate(count=Count('id'))
+        for item in type_counts:
+            stats['by_type'][item['type']] = item['count']
+        
+        return Response(stats)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_update(self, request):
+        """
+        Bulk update modifiers
+        
+        POST /api/admin/modifiers/bulk_update/
+        Body: {
+            "modifier_ids": [1, 2, 3],
+            "updates": {
+                "is_active": true,
+                ...
+            }
+        }
+        """
+        modifier_ids = request.data.get('modifier_ids', [])
+        updates = request.data.get('updates', {})
+        
+        if not modifier_ids:
+            return Response(
+                {'error': 'No modifier IDs provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not updates:
+            return Response(
+                {'error': 'No updates provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate modifiers belong to user
+        modifiers = self.get_queryset().filter(id__in=modifier_ids)
+        
+        if modifiers.count() != len(modifier_ids):
+            return Response(
+                {'error': 'Some modifiers not found or not accessible'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update modifiers
+        updated_count = modifiers.update(**updates)
+        
+        return Response({
+            'message': f'{updated_count} modifiers updated successfully',
+            'updated_count': updated_count
+        })
+    
+    @action(detail=False, methods=['get'])
+    def by_product(self, request):
+        """
+        Get modifiers grouped by product
+        
+        GET /api/admin/modifiers/by_product/?product_id=1
+        """
+        product_id = request.query_params.get('product_id')
+        
+        if not product_id:
+            return Response(
+                {'error': 'product_id parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        queryset = self.get_queryset().filter(product_id=product_id)
+        serializer = self.get_serializer(queryset, many=True)
+        
+        return Response(serializer.data)

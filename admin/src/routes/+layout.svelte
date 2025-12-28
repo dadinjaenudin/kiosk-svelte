@@ -16,6 +16,8 @@
 		{ name: 'Customers', href: '/customers', icon: '👥', feature: 'customers' },
 		{ name: 'Promotions', href: '/promotions', icon: '🔥', feature: 'promotions' },
 		{ name: 'Products', href: '/products', icon: '🍽️', feature: 'products' },
+		{ name: 'Toppings', href: '/toppings', icon: '🧀', feature: 'products' },
+		{ name: 'Additions', href: '/additions', icon: '➕', feature: 'products' },
 		{ name: 'Reports', href: '/reports', icon: '📈', feature: 'reports' },
 		{ name: 'Users', href: '/users', icon: '👤', feature: 'users' },
 		{ name: 'Settings', href: '/settings', icon: '⚙️', feature: 'settings' }
