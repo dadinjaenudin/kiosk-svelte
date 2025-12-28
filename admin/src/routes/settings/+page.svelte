@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import {
 		getTenantSettings,
 		updateTenantSettings,
@@ -19,6 +20,15 @@
 		getCitiesList,
 		getProvincesList
 	} from '$lib/api/settings';
+
+	// Safe alert function for SSR compatibility
+	function safeAlert(message) {
+		if (browser && typeof alert !== 'undefined') {
+			safeAlert(message);
+		} else {
+			console.log('[Alert]:', message);
+		}
+	}
 
 	// Active tab
 	let activeTab = 'tenant'; // 'tenant' or 'outlets'
@@ -95,6 +105,8 @@
 
 	// Load tenant settings
 	async function loadTenantSettings() {
+		if (!browser) return; // Only run in browser
+		
 		try {
 			tenantLoading = true;
 			tenant = await getTenantSettings();
@@ -113,7 +125,9 @@
 			};
 		} catch (error) {
 			console.error('Failed to load tenant settings:', error);
-			alert('Failed to load tenant settings');
+			if (browser && typeof alert !== 'undefined') {
+				safeAlert('Failed to load tenant settings');
+			}
 		} finally {
 			tenantLoading = false;
 		}
@@ -147,10 +161,10 @@
 			
 			tenantSaving = true;
 			tenant = await updateTenantSettings(tenant.id, tenantForm);
-			alert('Tenant settings saved successfully');
+			safeAlert('Tenant settings saved successfully');
 		} catch (error) {
 			console.error('Failed to save tenant settings:', error);
-			alert('Failed to save tenant settings');
+			safeAlert('Failed to save tenant settings');
 		} finally {
 			tenantSaving = false;
 		}
@@ -163,13 +177,13 @@
 		
 		// Validate file type
 		if (!file.type.startsWith('image/')) {
-			alert('Please select an image file');
+			safeAlert('Please select an image file');
 			return;
 		}
 		
 		// Validate file size (max 2MB)
 		if (file.size > 2 * 1024 * 1024) {
-			alert('Image file size must be less than 2MB');
+			safeAlert('Image file size must be less than 2MB');
 			return;
 		}
 		
@@ -186,7 +200,7 @@
 	// Upload logo
 	async function handleLogoUpload() {
 		if (!logoFile) {
-			alert('Please select a logo file');
+			safeAlert('Please select a logo file');
 			return;
 		}
 		
@@ -196,10 +210,10 @@
 			logoFile = null;
 			logoPreview = null;
 			showLogoUpload = false;
-			alert('Logo uploaded successfully');
+			safeAlert('Logo uploaded successfully');
 		} catch (error) {
 			console.error('Failed to upload logo:', error);
-			alert('Failed to upload logo');
+			safeAlert('Failed to upload logo');
 		}
 	}
 
@@ -210,15 +224,17 @@
 		try {
 			await deleteTenantLogo(tenant.id);
 			tenant.logo_url = null;
-			alert('Logo deleted successfully');
+			safeAlert('Logo deleted successfully');
 		} catch (error) {
 			console.error('Failed to delete logo:', error);
-			alert('Failed to delete logo');
+			safeAlert('Failed to delete logo');
 		}
 	}
 
 	// Load outlets
 	async function loadOutlets() {
+		if (!browser) return; // Only run in browser
+		
 		try {
 			outletsLoading = true;
 			
@@ -245,7 +261,7 @@
 			allOutletsSelected = false;
 		} catch (error) {
 			console.error('Failed to load outlets:', error);
-			alert('Failed to load outlets');
+			safeAlert('Failed to load outlets');
 		} finally {
 			outletsLoading = false;
 		}
@@ -253,6 +269,8 @@
 
 	// Load outlet stats
 	async function loadOutletStats() {
+		if (!browser) return; // Only run in browser
+		
 		try {
 			outletStats = await getOutletStats();
 		} catch (error) {
@@ -341,10 +359,10 @@
 			showOutletModal = false;
 			await loadOutlets();
 			await loadOutletStats();
-			alert(editingOutlet ? 'Outlet updated successfully' : 'Outlet created successfully');
+			safeAlert(editingOutlet ? 'Outlet updated successfully' : 'Outlet created successfully');
 		} catch (error) {
 			console.error('Failed to save outlet:', error);
-			alert('Failed to save outlet');
+			safeAlert('Failed to save outlet');
 		}
 	}
 
@@ -356,10 +374,10 @@
 			deletingOutlet = null;
 			await loadOutlets();
 			await loadOutletStats();
-			alert('Outlet deleted successfully');
+			safeAlert('Outlet deleted successfully');
 		} catch (error) {
 			console.error('Failed to delete outlet:', error);
-			alert('Failed to delete outlet');
+			safeAlert('Failed to delete outlet');
 		}
 	}
 
@@ -386,7 +404,7 @@
 	// Bulk activate
 	async function bulkActivate() {
 		if (selectedOutlets.length === 0) {
-			alert('Please select outlets to activate');
+			safeAlert('Please select outlets to activate');
 			return;
 		}
 		
@@ -396,17 +414,17 @@
 			await loadOutletStats();
 			selectedOutlets = [];
 			allOutletsSelected = false;
-			alert('Outlets activated successfully');
+			safeAlert('Outlets activated successfully');
 		} catch (error) {
 			console.error('Failed to activate outlets:', error);
-			alert('Failed to activate outlets');
+			safeAlert('Failed to activate outlets');
 		}
 	}
 
 	// Bulk deactivate
 	async function bulkDeactivate() {
 		if (selectedOutlets.length === 0) {
-			alert('Please select outlets to deactivate');
+			safeAlert('Please select outlets to deactivate');
 			return;
 		}
 		
@@ -416,10 +434,10 @@
 			await loadOutletStats();
 			selectedOutlets = [];
 			allOutletsSelected = false;
-			alert('Outlets deactivated successfully');
+			safeAlert('Outlets deactivated successfully');
 		} catch (error) {
 			console.error('Failed to deactivate outlets:', error);
-			alert('Failed to deactivate outlets');
+			safeAlert('Failed to deactivate outlets');
 		}
 	}
 
@@ -459,11 +477,11 @@
 		}
 	});
 
-	// Watch tab changes
-	$: if (activeTab === 'tenant' && !tenant) {
+	// Watch tab changes (only in browser)
+	$: if (browser && activeTab === 'tenant' && !tenant) {
 		loadTenantSettings();
 	}
-	$: if (activeTab === 'outlets' && outlets.length === 0) {
+	$: if (browser && activeTab === 'outlets' && outlets.length === 0) {
 		loadOutlets();
 		loadOutletStats();
 	}
