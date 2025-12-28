@@ -114,7 +114,7 @@ export async function getPromotionStats() {
 
 /**
  * Get products for selector (searchable, filterable)
- * Fixed: Use correct endpoint /api/products/
+ * Fixed: Use correct endpoint /api/promotions/product-selector/
  */
 export async function getProductsForSelector(filters = {}) {
 	const params = new URLSearchParams();
@@ -123,8 +123,8 @@ export async function getProductsForSelector(filters = {}) {
 	if (filters.tenant) params.append('tenant', filters.tenant);
 	if (filters.is_available !== undefined) params.append('is_available', filters.is_available);
 	
-	// Fixed: Changed from /product-selector/ to /products/
-	const url = `${API_BASE}/products/${params.toString() ? '?' + params.toString() : ''}`;
+	// Fixed: Use the correct endpoint from promotions app
+	const url = `${API_BASE}/promotions/product-selector/${params.toString() ? '?' + params.toString() : ''}`;
 	return await authFetch(url);
 }
 
