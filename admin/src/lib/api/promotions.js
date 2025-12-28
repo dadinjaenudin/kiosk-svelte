@@ -1,6 +1,7 @@
 /**
  * Promotion API
  */
+import { authFetch } from './auth';
 
 const API_BASE = '/api';
 
@@ -21,43 +22,14 @@ export async function getPromotions(filters = {}) {
 	if (filters.is_featured !== undefined) params.append('is_featured', filters.is_featured);
 	
 	const url = `${API_BASE}/promotions/${params.toString() ? '?' + params.toString() : ''}`;
-	
-	const response = await fetch(url, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to fetch promotions');
-	}
-	
-	return response.json();
+	return await authFetch(url);
 }
 
 /**
  * Get single promotion by ID
  */
 export async function getPromotion(id) {
-	const response = await fetch(`${API_BASE}/promotions/${id}/`, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to fetch promotion');
-	}
-	
-	return response.json();
+	return await authFetch(`${API_BASE}/promotions/${id}/`);
 }
 
 /**
@@ -66,25 +38,11 @@ export async function getPromotion(id) {
 export async function createPromotion(data) {
 	console.log('📝 Creating promotion:', data);
 	
-	const response = await fetch(`${API_BASE}/promotions/`, {
+	const result = await authFetch(`${API_BASE}/promotions/`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include',
 		body: JSON.stringify(data)
 	});
 	
-	console.log('📡 Create response status:', response.status);
-	
-	if (!response.ok) {
-		const error = await response.json();
-		console.error('❌ Create error:', error);
-		throw new Error(error.message || 'Failed to create promotion');
-	}
-	
-	const result = await response.json();
 	console.log('✅ Promotion created:', result);
 	return result;
 }
@@ -95,25 +53,11 @@ export async function createPromotion(data) {
 export async function updatePromotion(id, data) {
 	console.log('📝 Updating promotion:', id, data);
 	
-	const response = await fetch(`${API_BASE}/promotions/${id}/`, {
+	const result = await authFetch(`${API_BASE}/promotions/${id}/`, {
 		method: 'PUT',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include',
 		body: JSON.stringify(data)
 	});
 	
-	console.log('📡 Update response status:', response.status);
-	
-	if (!response.ok) {
-		const error = await response.json();
-		console.error('❌ Update error:', error);
-		throw new Error(error.message || 'Failed to update promotion');
-	}
-	
-	const result = await response.json();
 	console.log('✅ Promotion updated:', result);
 	return result;
 }
@@ -122,18 +66,9 @@ export async function updatePromotion(id, data) {
  * Delete promotion
  */
 export async function deletePromotion(id) {
-	const response = await fetch(`${API_BASE}/promotions/${id}/`, {
-		method: 'DELETE',
-		headers: {
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
+	await authFetch(`${API_BASE}/promotions/${id}/`, {
+		method: 'DELETE'
 	});
-	
-	if (!response.ok && response.status !== 204) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to delete promotion');
-	}
 	
 	return true;
 }
@@ -142,109 +77,44 @@ export async function deletePromotion(id) {
  * Activate promotion
  */
 export async function activatePromotion(id) {
-	const response = await fetch(`${API_BASE}/promotions/${id}/activate/`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
+	return await authFetch(`${API_BASE}/promotions/${id}/activate/`, {
+		method: 'POST'
 	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.error || 'Failed to activate promotion');
-	}
-	
-	return response.json();
 }
 
 /**
  * Deactivate promotion
  */
 export async function deactivatePromotion(id) {
-	const response = await fetch(`${API_BASE}/promotions/${id}/deactivate/`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
+	return await authFetch(`${API_BASE}/promotions/${id}/deactivate/`, {
+		method: 'POST'
 	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.error || 'Failed to deactivate promotion');
-	}
-	
-	return response.json();
 }
 
 /**
  * Get promotion preview (affected products and prices)
  */
 export async function getPromotionPreview(id) {
-	const response = await fetch(`${API_BASE}/promotions/${id}/preview/`, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to get promotion preview');
-	}
-	
-	return response.json();
+	return await authFetch(`${API_BASE}/promotions/${id}/preview/`);
 }
 
 /**
  * Get active promotions
  */
 export async function getActivePromotions() {
-	const response = await fetch(`${API_BASE}/promotions/active/`, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to fetch active promotions');
-	}
-	
-	return response.json();
+	return await authFetch(`${API_BASE}/promotions/active/`);
 }
 
 /**
  * Get promotion statistics
  */
 export async function getPromotionStats() {
-	const response = await fetch(`${API_BASE}/promotions/stats/`, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to fetch promotion stats');
-	}
-	
-	return response.json();
+	return await authFetch(`${API_BASE}/promotions/stats/`);
 }
 
 /**
  * Get products for selector (searchable, filterable)
+ * Fixed: Use correct endpoint /api/products/
  */
 export async function getProductsForSelector(filters = {}) {
 	const params = new URLSearchParams();
@@ -253,23 +123,9 @@ export async function getProductsForSelector(filters = {}) {
 	if (filters.tenant) params.append('tenant', filters.tenant);
 	if (filters.is_available !== undefined) params.append('is_available', filters.is_available);
 	
-	const url = `${API_BASE}/product-selector/${params.toString() ? '?' + params.toString() : ''}`;
-	
-	const response = await fetch(url, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to fetch products');
-	}
-	
-	return response.json();
+	// Fixed: Changed from /product-selector/ to /products/
+	const url = `${API_BASE}/products/${params.toString() ? '?' + params.toString() : ''}`;
+	return await authFetch(url);
 }
 
 /**
@@ -283,20 +139,5 @@ export async function getPromotionUsage(filters = {}) {
 	if (filters.page) params.append('page', filters.page);
 	
 	const url = `${API_BASE}/promotion-usage/${params.toString() ? '?' + params.toString() : ''}`;
-	
-	const response = await fetch(url, {
-		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Token ${localStorage.getItem('token')}`
-		},
-		credentials: 'include'
-	});
-	
-	if (!response.ok) {
-		const error = await response.json();
-		throw new Error(error.message || 'Failed to fetch promotion usage');
-	}
-	
-	return response.json();
+	return await authFetch(url);
 }
