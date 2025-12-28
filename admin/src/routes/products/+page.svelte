@@ -494,10 +494,12 @@
 									{/if}
 								</td>
 								<td class="px-6 py-4">
-									{@const badge = getStatusBadge(product)}
-									<span class="px-2 py-1 text-xs font-medium rounded-full {badge.class}">
-										{badge.label}
-									</span>
+									{#if true}
+										{@const badge = getStatusBadge(product)}
+										<span class="px-2 py-1 text-xs font-medium rounded-full {badge.class}">
+											{badge.label}
+										</span>
+									{/if}
 								</td>
 								<td class="px-6 py-4 text-sm">
 									<div class="flex items-center gap-2">
