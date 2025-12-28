@@ -44,8 +44,11 @@ export function hasPermission(requiredRole) {
 	if (!currentUser) return false;
 
 	const roleHierarchy = {
+		admin: 5,           // Added admin role
 		super_admin: 5,
+		tenant_owner: 4,    // Added tenant_owner
 		owner: 4,
+		outlet_manager: 3,  // Added outlet_manager
 		manager: 3,
 		cashier: 2,
 		kitchen: 1
@@ -65,8 +68,11 @@ export function canAccess(feature) {
 	if (!currentUser) return false;
 
 	const permissions = {
+		admin: ['dashboard', 'orders', 'customers', 'promotions', 'products', 'reports', 'users', 'settings'],
 		super_admin: ['dashboard', 'orders', 'customers', 'promotions', 'products', 'reports', 'users', 'settings'],
+		tenant_owner: ['dashboard', 'orders', 'customers', 'promotions', 'products', 'reports', 'users', 'settings'],
 		owner: ['dashboard', 'orders', 'customers', 'promotions', 'products', 'reports', 'users', 'settings'],
+		outlet_manager: ['dashboard', 'orders', 'customers', 'promotions', 'products', 'reports'],
 		manager: ['dashboard', 'orders', 'customers', 'promotions', 'products', 'reports'],
 		cashier: ['orders'],
 		kitchen: ['orders']
