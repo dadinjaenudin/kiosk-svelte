@@ -4,10 +4,17 @@ Orders URL configuration
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from apps.orders.views import OrderViewSet
+from apps.orders.views_admin import OrderManagementViewSet
 
-router = DefaultRouter()
-router.register(r'orders', OrderViewSet, basename='order')
+# Public/Kiosk router
+public_router = DefaultRouter()
+public_router.register(r'orders', OrderViewSet, basename='order')
+
+# Admin router
+admin_router = DefaultRouter()
+admin_router.register(r'admin/orders', OrderManagementViewSet, basename='admin-order')
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('', include(public_router.urls)),
+    path('', include(admin_router.urls)),
 ]
