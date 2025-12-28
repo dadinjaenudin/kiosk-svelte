@@ -1,6 +1,7 @@
 """
 Admin views for Order Management
 """
+import logging
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,6 +13,8 @@ from datetime import datetime, timedelta
 from apps.orders.models import Order, OrderItem
 from apps.orders.serializers import OrderSerializer, OrderItemSerializer
 from apps.core.permissions import IsAdminOrTenantOwnerOrManager
+
+logger = logging.getLogger(__name__)
 
 
 class OrderFilter:
@@ -185,67 +188,74 @@ class OrderManagementViewSet(viewsets.ModelViewSet):
         
         Returns status changes with timestamps
         """
-        order = self.get_object()
-        
-        timeline = [
-            {
-                'status': 'draft',
-                'label': 'Draft',
-                'timestamp': order.created_at.isoformat() if order.status != 'draft' else None,
-                'completed': True if order.status != 'draft' else False
-            },
-            {
-                'status': 'pending',
-                'label': 'Order Placed',
-                'timestamp': order.created_at.isoformat(),
-                'completed': True
-            },
-            {
-                'status': 'confirmed',
-                'label': 'Confirmed',
-                'timestamp': order.updated_at.isoformat() if order.status in ['confirmed', 'preparing', 'ready', 'served', 'completed'] else None,
-                'completed': order.status in ['confirmed', 'preparing', 'ready', 'served', 'completed']
-            },
-            {
-                'status': 'preparing',
-                'label': 'Preparing',
-                'timestamp': order.updated_at.isoformat() if order.status in ['preparing', 'ready', 'served', 'completed'] else None,
-                'completed': order.status in ['preparing', 'ready', 'served', 'completed']
-            },
-            {
-                'status': 'ready',
-                'label': 'Ready to Serve',
-                'timestamp': order.updated_at.isoformat() if order.status in ['ready', 'served', 'completed'] else None,
-                'completed': order.status in ['ready', 'served', 'completed']
-            },
-            {
-                'status': 'served',
-                'label': 'Served',
-                'timestamp': order.updated_at.isoformat() if order.status in ['served', 'completed'] else None,
-                'completed': order.status in ['served', 'completed']
-            },
-            {
-                'status': 'completed',
-                'label': 'Completed',
-                'timestamp': order.completed_at.isoformat() if order.status == 'completed' else None,
-                'completed': order.status == 'completed'
-            }
-        ]
-        
-        # If cancelled, add cancelled status
-        if order.status == 'cancelled':
-            timeline.append({
-                'status': 'cancelled',
-                'label': 'Cancelled',
-                'timestamp': order.updated_at.isoformat(),
-                'completed': True
+        try:
+            order = self.get_object()
+            
+            timeline = [
+                {
+                    'status': 'draft',
+                    'label': 'Draft',
+                    'timestamp': order.created_at.isoformat() if order.status != 'draft' else None,
+                    'completed': True if order.status != 'draft' else False
+                },
+                {
+                    'status': 'pending',
+                    'label': 'Order Placed',
+                    'timestamp': order.created_at.isoformat() if order.created_at else None,
+                    'completed': True
+                },
+                {
+                    'status': 'confirmed',
+                    'label': 'Confirmed',
+                    'timestamp': order.updated_at.isoformat() if order.status in ['confirmed', 'preparing', 'ready', 'served', 'completed'] and order.updated_at else None,
+                    'completed': order.status in ['confirmed', 'preparing', 'ready', 'served', 'completed']
+                },
+                {
+                    'status': 'preparing',
+                    'label': 'Preparing',
+                    'timestamp': order.updated_at.isoformat() if order.status in ['preparing', 'ready', 'served', 'completed'] and order.updated_at else None,
+                    'completed': order.status in ['preparing', 'ready', 'served', 'completed']
+                },
+                {
+                    'status': 'ready',
+                    'label': 'Ready to Serve',
+                    'timestamp': order.updated_at.isoformat() if order.status in ['ready', 'served', 'completed'] and order.updated_at else None,
+                    'completed': order.status in ['ready', 'served', 'completed']
+                },
+                {
+                    'status': 'served',
+                    'label': 'Served',
+                    'timestamp': order.updated_at.isoformat() if order.status in ['served', 'completed'] and order.updated_at else None,
+                    'completed': order.status in ['served', 'completed']
+                },
+                {
+                    'status': 'completed',
+                    'label': 'Completed',
+                    'timestamp': order.completed_at.isoformat() if order.status == 'completed' and order.completed_at else None,
+                    'completed': order.status == 'completed'
+                }
+            ]
+            
+            # If cancelled, add cancelled status
+            if order.status == 'cancelled':
+                timeline.append({
+                    'status': 'cancelled',
+                    'label': 'Cancelled',
+                    'timestamp': order.updated_at.isoformat() if order.updated_at else None,
+                    'completed': True
+                })
+            
+            return Response({
+                'order_number': order.order_number,
+                'current_status': order.status,
+                'timeline': timeline
             })
-        
-        return Response({
-            'order_number': order.order_number,
-            'current_status': order.status,
-            'timeline': timeline
-        })
+        except Exception as e:
+            logger.error(f"Error generating timeline for order {pk}: {str(e)}")
+            return Response({
+                'error': 'Failed to generate timeline',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['get'])
     def receipt(self, request, pk=None):

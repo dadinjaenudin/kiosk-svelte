@@ -14,6 +14,9 @@
 		formatDateTime 
 	} from '$lib/api/orders';
 	
+	// Props (suppress warning)
+	export let data = {};
+	
 	// Get order ID from URL
 	$: orderId = $page.params.id;
 	
@@ -45,13 +48,18 @@
 		error = null;
 		
 		try {
-			const [orderData, timelineData] = await Promise.all([
-				getOrderDetail(orderId),
-				getOrderTimeline(orderId)
-			]);
+			// Load order detail first
+			order = await getOrderDetail(orderId);
 			
-			order = orderData;
-			timeline = timelineData.timeline || [];
+			// Then load timeline (separate try-catch to not fail if timeline fails)
+			try {
+				const timelineData = await getOrderTimeline(orderId);
+				timeline = timelineData.timeline || [];
+			} catch (timelineErr) {
+				console.error('Error loading timeline:', timelineErr);
+				// Don't fail the whole page if timeline fails
+				timeline = [];
+			}
 			
 		} catch (err) {
 			console.error('Error loading order:', err);
