@@ -178,22 +178,26 @@
 			<!-- Order Status -->
 			<div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
 				<div class="text-sm text-gray-600 mb-1">Order Status</div>
-				{@const orderStatus = formatOrderStatus(order.status)}
 				<div class="text-lg font-semibold">
-					<span class="px-3 py-1 rounded-full text-sm {orderStatus.bgColor} {orderStatus.textColor}">
-						{orderStatus.label}
-					</span>
+					{#if order.status}
+						{@const orderStatus = formatOrderStatus(order.status)}
+						<span class="px-3 py-1 rounded-full text-sm {orderStatus.bgColor} {orderStatus.textColor}">
+							{orderStatus.label}
+						</span>
+					{/if}
 				</div>
 			</div>
 			
 			<!-- Payment Status -->
 			<div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
 				<div class="text-sm text-gray-600 mb-1">Payment Status</div>
-				{@const paymentStatus = formatPaymentStatus(order.payment_status)}
 				<div class="text-lg font-semibold">
-					<span class="px-3 py-1 rounded-full text-sm {paymentStatus.bgColor} {paymentStatus.textColor}">
-						{paymentStatus.label}
-					</span>
+					{#if order.payment_status}
+						{@const paymentStatus = formatPaymentStatus(order.payment_status)}
+						<span class="px-3 py-1 rounded-full text-sm {paymentStatus.bgColor} {paymentStatus.textColor}">
+							{paymentStatus.label}
+						</span>
+					{/if}
 				</div>
 			</div>
 			
