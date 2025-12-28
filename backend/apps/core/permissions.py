@@ -6,6 +6,7 @@ Provides role-based and custom permission checking for users.
 from functools import wraps
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
+from rest_framework import permissions
 
 
 # Permission definitions by role
@@ -261,3 +262,77 @@ def get_user_permissions(user):
             custom_perms = []
     
     return list(set(role_perms + custom_perms))
+
+
+# Django REST Framework Permission Classes
+
+class IsAdminOrTenantOwnerOrManager(permissions.BasePermission):
+    """
+    Permission class for DRF views
+    Allows access to:
+    - Admin (superuser or role=admin)
+    - Tenant Owner (role=tenant_owner)
+    - Outlet Manager (role=outlet_manager)
+    """
+    
+    def has_permission(self, request, view):
+        # Must be authenticated
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Superuser always has access
+        if request.user.is_superuser:
+            return True
+        
+        # Check role
+        user_role = getattr(request.user, 'role', None)
+        allowed_roles = ['admin', 'tenant_owner', 'outlet_manager']
+        
+        return user_role in allowed_roles
+
+
+class IsAdmin(permissions.BasePermission):
+    """
+    Permission class for admin-only views
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser:
+            return True
+        
+        return getattr(request.user, 'role', None) == 'admin'
+
+
+class IsTenantOwner(permissions.BasePermission):
+    """
+    Permission class for tenant owner views
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser:
+            return True
+        
+        user_role = getattr(request.user, 'role', None)
+        return user_role in ['admin', 'tenant_owner']
+
+
+class IsOutletManager(permissions.BasePermission):
+    """
+    Permission class for outlet manager views
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser:
+            return True
+        
+        user_role = getattr(request.user, 'role', None)
+        return user_role in ['admin', 'tenant_owner', 'outlet_manager']

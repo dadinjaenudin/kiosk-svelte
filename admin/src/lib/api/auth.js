@@ -1,7 +1,65 @@
 import { user, isLoading, authError } from '../stores/auth';
 import { goto } from '$app/navigation';
+import { get } from 'svelte/store';
 
 const API_BASE = '/api';
+
+/**
+ * Authenticated fetch wrapper
+ * Automatically adds authentication token to requests
+ */
+export async function authFetch(url, options = {}) {
+	const currentUser = get(user);
+	
+	// Get token from user store
+	const token = currentUser?.token;
+	
+	// Build headers
+	const headers = {
+		'Content-Type': 'application/json',
+		...options.headers
+	};
+	
+	// Add token if available
+	if (token) {
+		headers['Authorization'] = `Token ${token}`;
+	}
+	
+	// Make request
+	const response = await fetch(url, {
+		...options,
+		headers,
+		credentials: 'include'
+	});
+	
+	// Handle unauthorized
+	if (response.status === 401) {
+		// Clear user and redirect to login
+		user.set(null);
+		goto('/login');
+		throw new Error('Unauthorized - please login again');
+	}
+	
+	// Handle other errors
+	if (!response.ok) {
+		const errorText = await response.text();
+		let errorMessage = `Request failed with status ${response.status}`;
+		
+		try {
+			const error = JSON.parse(errorText);
+			errorMessage = error.message || error.error || error.detail || errorMessage;
+		} catch (e) {
+			if (errorText) {
+				errorMessage = errorText;
+			}
+		}
+		
+		throw new Error(errorMessage);
+	}
+	
+	// Parse and return JSON
+	return await response.json();
+}
 
 /**
  * Login user with username and password
