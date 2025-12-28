@@ -36,6 +36,8 @@ class TenantMiddleware(MiddlewareMixin):
         '/api/public/',  # Public kiosk endpoints (tenants, etc)
         '/api/products/',  # Public kiosk API - browse all products
         '/api/orders/',  # Public order API - multi-tenant checkout
+        '/api/admin/',  # Admin panel API endpoints
+        '/api/promotions/',  # Promotion management (admin access)
         '/admin/',
         '/static/',
         '/media/',
@@ -59,6 +61,11 @@ class TenantMiddleware(MiddlewareMixin):
         # If authenticated user, get tenant from user
         if hasattr(request, 'user') and request.user.is_authenticated:
             set_current_user(request.user)
+            
+            # Super admins don't need tenant context
+            if request.user.role == 'admin':
+                logger.debug(f"Super admin user: {request.user.username} - tenant not required")
+                return None
             
             # Use user's tenant if header not provided
             if not tenant_id and hasattr(request.user, 'tenant_id'):
