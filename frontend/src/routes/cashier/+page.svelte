@@ -1,24 +1,20 @@
 <script>
 	import { onMount } from 'svelte';
-	import { writable } from 'svelte/store';
 	import { cartItems, cartTotals, loadCart, addProductToCart, updateQuantity, removeCartItem, clearAllCart } from '$stores/cart.js';
 	import { getProducts, getCategories } from '$db/index.js';
 	import { browser } from '$app/environment';
-	import { db, addToSyncQueue, saveOrder } from '$db/index.js';
+	import { db } from '$db/index.js';
 	import { isOnline, startSync } from '$stores/offline.js';
-	import { broadcastNewOrder, syncServerConnected } from '$lib/stores/localSync.js';
+	import { broadcastNewOrder } from '$lib/stores/localSync.js';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import SuccessModal from '$lib/components/SuccessModal.svelte';
 	import ModifierModal from '$lib/components/ModifierModal.svelte';
-	
-	export let data = undefined;
 	
 	let products = [];
 	let categories = [];
 	let tenants = [];
 	let selectedCategory = null;
 	let selectedTenant = null;
-	let showCart = true; // Cashier: Always show cart for quick entry
 	let showPaymentModal = false;
 	let showSuccessModal = false;
 	let showModifierModal = false;
@@ -26,24 +22,53 @@
 	let checkoutResult = null;
 	let loading = true;
 	let searchQuery = '';
-	let showAvailable = true;
 	
-	// Cashier-specific fields
+	// Customer info
 	let customerName = '';
 	let customerPhone = '';
 	let tableNumber = '';
-	let orderNotes = '';
-	let showCustomerForm = false;
 	
 	$: filteredProducts = products.filter(p => {
 		if (selectedTenant && p.tenant_id !== selectedTenant) return false;
-		if (selectedCategory && p.category_id !== selectedCategory) return false;
-		if (showAvailable && !p.is_available) return false;
+		if (selectedCategory && p.category_name !== selectedCategory) return false;
 		if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-		return true;
+		return p.is_available;
 	});
 	
 	$: totalItems = $cartItems.reduce((sum, item) => sum + item.quantity, 0);
+	$: totalAmount = parseFloat($cartTotals.total);
+	
+	// Group cart items by tenant
+	$: groupedCartItems = Object.values(
+		$cartItems.reduce((groups, item) => {
+			const tenantId = item.tenant_id || 0;
+			if (!groups[tenantId]) {
+				groups[tenantId] = {
+					tenant_id: tenantId,
+					tenant_name: item.tenant_name || 'Unknown',
+					tenant_color: item.tenant_color || '#6b7280',
+					items: [],
+					total: 0
+				};
+			}
+			
+			const parsedItem = {
+				...item,
+				modifiers: typeof item.modifiers === 'string' 
+					? JSON.parse(item.modifiers || '[]') 
+					: (item.modifiers || [])
+			};
+			
+			groups[tenantId].items.push(parsedItem);
+			
+			const modifiersTotal = parsedItem.modifiers.reduce((sum, mod) => 
+				sum + (parseFloat(mod.price_adjustment) || 0), 0);
+			const itemTotal = (parseFloat(item.product_price) + modifiersTotal) * item.quantity;
+			groups[tenantId].total += itemTotal;
+			
+			return groups;
+		}, {})
+	);
 	
 	onMount(async () => {
 		if (browser) {
@@ -59,18 +84,62 @@
 			products = await getProducts();
 			categories = await getCategories();
 			
-			const uniqueTenants = [...new Set(products.map(p => p.tenant_id))];
+			if ($isOnline) {
+				try {
+					const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
+					
+					const productsRes = await fetch(`${apiUrl}/products/`);
+					if (productsRes.ok) {
+						const productsData = await productsRes.json();
+						const freshProducts = productsData.results || productsData || [];
+						
+						if (freshProducts.length > 0) {
+							await db.products.clear();
+							await db.products.bulkAdd(freshProducts);
+							products = freshProducts;
+						}
+					}
+					
+					const categoriesRes = await fetch(`${apiUrl}/categories/`);
+					if (categoriesRes.ok) {
+						const categoriesData = await categoriesRes.json();
+						const freshCategories = categoriesData.results || categoriesData || [];
+						
+						if (freshCategories.length > 0) {
+							await db.categories.clear();
+							await db.categories.bulkAdd(freshCategories);
+							categories = freshCategories;
+						}
+					}
+				} catch (error) {
+					console.warn('Sync failed:', error);
+				}
+			}
+			
+			// Extract unique tenants
+			const uniqueTenants = [...new Set(products.map(p => p.tenant_id))].filter(Boolean);
 			tenants = uniqueTenants.map(id => {
 				const product = products.find(p => p.tenant_id === id);
 				return {
 					id,
-					name: product?.tenant_name || 'Unknown',
-					color: product?.tenant_color || '#6366f1'
+					name: product?.tenant_name || `Tenant ${id}`,
+					color: product?.tenant_color || '#6b7280'
 				};
 			});
 		} catch (error) {
 			console.error('Error loading products:', error);
 		}
+	}
+	
+	function getImageUrl(imagePath) {
+		if (!imagePath) return null;
+		if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+			return imagePath;
+		}
+		const backendUrl = import.meta.env.PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:8001';
+		return imagePath.startsWith('/') 
+			? `${backendUrl}${imagePath}`
+			: `${backendUrl}/${imagePath}`;
 	}
 	
 	function selectProduct(product) {
@@ -79,30 +148,109 @@
 		showModifierModal = true;
 	}
 	
+	async function handleAddToCart(event) {
+		const { product, quantity, modifiers, notes } = event.detail;
+		
+		try {
+			const productWithTenant = {
+				...product,
+				tenant_id: product.tenant_id,
+				tenant_name: product.tenant_name,
+				tenant_color: product.tenant_color
+			};
+			
+			await addProductToCart(productWithTenant, quantity, modifiers, notes);
+			selectedProduct = null;
+		} catch (error) {
+			console.error('Error adding to cart:', error);
+		}
+	}
+	
 	function handleCheckout() {
 		if (totalItems === 0) return;
 		showPaymentModal = true;
 	}
 	
-	async function handlePaymentComplete(event) {
-		showPaymentModal = false;
-		checkoutResult = event.detail;
-		showSuccessModal = true;
+	async function processCheckout(event) {
+		const { paymentMethod } = event.detail;
 		
-		// Reset customer form
-		customerName = '';
-		customerPhone = '';
-		tableNumber = '';
-		orderNotes = '';
-		showCustomerForm = false;
-		
-		await broadcastNewOrder(event.detail.order);
+		try {
+			const checkoutData = {
+				items: $cartItems.map(item => ({
+					product_id: item.product_id,
+					quantity: item.quantity,
+					modifiers: typeof item.modifiers === 'string' 
+						? JSON.parse(item.modifiers || '[]')
+						: (item.modifiers || []),
+					notes: item.notes || ''
+				})),
+				payment_method: paymentMethod,
+				customer_name: customerName,
+				customer_phone: customerPhone,
+				table_number: tableNumber
+			};
+			
+			let result;
+			
+			if ($isOnline) {
+				try {
+					const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
+					const response = await fetch(`${apiUrl}/orders/checkout/`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(checkoutData)
+					});
+					
+					if (!response.ok) {
+						const error = await response.json();
+						throw new Error(error.error || error.detail || 'Checkout failed');
+					}
+					
+					result = await response.json();
+					
+					if (result.orders && Array.isArray(result.orders)) {
+						result.orders.forEach(order => broadcastNewOrder(order));
+					}
+				} catch (fetchError) {
+					console.warn('Online checkout failed:', fetchError.message);
+					alert('Checkout failed: ' + fetchError.message);
+					return;
+				}
+			} else {
+				alert('Offline mode: Please connect to complete checkout');
+				return;
+			}
+			
+			await clearAllCart();
+			
+			// Reset customer info
+			customerName = '';
+			customerPhone = '';
+			tableNumber = '';
+			
+			checkoutResult = result;
+			showPaymentModal = false;
+			showSuccessModal = true;
+			
+		} catch (error) {
+			console.error('Checkout error:', error);
+			alert(`Checkout failed: ${error.message}`);
+		}
 	}
 	
-	function quickAddProduct(product) {
-		if (!product.is_available) return;
-		// Quick add without modifiers
-		addProductToCart(product, [], '');
+	function handleSuccessClose() {
+		showSuccessModal = false;
+		setTimeout(() => {
+			checkoutResult = null;
+			selectedCategory = null;
+			selectedTenant = null;
+			searchQuery = '';
+		}, 100);
+	}
+	
+	async function clearCart() {
+		if (!confirm('Clear all items from cart?')) return;
+		await clearAllCart();
 	}
 </script>
 
@@ -111,247 +259,186 @@
 </svelte:head>
 
 {#if loading}
-	<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
-		<div class="text-center text-white">
-			<div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white mx-auto mb-4"></div>
-			<p class="text-xl font-semibold">Loading Cashier POS...</p>
-		</div>
+	<div class="loading-screen">
+		<div class="spinner"></div>
+		<p>Loading POS System...</p>
 	</div>
 {:else}
-	<div class="cashier-pos min-h-screen bg-gray-100">
-		
-		<!-- Header - Cashier Professional Style (Gray/Dark Theme) -->
-		<header class="cashier-header sticky top-0 z-40 bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-lg">
-			<div class="container mx-auto px-4 py-3">
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-3">
-						<div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-							<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-							</svg>
-						</div>
-						<div>
-							<h1 class="text-lg font-bold">💰 Cashier POS</h1>
-							<p class="text-xs text-gray-300">Staff Terminal</p>
-						</div>
-					</div>
-					
-					<div class="flex items-center gap-4">
-						<div class="text-sm">
-							<div class="text-gray-300">Online Status</div>
-							<div class="font-semibold {$isOnline ? 'text-green-400' : 'text-red-400'}">
-								{$isOnline ? '🟢 Connected' : '🔴 Offline'}
-							</div>
-						</div>
-						
-						<button on:click={() => showCustomerForm = !showCustomerForm} class="btn-cashier-secondary">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-							</svg>
-							Customer
-						</button>
-					</div>
-				</div>
-				
-				<!-- Customer Form (Expandable) -->
-				{#if showCustomerForm}
-					<div class="mt-4 bg-gray-700 rounded-lg p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-						<input 
-							type="text" 
-							bind:value={customerName}
-							placeholder="Customer Name"
-							class="input-cashier"
-						/>
-						<input 
-							type="tel" 
-							bind:value={customerPhone}
-							placeholder="Phone Number"
-							class="input-cashier"
-						/>
-						<input 
-							type="text" 
-							bind:value={tableNumber}
-							placeholder="Table Number"
-							class="input-cashier"
-						/>
-						<input 
-							type="text" 
-							bind:value={orderNotes}
-							placeholder="Order Notes"
-							class="input-cashier"
-						/>
-					</div>
-				{/if}
+	<div class="cashier-layout">
+		<!-- LEFT: Product Selection -->
+		<div class="products-section">
+			<!-- Header -->
+			<div class="section-header">
+				<h2 class="text-xl font-bold text-gray-800">Products</h2>
+				<input 
+					type="search" 
+					bind:value={searchQuery}
+					placeholder="🔍 Search products..."
+					class="search-input"
+				/>
 			</div>
-		</header>
-		
-		<!-- Main Content - Split View (Products | Cart) -->
-		<main class="container mx-auto px-4 py-4">
-			<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-				
-				<!-- LEFT: Products Panel -->
-				<div class="lg:col-span-2">
-					
-					<!-- Search Bar -->
-					<div class="mb-4">
-						<input 
-							type="search" 
-							bind:value={searchQuery}
-							placeholder="🔍 Search products... (Quick entry)"
-							class="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none bg-white"
-						/>
-					</div>
-					
-					<!-- Category Filters - Compact -->
-					{#if categories.length > 0}
-						<div class="mb-4">
-							<div class="flex gap-2 overflow-x-auto pb-2">
-								<button 
-									class="category-chip-cashier {!selectedCategory ? 'active' : ''}"
-									on:click={() => selectedCategory = null}
-								>
-									All
-								</button>
-								{#each categories as category}
-									<button 
-										class="category-chip-cashier {selectedCategory === category.id ? 'active' : ''}"
-										on:click={() => selectedCategory = category.id}
-									>
-										{category.name}
-									</button>
-								{/each}
-							</div>
-						</div>
-					{/if}
-					
-					<!-- Products Grid - Compact List View -->
-					<div class="products-list-cashier">
-						{#each filteredProducts as product}
-							<div class="product-row-cashier" on:click={() => selectProduct(product)}>
-								<div class="flex items-center gap-3 flex-1">
-									{#if product.image_url}
-										<img src={product.image_url} alt={product.name} class="product-thumb-cashier" />
-									{:else}
-										<div class="product-thumb-placeholder-cashier">
-											<svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-												<path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
-											</svg>
-										</div>
-									{/if}
-									
-									<div class="flex-1">
-										<h3 class="font-semibold text-gray-800">{product.name}</h3>
-										<p class="text-xs text-gray-500">{product.tenant_name}</p>
-									</div>
-								</div>
-								
-								<div class="flex items-center gap-3">
-									<span class="text-lg font-bold text-gray-800">
-										Rp {product.price.toLocaleString('id-ID')}
-									</span>
-									<button 
-										on:click|stopPropagation={() => quickAddProduct(product)}
-										class="btn-quick-add"
-										disabled={!product.is_available}
-									>
-										{#if product.is_available}
-											<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-											</svg>
-										{:else}
-											<span class="text-xs">N/A</span>
-										{/if}
-									</button>
-								</div>
-							</div>
-						{/each}
-					</div>
+			
+			<!-- Filters -->
+			<div class="filters-row">
+				<div class="filter-group">
+					<button 
+						class="filter-chip {!selectedTenant ? 'active' : ''}"
+						on:click={() => selectedTenant = null}
+					>
+						All Tenants
+					</button>
+					{#each tenants as tenant}
+						<button 
+							class="filter-chip {selectedTenant === tenant.id ? 'active' : ''}"
+							style="--tenant-color: {tenant.color}"
+							on:click={() => selectedTenant = tenant.id}
+						>
+							{tenant.name}
+						</button>
+					{/each}
 				</div>
 				
-				<!-- RIGHT: Cart Panel (Always Visible for Cashier) -->
-				<div class="lg:col-span-1">
-					<div class="cart-panel-cashier sticky top-20">
-						<div class="cart-header-cashier">
-							<h2 class="text-lg font-bold">📋 Current Order</h2>
-							{#if $cartItems.length > 0}
-								<button on:click={clearAllCart} class="text-red-600 hover:text-red-700 text-sm font-semibold">
-									Clear All
-								</button>
-							{/if}
-						</div>
-						
-						<div class="cart-body-cashier">
-							{#if $cartItems.length === 0}
-								<div class="text-center py-12 text-gray-400">
-									<svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-									</svg>
-									<p class="text-sm">No items</p>
-								</div>
-							{:else}
-								{#each $cartItems as item}
-									<div class="cart-item-cashier">
-										<div class="flex-1">
-											<h4 class="font-semibold text-gray-800 text-sm">{item.name}</h4>
-											<p class="text-xs text-gray-500">{item.tenant_name}</p>
-											<p class="text-blue-600 font-semibold text-sm">Rp {item.price.toLocaleString('id-ID')}</p>
-										</div>
-										<div class="flex items-center gap-1">
-											<button on:click={() => updateQuantity(item.id, item.quantity - 1)} class="qty-btn-cashier">-</button>
-											<span class="font-semibold text-sm w-8 text-center">{item.quantity}</span>
-											<button on:click={() => updateQuantity(item.id, item.quantity + 1)} class="qty-btn-cashier">+</button>
-											<button on:click={() => removeCartItem(item.id)} class="text-red-500 hover:text-red-700 ml-1">
-												<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-												</svg>
-											</button>
-										</div>
-									</div>
-								{/each}
-							{/if}
-						</div>
-						
-						{#if $cartItems.length > 0}
-							<div class="cart-footer-cashier">
-								<div class="space-y-2 mb-4">
-									<div class="flex justify-between text-sm">
-										<span>Subtotal:</span>
-										<span>Rp {$cartTotals.subtotal.toLocaleString('id-ID')}</span>
-									</div>
-									<div class="flex justify-between text-sm">
-										<span>Tax ({$cartTotals.taxRate}%):</span>
-										<span>Rp {$cartTotals.tax.toLocaleString('id-ID')}</span>
-									</div>
-									<div class="flex justify-between text-lg font-bold border-t-2 border-gray-300 pt-2">
-										<span>TOTAL:</span>
-										<span class="text-blue-600">Rp {$cartTotals.total.toLocaleString('id-ID')}</span>
-									</div>
-								</div>
-								<button on:click={handleCheckout} class="btn-checkout-cashier w-full">
-									💳 Process Payment
-								</button>
+				<div class="filter-group">
+					<button 
+						class="filter-chip {!selectedCategory ? 'active' : ''}"
+						on:click={() => selectedCategory = null}
+					>
+						All Categories
+					</button>
+					{#each categories as category}
+						<button 
+							class="filter-chip {selectedCategory === category.name ? 'active' : ''}"
+							on:click={() => selectedCategory = category.name}
+						>
+							{category.name}
+						</button>
+					{/each}
+				</div>
+			</div>
+			
+			<!-- Products Grid -->
+			<div class="products-grid">
+				{#each filteredProducts as product}
+					<button class="product-card" on:click={() => selectProduct(product)}>
+						{#if getImageUrl(product.image)}
+							<img src={getImageUrl(product.image)} alt={product.name} class="product-image" />
+						{:else}
+							<div class="product-placeholder">
+								<svg class="w-12 h-12 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+								</svg>
 							</div>
 						{/if}
-					</div>
-				</div>
-				
+						<div class="product-info">
+							<h3 class="product-name">{product.name}</h3>
+							<p class="product-tenant">{product.tenant_name}</p>
+							<p class="product-price">Rp {product.price.toLocaleString('id-ID')}</p>
+						</div>
+					</button>
+				{/each}
 			</div>
-		</main>
+		</div>
 		
+		<!-- RIGHT: Cart Panel -->
+		<div class="cart-section">
+			<div class="cart-header">
+				<h2>Current Order</h2>
+				{#if $cartItems.length > 0}
+					<button on:click={clearCart} class="btn-clear">Clear</button>
+				{/if}
+			</div>
+			
+			<!-- Customer Info -->
+			<div class="customer-info">
+				<input 
+					type="text" 
+					bind:value={customerName}
+					placeholder="Customer Name"
+					class="input-field"
+				/>
+				<input 
+					type="tel" 
+					bind:value={customerPhone}
+					placeholder="Phone"
+					class="input-field"
+				/>
+				<input 
+					type="text" 
+					bind:value={tableNumber}
+					placeholder="Table #"
+					class="input-field"
+				/>
+			</div>
+			
+			<!-- Cart Items -->
+			<div class="cart-items">
+				{#if $cartItems.length === 0}
+					<div class="empty-cart">
+						<svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+						</svg>
+						<p>No items</p>
+					</div>
+				{:else}
+					{#each $cartItems as item}
+						<div class="cart-item">
+							<div class="item-info">
+								<h4>{item.product_name}</h4>
+								<p class="item-tenant">{item.tenant_name}</p>
+								<p class="item-price">Rp {item.product_price?.toLocaleString('id-ID')}</p>
+							</div>
+							<div class="item-controls">
+								<button on:click={() => updateQuantity(item.id, item.quantity - 1)} class="qty-btn">-</button>
+								<span class="qty">{item.quantity}</span>
+								<button on:click={() => updateQuantity(item.id, item.quantity + 1)} class="qty-btn">+</button>
+								<button on:click={() => removeCartItem(item.id)} class="btn-remove">×</button>
+							</div>
+						</div>
+					{/each}
+				{/if}
+			</div>
+			
+			<!-- Cart Footer -->
+			{#if $cartItems.length > 0}
+				<div class="cart-footer">
+					<div class="totals">
+						<div class="total-row">
+							<span>Subtotal:</span>
+							<span>Rp {$cartTotals.subtotal.toLocaleString('id-ID')}</span>
+						</div>
+						<div class="total-row">
+							<span>Tax (10%):</span>
+							<span>Rp {$cartTotals.tax.toLocaleString('id-ID')}</span>
+						</div>
+						<div class="total-row grand-total">
+							<span>TOTAL:</span>
+							<span>Rp {$cartTotals.total.toLocaleString('id-ID')}</span>
+						</div>
+					</div>
+					<button on:click={handleCheckout} class="btn-checkout">
+						Process Payment
+					</button>
+				</div>
+			{/if}
+		</div>
 	</div>
 {/if}
 
+<!-- Modals -->
 <ModifierModal 
-	bind:show={showModifierModal} 
 	bind:product={selectedProduct} 
-	on:addToCart
+	on:addToCart={handleAddToCart}
+	on:close={() => selectedProduct = null}
 />
 
-<PaymentModal 
-	bind:show={showPaymentModal}
-	on:complete={handlePaymentComplete}
-	on:cancel={() => showPaymentModal = false}
-/>
+{#if showPaymentModal}
+	<PaymentModal 
+		groupedCartItems={groupedCartItems}
+		grandTotal={totalAmount}
+		on:checkout={processCheckout}
+		on:cancel={() => showPaymentModal = false}
+	/>
+{/if}
 
 {#if showSuccessModal && checkoutResult}
 	<SuccessModal 
@@ -360,197 +447,372 @@
 		totalAmount={parseFloat(checkoutResult.total_amount)}
 		paymentMethod={checkoutResult.payment_method}
 		offline={checkoutResult.offline || false}
-		on:close={() => showSuccessModal = false}
+		on:close={handleSuccessClose}
 	/>
 {/if}
 
 <style>
-	/* 💰 CASHIER PROFESSIONAL THEME - Gray/Dark (Staff-Facing) */
-	.cashier-pos {
-		font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-	}
-	
-	.btn-cashier-secondary {
-		padding: 0.5rem 1rem;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 0.5rem;
-		color: white;
-		font-weight: 600;
+	.loading-screen {
+		min-height: 100vh;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		gap: 0.5rem;
-		transition: all 0.2s;
-	}
-	
-	.btn-cashier-secondary:hover {
-		background: rgba(255, 255, 255, 0.2);
-	}
-	
-	.input-cashier {
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		background: rgba(255, 255, 255, 0.1);
-		color: white;
-		font-size: 0.875rem;
-	}
-	
-	.input-cashier::placeholder {
-		color: rgba(255, 255, 255, 0.5);
-	}
-	
-	.category-chip-cashier {
-		padding: 0.5rem 1rem;
-		border-radius: 0.5rem;
-		background: white;
-		border: 2px solid #e5e7eb;
-		font-weight: 600;
-		font-size: 0.875rem;
-		color: #4b5563;
-		white-space: nowrap;
-		transition: all 0.2s;
-	}
-	
-	.category-chip-cashier.active {
-		background: #3b82f6;
-		border-color: #3b82f6;
+		justify-content: center;
+		background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
 		color: white;
 	}
 	
-	.products-list-cashier {
-		background: white;
-		border-radius: 0.75rem;
-		overflow: hidden;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-		max-height: calc(100vh - 280px);
-		overflow-y: auto;
-	}
-	
-	.product-row-cashier {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid #f3f4f6;
-		cursor: pointer;
-		transition: background 0.2s;
-	}
-	
-	.product-row-cashier:hover {
-		background: #f9fafb;
-	}
-	
-	.product-thumb-cashier {
+	.spinner {
 		width: 48px;
 		height: 48px;
-		border-radius: 0.5rem;
+		border: 4px solid rgba(255, 255, 255, 0.3);
+		border-top-color: white;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		margin-bottom: 1rem;
+	}
+	
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+	
+	.cashier-layout {
+		min-height: 100vh;
+		background: #f3f4f6;
+		display: grid;
+		grid-template-columns: 2fr 1fr;
+		gap: 1rem;
+		padding: 1rem;
+	}
+	
+	.products-section {
+		background: white;
+		border-radius: 16px;
+		padding: 1.5rem;
+		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+		overflow-y: auto;
+		max-height: calc(100vh - 2rem);
+	}
+	
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+	}
+	
+	.search-input {
+		width: 300px;
+		padding: 0.75rem 1rem;
+		border: 2px solid #e5e7eb;
+		border-radius: 8px;
+		font-size: 0.875rem;
+	}
+	
+	.search-input:focus {
+		outline: none;
+		border-color: #3b82f6;
+	}
+	
+	.filters-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+	}
+	
+	.filter-group {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	
+	.filter-chip {
+		padding: 0.5rem 1rem;
+		border-radius: 20px;
+		border: 2px solid #e5e7eb;
+		background: white;
+		color: #6b7280;
+		font-size: 0.875rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	
+	.filter-chip:hover {
+		border-color: #3b82f6;
+		color: #3b82f6;
+	}
+	
+	.filter-chip.active {
+		background: var(--tenant-color, #3b82f6);
+		border-color: var(--tenant-color, #3b82f6);
+		color: white;
+	}
+	
+	.products-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+		gap: 1rem;
+	}
+	
+	.product-card {
+		background: white;
+		border: 2px solid #e5e7eb;
+		border-radius: 12px;
+		padding: 0;
+		cursor: pointer;
+		transition: all 0.2s;
+		overflow: hidden;
+	}
+	
+	.product-card:hover {
+		transform: translateY(-4px);
+		box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+		border-color: #3b82f6;
+	}
+	
+	.product-image {
+		width: 100%;
+		height: 120px;
 		object-fit: cover;
 	}
 	
-	.product-thumb-placeholder-cashier {
-		width: 48px;
-		height: 48px;
-		border-radius: 0.5rem;
+	.product-placeholder {
+		width: 100%;
+		height: 120px;
 		background: #f3f4f6;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 	}
 	
-	.btn-quick-add {
-		padding: 0.5rem;
-		background: #3b82f6;
-		border-radius: 0.5rem;
-		color: white;
-		transition: background 0.2s;
+	.product-info {
+		padding: 0.75rem;
 	}
 	
-	.btn-quick-add:hover:not(:disabled) {
-		background: #2563eb;
+	.product-name {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #1f2937;
+		margin-bottom: 0.25rem;
 	}
 	
-	.btn-quick-add:disabled {
-		background: #e5e7eb;
-		color: #9ca3af;
-		cursor: not-allowed;
+	.product-tenant {
+		font-size: 0.75rem;
+		color: #6b7280;
+		margin-bottom: 0.5rem;
 	}
 	
-	.cart-panel-cashier {
+	.product-price {
+		font-size: 1rem;
+		font-weight: 700;
+		color: #3b82f6;
+	}
+	
+	.cart-section {
 		background: white;
-		border-radius: 0.75rem;
-		box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-		overflow: hidden;
+		border-radius: 16px;
+		padding: 1.5rem;
+		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 		display: flex;
 		flex-direction: column;
-		max-height: calc(100vh - 120px);
+		max-height: calc(100vh - 2rem);
+		position: sticky;
+		top: 1rem;
 	}
 	
-	.cart-header-cashier {
-		padding: 1rem;
-		background: linear-gradient(135deg, #1f2937, #374151);
-		color: white;
+	.cart-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		margin-bottom: 1rem;
+		padding-bottom: 1rem;
+		border-bottom: 2px solid #e5e7eb;
 	}
 	
-	.cart-body-cashier {
+	.cart-header h2 {
+		font-size: 1.25rem;
+		font-weight: 700;
+		color: #1f2937;
+	}
+	
+	.btn-clear {
+		padding: 0.5rem 1rem;
+		background: #fee2e2;
+		color: #dc2626;
+		border-radius: 8px;
+		font-size: 0.875rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	
+	.btn-clear:hover {
+		background: #fecaca;
+	}
+	
+	.customer-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+	
+	.input-field {
+		padding: 0.625rem;
+		border: 2px solid #e5e7eb;
+		border-radius: 8px;
+		font-size: 0.875rem;
+	}
+	
+	.input-field:focus {
+		outline: none;
+		border-color: #3b82f6;
+	}
+	
+	.cart-items {
 		flex: 1;
 		overflow-y: auto;
-		padding: 1rem;
-		min-height: 300px;
+		margin-bottom: 1rem;
 	}
 	
-	.cart-item-cashier {
+	.empty-cart {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 3rem 1rem;
+		color: #9ca3af;
+	}
+	
+	.cart-item {
 		display: flex;
 		gap: 0.75rem;
 		padding: 0.75rem;
-		background: #f9fafb;
-		border-radius: 0.5rem;
-		margin-bottom: 0.75rem;
-		border: 1px solid #e5e7eb;
+		border-bottom: 1px solid #e5e7eb;
 	}
 	
-	.qty-btn-cashier {
-		width: 1.75rem;
-		height: 1.75rem;
-		border-radius: 0.375rem;
-		background: #3b82f6;
-		color: white;
-		font-weight: bold;
+	.item-info {
+		flex: 1;
+	}
+	
+	.item-info h4 {
 		font-size: 0.875rem;
-		transition: background 0.2s;
+		font-weight: 600;
+		color: #1f2937;
+		margin-bottom: 0.25rem;
 	}
 	
-	.qty-btn-cashier:hover {
-		background: #2563eb;
+	.item-tenant {
+		font-size: 0.75rem;
+		color: #6b7280;
+		margin-bottom: 0.25rem;
 	}
 	
-	.cart-footer-cashier {
-		padding: 1rem;
-		border-top: 2px solid #e5e7eb;
-		background: #f9fafb;
+	.item-price {
+		font-size: 0.875rem;
+		font-weight: 700;
+		color: #3b82f6;
 	}
 	
-	.btn-checkout-cashier {
-		padding: 0.875rem 1.5rem;
-		background: linear-gradient(135deg, #3b82f6, #2563eb);
-		color: white;
-		border-radius: 0.75rem;
-		font-size: 1rem;
-		font-weight: bold;
+	.item-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	
+	.qty-btn {
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		background: #f3f4f6;
+		color: #374151;
+		font-weight: 600;
+		cursor: pointer;
 		transition: all 0.2s;
-		box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
 	}
 	
-	.btn-checkout-cashier:hover {
-		transform: scale(1.02);
+	.qty-btn:hover {
+		background: #e5e7eb;
+	}
+	
+	.qty {
+		width: 32px;
+		text-align: center;
+		font-weight: 600;
+	}
+	
+	.btn-remove {
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		background: #fee2e2;
+		color: #dc2626;
+		font-size: 1.25rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	
+	.btn-remove:hover {
+		background: #fecaca;
+	}
+	
+	.cart-footer {
+		padding-top: 1rem;
+		border-top: 2px solid #e5e7eb;
+	}
+	
+	.totals {
+		margin-bottom: 1rem;
+	}
+	
+	.total-row {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.875rem;
+		margin-bottom: 0.5rem;
+	}
+	
+	.grand-total {
+		font-size: 1.125rem;
+		font-weight: 700;
+		color: #1f2937;
+		padding-top: 0.5rem;
+		border-top: 2px solid #e5e7eb;
+		margin-top: 0.5rem;
+	}
+	
+	.grand-total span:last-child {
+		color: #3b82f6;
+	}
+	
+	.btn-checkout {
+		width: 100%;
+		padding: 1rem;
+		background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+		color: white;
+		border-radius: 12px;
+		font-size: 1rem;
+		font-weight: 700;
+		cursor: pointer;
+		transition: all 0.2s;
+		box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+	}
+	
+	.btn-checkout:hover {
+		transform: translateY(-2px);
 		box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
 	}
 	
 	@media (max-width: 1024px) {
-		.cart-panel-cashier {
+		.cashier-layout {
+			grid-template-columns: 1fr;
+		}
+		
+		.cart-section {
+			position: relative;
 			max-height: none;
 		}
 	}

@@ -94,7 +94,10 @@
 				} catch (e) {
 					parsedItem.modifiers = [];
 				}
-			} else if (!Array.isArray(item.modifiers)) {
+			}
+			
+			// Ensure modifiers is always an array
+			if (!Array.isArray(parsedItem.modifiers)) {
 				parsedItem.modifiers = [];
 			}
 			
