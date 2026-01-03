@@ -56,7 +56,7 @@ class Outlet(models.Model):
     address = models.TextField()
     city = models.CharField(max_length=100)
     province = models.CharField(max_length=100)
-    postal_code = models.CharField(max_length=10)
+    postal_code = models.CharField(max_length=10, blank=True)
     
     # Contact
     phone = models.CharField(max_length=20)
