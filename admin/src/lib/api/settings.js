@@ -4,7 +4,7 @@
 
 import { authFetch } from './auth';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = '/api';
 
 /**
  * Tenant Settings API
@@ -76,6 +76,7 @@ export async function getOutlets(filters = {}) {
 	const params = new URLSearchParams();
 
 	if (filters.search) params.append('search', filters.search);
+	if (filters.tenant) params.append('tenant', filters.tenant);
 	if (filters.is_active !== undefined) params.append('is_active', filters.is_active);
 	if (filters.city) params.append('city', filters.city);
 	if (filters.province) params.append('province', filters.province);

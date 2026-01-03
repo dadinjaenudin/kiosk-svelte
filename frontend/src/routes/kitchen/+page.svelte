@@ -15,7 +15,7 @@
 	async function loadTenants() {
 		try {
 			// Load all tenants from products to get tenant info
-			const response = await fetch(`${apiUrl}/products/products/`);
+			const response = await fetch(`${apiUrl}/products/`);
 			if (response.ok) {
 				const data = await response.json();
 				const products = data.results || data || [];

@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { user } from '$lib/stores/auth';
+	import { user, selectedTenant } from '$lib/stores/auth';
 	import { getDashboardAnalytics } from '$lib/api/dashboard';
 	import RevenueChart from '$lib/components/RevenueChart.svelte';
 
@@ -19,13 +19,21 @@
 	let loading = true;
 	let error = null;
 	let selectedPeriod = 'today';
+	let mounted = false;
 
 	async function loadDashboard() {
 		loading = true;
 		error = null;
 		
 		try {
-			const data = await getDashboardAnalytics({ period: selectedPeriod });
+			const params = { period: selectedPeriod };
+			
+			// Add tenant filter if selected
+			if ($selectedTenant) {
+				params.tenant_id = $selectedTenant;
+			}
+			
+			const data = await getDashboardAnalytics(params);
 			
 			// Update stats
 			stats = {
@@ -67,7 +75,14 @@
 
 	onMount(() => {
 		loadDashboard();
+		mounted = true;
 	});
+
+	// Reactive: reload when tenant filter changes
+	$: if (mounted) {
+		const tenantId = $selectedTenant;
+		loadDashboard();
+	}
 
 	function changePeriod(period) {
 		selectedPeriod = period;

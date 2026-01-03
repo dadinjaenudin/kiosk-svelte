@@ -21,13 +21,44 @@ class UserAdminSerializer(UserSerializer):
     """Extended user serializer for admin with write support"""
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     outlet_name = serializers.CharField(source='outlet.name', read_only=True)
+    accessible_outlet_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text='List of outlet IDs for manager accessible_outlets'
+    )
     
     class Meta(UserSerializer.Meta):
-        fields = UserSerializer.Meta.fields + ['tenant_name', 'outlet_name']
+        fields = UserSerializer.Meta.fields + ['tenant_name', 'outlet_name', 'accessible_outlet_ids']
         read_only_fields = ['last_login', 'date_joined', 'created_at', 'updated_at']
         extra_kwargs = {
             'password': {'write_only': True, 'required': False}
         }
+    
+    def create(self, validated_data):
+        """Handle accessible_outlets during creation"""
+        accessible_outlet_ids = validated_data.pop('accessible_outlet_ids', [])
+        user = super().create(validated_data)
+        
+        # Set accessible_outlets for manager role
+        if accessible_outlet_ids and user.role == 'manager':
+            user.accessible_outlets.set(accessible_outlet_ids)
+        
+        return user
+    
+    def update(self, instance, validated_data):
+        """Handle accessible_outlets during update"""
+        accessible_outlet_ids = validated_data.pop('accessible_outlet_ids', None)
+        user = super().update(instance, validated_data)
+        
+        # Update accessible_outlets for manager role
+        if accessible_outlet_ids is not None and user.role == 'manager':
+            user.accessible_outlets.set(accessible_outlet_ids)
+        elif user.role != 'manager':
+            # Clear accessible_outlets if role is not manager
+            user.accessible_outlets.clear()
+        
+        return user
 
 
 class UserManagementViewSet(viewsets.ModelViewSet):
@@ -56,14 +87,14 @@ class UserManagementViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Filter users based on role
-        - Admin: sees all users
+        - Super admin/admin: sees all users
         - Tenant owner: sees users in their tenant
         - Others: see no users
         """
         user = self.request.user
         
-        if user.role == 'admin':
-            # Admin sees all users
+        if user.is_superuser or user.role in ['super_admin', 'admin']:
+            # Super admin sees all users
             return User.objects.select_related('tenant', 'outlet').all()
         elif user.role == 'owner' and hasattr(user, 'tenant') and user.tenant:
             # Tenant owner sees users in their tenant
@@ -84,7 +115,7 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         
         # Auto-assign tenant for non-admin creators
         user = self.request.user
-        if user.role != 'admin' and hasattr(user, 'tenant') and user.tenant:
+        if not (user.is_superuser or user.role in ['super_admin', 'admin']) and hasattr(user, 'tenant') and user.tenant:
             serializer.validated_data['tenant'] = user.tenant
         
         serializer.save()

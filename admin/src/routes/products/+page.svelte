@@ -1,7 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated } from '$lib/stores/auth';
+	import { isAuthenticated, selectedTenant } from '$lib/stores/auth';
+	import RoleGuard from '$lib/components/RoleGuard.svelte';
+	import PermissionButton from '$lib/components/PermissionButton.svelte';
 	import {
 		getProducts,
 		getCategories,
@@ -12,16 +15,20 @@
 		formatCurrency,
 		formatDate
 	} from '$lib/api/products';
+	import { getTenants } from '$lib/api/tenants';
 
 	// Props
 	export let data = {};
+	$: ({ queryParams } = data);
 
 	// State
 	let products = [];
 	let categories = [];
+	let tenants = [];
 	let stats = null;
 	let isLoading = true;
 	let error = null;
+	let mounted = false;
 	let searchQuery = '';
 	let selectedCategory = '';
 	let selectedStatus = '';
@@ -57,19 +64,21 @@
 			const filterParams = {
 				search: searchQuery || undefined,
 				category: selectedCategory || undefined,
+			tenant: $selectedTenant || undefined,
 				is_active: filters.is_active !== '' ? filters.is_active : undefined,
 				is_available: filters.is_available !== '' ? filters.is_available : undefined,
 				is_featured: filters.is_featured !== '' ? filters.is_featured : undefined,
 				has_promo: filters.has_promo !== '' ? filters.has_promo : undefined,
 				track_stock: filters.track_stock !== '' ? filters.track_stock : undefined,
 				page: currentPage,
+				page_size: 10,
 				ordering: '-created_at'
 			};
 
 			const response = await getProducts(filterParams);
 			products = response.results || response;
 			totalProducts = response.count || products.length;
-			totalPages = response.next || response.previous ? Math.ceil(totalProducts / 20) : 1;
+			totalPages = response.next || response.previous ? Math.ceil(totalProducts / 10) : 1;
 		} catch (err) {
 			console.error('Error loading products:', err);
 			error = err.message || 'Failed to load products';
@@ -87,9 +96,20 @@
 		}
 	}
 
-	async function loadStats() {
+	async function loadTenants() {
 		try {
-			stats = await getProductStats();
+			const response = await getTenants({ page_size: 100 });
+			tenants = response.results || response;
+		} catch (err) {
+			console.error('Error loading tenants:', err);
+		}
+	}
+
+	async function loadStats() {
+		if (!browser) return;
+		
+		try {
+			stats = await getProductStats($selectedTenant);
 		} catch (err) {
 			console.error('Error loading stats:', err);
 		}
@@ -193,16 +213,29 @@
 		return { class: 'bg-green-100 text-green-800', label: 'Active' };
 	}
 
-	onMount(() => {
-		if (!$isAuthenticated) {
-			goto('/login');
-			return;
-		}
+	// Reactive: reload when tenant filter changes
+	$: if (mounted) {
+		const tenantId = $selectedTenant;
+		currentPage = 1;
+		loadProducts();
+	}
 
+	onMount(() => {
 		loadProducts();
 		loadCategories();
+		loadTenants();
 		loadStats();
+		mounted = true;
 	});
+
+	// Reactive: reload when tenant filter changes
+	$: if (mounted && $selectedTenant !== undefined) {
+		console.log('🔄 Products: Reactive reload triggered. Tenant:', $selectedTenant);
+		const tenantId = $selectedTenant;
+		currentPage = 1;
+		loadProducts();
+		loadStats();
+	}
 </script>
 
 <svelte:head>
@@ -216,9 +249,10 @@
 			<h1 class="text-2xl font-bold text-gray-900">Products</h1>
 			<p class="text-gray-600 mt-1">Manage your product catalog</p>
 		</div>
-		<button
+		<PermissionButton
+			action="create"
+			resource="products"
 			on:click={() => goto('/products/create')}
-			class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
 		>
 			<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path
@@ -229,7 +263,7 @@
 				/>
 			</svg>
 			Add Product
-		</button>
+		</PermissionButton>
 	</div>
 
 	<!-- Stats Cards -->
@@ -443,6 +477,8 @@
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outlet</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -478,7 +514,25 @@
 								<td class="px-6 py-4 text-sm text-gray-900">
 									{product.category_name || '-'}
 								</td>
-								<td class="px-6 py-4">
+								<td class="px-6 py-4 text-sm">
+									{#if product.tenant_name}
+										<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+											{product.tenant_name}
+										</span>
+									{:else}
+										<span class="text-gray-400">-</span>
+									{/if}
+								</td>							<td class="px-6 py-4 text-sm">
+								{#if product.outlet_name}
+									<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+										📍 {product.outlet_name}
+									</span>
+								{:else}
+									<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+										🌐 All Outlets
+									</span>
+								{/if}
+							</td>								<td class="px-6 py-4">
 									<div class="font-medium text-gray-900">{formatCurrency(product.price)}</div>
 									{#if product.has_promo && product.promo_price}
 										<div class="text-sm text-green-600">{formatCurrency(product.promo_price)}</div>

@@ -6,6 +6,7 @@
 	export let payments = [];
 	export let totalAmount = 0;
 	export let paymentMethod = '';
+	export let offline = false; // New: track if order was saved offline
 	
 	const dispatch = createEventDispatcher();
 	
@@ -54,8 +55,15 @@
 		
 		<!-- Header -->
 		<div class="modal-header">
-			<h2>🎉 Pembayaran Berhasil!</h2>
-			<p class="subtitle">{orders.length} pesanan telah dibuat</p>
+			{#if offline}
+				<h2>📴 Pembayaran Disimpan (Offline)</h2>
+				<p class="subtitle offline-notice">
+					{orders.length} pesanan disimpan offline. Akan otomatis dikirim ke server saat online.
+				</p>
+			{:else}
+				<h2>🎉 Pembayaran Berhasil!</h2>
+				<p class="subtitle">{orders.length} pesanan telah dibuat</p>
+			{/if}
 		</div>
 		
 		<!-- Orders List -->
@@ -216,6 +224,15 @@
 		font-size: 16px;
 		color: #6B7280;
 		margin: 0;
+	}
+	
+	.offline-notice {
+		color: #F59E0B;
+		background: #FEF3C7;
+		padding: 8px 16px;
+		border-radius: 8px;
+		font-weight: 500;
+		margin-top: 8px;
 	}
 	
 	.orders-list {

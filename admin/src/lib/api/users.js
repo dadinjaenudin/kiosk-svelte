@@ -18,6 +18,7 @@ export async function getUsers(filters = {}) {
 	if (filters.search) params.append('search', filters.search);
 	if (filters.ordering) params.append('ordering', filters.ordering);
 	if (filters.page) params.append('page', filters.page);
+	if (filters.page_size) params.append('page_size', filters.page_size);
 	
 	const url = params.toString() ? `${BASE_URL}/?${params}` : `${BASE_URL}/`;
 	return authFetch(url);
@@ -132,8 +133,10 @@ export async function bulkUpdateUsers(userIds, updates) {
  */
 export function getRoleOptions() {
 	return [
-		{ value: 'owner', label: 'Owner', color: 'purple' },
+		{ value: 'super_admin', label: 'Super Admin', color: 'indigo' },
 		{ value: 'admin', label: 'Admin', color: 'red' },
+		{ value: 'tenant_owner', label: 'Tenant Owner', color: 'purple' },
+		{ value: 'manager', label: 'Manager', color: 'orange' },
 		{ value: 'cashier', label: 'Cashier', color: 'blue' },
 		{ value: 'kitchen', label: 'Kitchen Staff', color: 'green' }
 	];
@@ -144,8 +147,10 @@ export function getRoleOptions() {
  */
 export function formatRole(role) {
 	const roles = {
-		owner: { label: 'Owner', color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
+		super_admin: { label: 'Super Admin', color: 'indigo', bgColor: 'bg-indigo-100', textColor: 'text-indigo-800' },
 		admin: { label: 'Admin', color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+		tenant_owner: { label: 'Tenant Owner', color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
+		manager: { label: 'Manager', color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' },
 		cashier: { label: 'Cashier', color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
 		kitchen: { label: 'Kitchen Staff', color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' }
 	};

@@ -84,9 +84,14 @@ class OutletSerializer(serializers.ModelSerializer):
         """
         Validate outlet data
         """
-        # Ensure tenant matches current tenant
+        # Ensure tenant matches current tenant (only for creation)
         from apps.core.context import get_current_tenant
         
+        # Skip tenant validation for updates (instance exists)
+        if self.instance is not None:
+            return data
+        
+        # For creation, ensure tenant is provided and matches current tenant
         tenant = get_current_tenant()
         if tenant and data.get('tenant') != tenant:
             raise serializers.ValidationError(

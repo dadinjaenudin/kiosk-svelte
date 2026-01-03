@@ -1,3 +1,0 @@
-@echo off
-echo Checking backend logs...
-docker logs kiosk-svelte-backend-1 --tail 50

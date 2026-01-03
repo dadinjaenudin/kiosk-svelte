@@ -17,6 +17,7 @@ export async function getModifiers(filters = {}) {
 	if (filters.search) params.append('search', filters.search);
 	if (filters.ordering) params.append('ordering', filters.ordering);
 	if (filters.page) params.append('page', filters.page);
+	if (filters.page_size) params.append('page_size', filters.page_size);
 	
 	const url = params.toString() ? `${BASE_URL}/?${params}` : `${BASE_URL}/`;
 	return authFetch(url);
@@ -42,22 +43,16 @@ export async function getModifiersByProduct(productId) {
 export async function createModifier(modifierData) {
 	return authFetch(`${BASE_URL}/`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
 		body: JSON.stringify(modifierData)
 	});
 }
 
 /**
- * Update modifier
+ * Update modifier (PATCH for partial updates)
  */
 export async function updateModifier(id, modifierData) {
 	return authFetch(`${BASE_URL}/${id}/`, {
-		method: 'PUT',
-		headers: {
-			'Content-Type': 'application/json'
-		},
+		method: 'PATCH',
 		body: JSON.stringify(modifierData)
 	});
 }
@@ -68,9 +63,6 @@ export async function updateModifier(id, modifierData) {
 export async function patchModifier(id, updates) {
 	return authFetch(`${BASE_URL}/${id}/`, {
 		method: 'PATCH',
-		headers: {
-			'Content-Type': 'application/json'
-		},
 		body: JSON.stringify(updates)
 	});
 }

@@ -12,8 +12,12 @@ from apps.tenants.serializers import (
     OutletSerializer,
     OutletDetailSerializer
 )
-from apps.core.permissions import has_permission, require_permission
 from apps.core.context import get_current_tenant
+from apps.core.permissions import (
+    CanManageTenants,
+    IsManagerOrAbove,
+    is_admin_user
+)
 
 
 class PublicTenantViewSet(viewsets.ReadOnlyModelViewSet):
@@ -59,13 +63,16 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
     
     queryset = Tenant.objects.all()
     serializer_class = TenantSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageTenants]
     
     def get_queryset(self):
         """
-        Filter tenants based on user permissions
+        Filter tenants based on user permissions.
+        Admin can see all, others see only their own.
         """
-        if self.request.user.is_superuser:
+        user = self.request.user
+        
+        if is_admin_user(user):
             return Tenant.objects.all()
         
         # Regular users can only see their own tenant
@@ -116,29 +123,48 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
 
 class OutletViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for Outlet
+    ViewSet for Outlet Management (Multi-outlet support)
     
-    list: List all outlets for current tenant
-    create: Create new outlet
+    list: List outlets for current tenant (filtered by user access)
+    create: Create new outlet (tenant_owner only)
     retrieve: Get outlet details
-    update: Update outlet
-    delete: Delete outlet
+    update: Update outlet (tenant_owner only)
+    delete: Soft delete outlet (tenant_owner only)
+    accessible: Get outlets accessible to current user
+    set_current: Set current outlet context
     """
     
     queryset = Outlet.objects.all()
     serializer_class = OutletSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsManagerOrAbove]
     
     def get_queryset(self):
         """
-        Filter outlets by current tenant
+        Filter outlets by current tenant and user access
         """
+        user = self.request.user
         tenant = get_current_tenant()
         
         if not tenant:
             return Outlet.objects.none()
         
-        return Outlet.objects.filter(tenant=tenant, is_active=True)
+        # Admin/Super Admin: See all outlets in tenant
+        if is_admin_user(user):
+            return Outlet.objects.filter(tenant=tenant, is_active=True)
+        
+        # Tenant Owner: See all outlets in their tenant
+        if user.role == 'tenant_owner':
+            return Outlet.objects.filter(tenant=tenant, is_active=True)
+        
+        # Manager: See accessible outlets
+        if user.role == 'manager':
+            return user.accessible_outlets.filter(tenant=tenant, is_active=True)
+        
+        # Cashier/Kitchen: See only their assigned outlet
+        if user.outlet:
+            return Outlet.objects.filter(id=user.outlet.id, is_active=True)
+        
+        return Outlet.objects.none()
     
     def get_serializer_class(self):
         """
@@ -148,14 +174,101 @@ class OutletViewSet(viewsets.ModelViewSet):
             return OutletDetailSerializer
         return OutletSerializer
     
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def all_outlets(self, request):
+        """
+        Get all outlets (for admin/superadmin use in forms)
+        
+        GET /api/outlets/all_outlets/
+        
+        Returns ALL outlets across all tenants for admin use
+        (e.g., in user management forms to assign outlets)
+        """
+        user = request.user
+        
+        # Only allow admin/superadmin to see all outlets
+        if not is_admin_user(user):
+            return Response({
+                'error': 'Only admins can view all outlets'
+            }, status=403)
+        
+        # Get all active outlets across all tenants
+        outlets = Outlet.objects.filter(is_active=True).select_related('tenant').order_by('tenant__name', 'name')
+        serializer = self.get_serializer(outlets, many=True)
+        
+        return Response({
+            'results': serializer.data,
+            'count': outlets.count()
+        })
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def accessible(self, request):
+        """
+        Get outlets accessible to current user
+        
+        GET /api/outlets/accessible/
+        
+        Returns list of outlets the user can access based on their role:
+        - super_admin/admin: All outlets
+        - tenant_owner: All outlets in their tenant
+        - manager: Their accessible_outlets
+        - cashier/kitchen: Their assigned outlet only
+        """
+        user = request.user
+        tenant = get_current_tenant()
+        
+        outlets = self.get_queryset()
+        serializer = self.get_serializer(outlets, many=True)
+        
+        return Response({
+            'outlets': serializer.data,
+            'count': outlets.count(),
+            'user_role': user.role,
+            'current_tenant': tenant.name if tenant else None
+        })
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def set_current(self, request, pk=None):
+        """
+        Set current outlet context for user
+        
+        POST /api/outlets/{id}/set_current/
+        
+        Sets the outlet in session for subsequent requests.
+        User must have access to the outlet.
+        """
+        from apps.core.context import set_current_outlet
+        
+        outlet = self.get_object()
+        user = request.user
+        
+        # Verify user can access this outlet
+        accessible_outlets = self.get_queryset()
+        if not accessible_outlets.filter(id=outlet.id).exists():
+            return Response({
+                'error': 'Access denied',
+                'detail': 'You do not have access to this outlet'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Set in context and session
+        set_current_outlet(outlet)
+        request.session['current_outlet_id'] = outlet.id
+        
+        return Response({
+            'success': True,
+            'message': f'Current outlet set to {outlet.name}',
+            'outlet': self.get_serializer(outlet).data
+        })
+    
     def create(self, request, *args, **kwargs):
         """
-        Create outlet (admin/owner only)
+        Create outlet (tenant_owner only)
         """
-        if not has_permission(request.user, 'outlet.create'):
+        # Only tenant_owner can create outlets
+        if request.user.role not in ['super_admin', 'admin', 'tenant_owner']:
             return Response({
                 'error': 'Permission denied',
-                'detail': 'You do not have permission to create outlets'
+                'detail': 'Only tenant owners can create outlets'
             }, status=status.HTTP_403_FORBIDDEN)
         
         # Auto-set tenant
@@ -167,22 +280,24 @@ class OutletViewSet(viewsets.ModelViewSet):
     
     def update(self, request, *args, **kwargs):
         """
-        Update outlet (admin/owner only)
+        Update outlet (tenant_owner only)
         """
-        if not has_permission(request.user, 'outlet.edit'):
+        if request.user.role not in ['super_admin', 'admin', 'tenant_owner']:
             return Response({
-                'error': 'Permission denied'
+                'error': 'Permission denied',
+                'detail': 'Only tenant owners can update outlets'
             }, status=status.HTTP_403_FORBIDDEN)
         
         return super().update(request, *args, **kwargs)
     
     def destroy(self, request, *args, **kwargs):
         """
-        Delete outlet (owner only)
+        Delete outlet (tenant_owner only) - Soft delete
         """
-        if not has_permission(request.user, 'outlet.delete'):
+        if request.user.role not in ['super_admin', 'admin', 'tenant_owner']:
             return Response({
-                'error': 'Permission denied'
+                'error': 'Permission denied',
+                'detail': 'Only tenant owners can delete outlets'
             }, status=status.HTTP_403_FORBIDDEN)
         
         # Soft delete - set is_active to False
@@ -190,4 +305,7 @@ class OutletViewSet(viewsets.ModelViewSet):
         instance.is_active = False
         instance.save()
         
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({
+            'success': True,
+            'message': f'Outlet {instance.name} has been deactivated'
+        }, status=status.HTTP_200_OK)

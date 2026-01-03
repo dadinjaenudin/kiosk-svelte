@@ -30,6 +30,16 @@ def get_current_tenant():
     return getattr(_thread_locals, 'tenant', None)
 
 
+def clear_current_tenant():
+    """
+    Clear the current tenant for this thread.
+    Used in middleware cleanup.
+    """
+    if hasattr(_thread_locals, 'tenant'):
+        delattr(_thread_locals, 'tenant')
+
+
+
 def set_current_outlet(outlet):
     """
     Set the current outlet for this thread

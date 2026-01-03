@@ -1,0 +1,41 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - heading "🏪 Food Court Admin" [level=1] [ref=e6]
+    - paragraph [ref=e7]: Management Dashboard
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - heading "Welcome Back" [level=2] [ref=e10]
+      - paragraph [ref=e11]: Please sign in to continue
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]: Username
+        - textbox "Username" [active] [ref=e15]:
+          - /placeholder: Enter your username
+      - generic [ref=e16]:
+        - generic [ref=e17]: Password
+        - textbox "Password" [ref=e18]:
+          - /placeholder: Enter your password
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - checkbox "Remember me" [ref=e21]
+          - generic [ref=e22]: Remember me
+        - link "Forgot password?" [ref=e23] [cursor=pointer]:
+          - /url: /forgot-password
+      - button "Sign In" [ref=e24] [cursor=pointer]
+    - generic [ref=e25]:
+      - paragraph [ref=e26]: "Demo Credentials:"
+      - generic [ref=e27]:
+        - paragraph [ref=e28]:
+          - text: "Super Admin:"
+          - code [ref=e29]: admin / admin123
+        - paragraph [ref=e30]:
+          - text: "Owner:"
+          - code [ref=e31]: warung-nasi-padang / password123
+        - paragraph [ref=e32]:
+          - text: "Manager:"
+          - code [ref=e33]: manager / password123
+  - paragraph [ref=e35]: © 2024 Food Court Kiosk. All rights reserved.
+```

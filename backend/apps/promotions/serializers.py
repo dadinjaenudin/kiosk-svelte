@@ -44,7 +44,7 @@ class PromotionSerializer(serializers.ModelSerializer):
     product_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         write_only=True,
-        queryset=Product.objects.all(),
+        queryset=Product._base_manager.all(),  # Use _base_manager to bypass tenant filtering
         required=False
     )
     

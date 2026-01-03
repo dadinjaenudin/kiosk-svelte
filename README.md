@@ -1,5 +1,8 @@
 # 🍽️ Enterprise F&B POS System
 
+> 📚 **Dokumentasi Teknikal Lengkap (NEW!)**: [markdown/technical-docs/](markdown/technical-docs/)  
+> Dokumentasi komprehensif untuk developer baru mencakup arsitektur, implementasi, API reference, dan setup guide.
+
 Sistem Point of Sale (POS) enterprise-grade untuk Food & Beverage dengan fitur multi-tenant, offline-first, dan integrasi payment gateway.
 
 ## 🎯 Features

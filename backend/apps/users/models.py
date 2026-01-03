@@ -10,8 +10,10 @@ class User(AbstractUser):
     Custom User model dengan role-based access
     """
     ROLE_CHOICES = (
-        ('owner', 'Owner'),
+        ('super_admin', 'Super Admin'),
         ('admin', 'Admin'),
+        ('tenant_owner', 'Tenant Owner'),  # New role for franchise owners
+        ('manager', 'Manager'),
         ('cashier', 'Cashier'),
         ('kitchen', 'Kitchen Staff'),
     )
@@ -19,7 +21,13 @@ class User(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='cashier')
     phone_number = models.CharField(max_length=20, blank=True)
     tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, null=True, blank=True, related_name='users')
-    outlet = models.ForeignKey('tenants.Outlet', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    
+    # Multi-outlet support
+    outlet = models.ForeignKey('tenants.Outlet', on_delete=models.SET_NULL, null=True, blank=True, related_name='users', 
+                               help_text='Primary/default outlet for this user')
+    accessible_outlets = models.ManyToManyField('tenants.Outlet', blank=True, related_name='accessible_users',
+                                                help_text='Outlets this user can access (for managers)')
+    
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

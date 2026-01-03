@@ -3,13 +3,35 @@
  * Enhanced with Multi-Tenant Support
  */
 
-const API_BASE_URL = typeof window !== 'undefined' 
-	? (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api')
-	: 'http://localhost:8000/api';
+// Get API URL - use environment variable or construct from window location
+const getAPIBaseURL = () => {
+	if (typeof window === 'undefined') {
+		// Server-side: use localhost
+		return 'http://localhost:8001/api';
+	}
+	
+	// Check environment variable first
+	if (import.meta.env.PUBLIC_API_URL) {
+		console.log('Using API URL from env:', import.meta.env.PUBLIC_API_URL);
+		return import.meta.env.PUBLIC_API_URL;
+	}
+	
+	// Construct API URL based on current host
+	// If accessing from 172.17.46.56:5174, backend should be at 172.17.46.56:8001
+	const protocol = window.location.protocol;
+	const hostname = window.location.hostname;
+	const apiUrl = `${protocol}//${hostname}:8001/api`;
+	console.log('Constructed API URL from hostname:', apiUrl);
+	return apiUrl;
+};
+
+const API_BASE_URL = getAPIBaseURL();
+console.log('Final API_BASE_URL:', API_BASE_URL);
 
 class APIClient {
 	constructor(baseURL = API_BASE_URL) {
 		this.baseURL = baseURL;
+		console.log('APIClient initialized with baseURL:', this.baseURL);
 		this.accessToken = null;
 		this.refreshToken = null;
 		this.tenantId = null;

@@ -31,13 +31,20 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Get orders
         Filter by tenant if provided in header
+        Admin can see all orders
         """
         queryset = Order.objects.select_related('tenant', 'outlet').prefetch_related('items')
         
-        # Filter by tenant if X-Tenant-ID header provided
-        tenant_id = self.request.headers.get('X-Tenant-ID')
-        if tenant_id:
-            queryset = queryset.filter(tenant_id=tenant_id)
+        # Admin/superuser can see all orders
+        user = self.request.user
+        if user.is_authenticated and (user.is_superuser or getattr(user, 'role', None) in ['admin', 'super_admin']):
+            # Don't filter by tenant for admin
+            pass
+        else:
+            # Filter by tenant if X-Tenant-ID header provided
+            tenant_id = self.request.headers.get('X-Tenant-ID')
+            if tenant_id:
+                queryset = queryset.filter(tenant_id=tenant_id)
         
         # Filter by status
         status_filter = self.request.query_params.get('status')
@@ -78,12 +85,29 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             "message": "Checkout successful. 3 orders created."
         }
         """
+        # Debug: Log incoming request data
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"📥 Checkout request data: {request.data}")
+        logger.info(f"📦 Items: {request.data.get('items', [])}")
+        
         serializer = CheckoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Get outlet (default to first outlet for now)
-        # TODO: Get outlet from X-Outlet-ID header or request
-        outlet = Outlet.objects.first()
+        # Get outlet from X-Outlet-ID header or query param
+        outlet_id = request.headers.get('X-Outlet-ID') or request.query_params.get('outlet_id')
+        
+        if outlet_id:
+            try:
+                outlet = Outlet.objects.get(id=outlet_id, is_active=True)
+            except Outlet.DoesNotExist:
+                return Response(
+                    {'error': f'Outlet with ID {outlet_id} not found or inactive'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            # Fallback to first outlet if no outlet specified
+            outlet = Outlet.objects.filter(is_active=True).first()
         
         if not outlet:
             return Response(

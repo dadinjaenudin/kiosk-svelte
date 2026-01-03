@@ -8,11 +8,14 @@ const BASE_URL = '/api/admin/reports';
 /**
  * Get sales summary
  */
-export async function getSalesSummary(period = '30days', startDate = null, endDate = null) {
+export async function getSalesSummary(period = '30days', startDate = null, endDate = null, tenantId = null) {
 	const params = new URLSearchParams({ period });
 	if (startDate && endDate) {
 		params.append('start_date', startDate);
 		params.append('end_date', endDate);
+	}
+	if (tenantId) {
+		params.append('tenant', tenantId);
 	}
 	return authFetch(`${BASE_URL}/sales_summary/?${params}`);
 }
@@ -24,12 +27,16 @@ export async function getSalesByPeriod(
 	period = '30days',
 	groupBy = 'day',
 	startDate = null,
-	endDate = null
+	endDate = null,
+	tenantId = null
 ) {
 	const params = new URLSearchParams({ period, group_by: groupBy });
 	if (startDate && endDate) {
 		params.append('start_date', startDate);
 		params.append('end_date', endDate);
+	}
+	if (tenantId) {
+		params.append('tenant', tenantId);
 	}
 	return authFetch(`${BASE_URL}/sales_by_period/?${params}`);
 }
@@ -37,16 +44,22 @@ export async function getSalesByPeriod(
 /**
  * Get top selling products
  */
-export async function getTopProducts(period = '30days', limit = 10) {
+export async function getTopProducts(period = '30days', limit = 10, tenantId = null) {
 	const params = new URLSearchParams({ period, limit: limit.toString() });
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
 	return authFetch(`${BASE_URL}/top_products/?${params}`);
 }
 
 /**
  * Get top selling categories
  */
-export async function getTopCategories(period = '30days') {
+export async function getTopCategories(period = '30days', tenantId = null) {
 	const params = new URLSearchParams({ period });
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
 	return authFetch(`${BASE_URL}/top_categories/?${params}`);
 }
 
@@ -61,16 +74,22 @@ export async function getSalesByCategory(period = '30days') {
 /**
  * Get customer statistics
  */
-export async function getCustomerStats(period = '30days') {
+export async function getCustomerStats(period = '30days', tenantId = null) {
 	const params = new URLSearchParams({ period });
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
 	return authFetch(`${BASE_URL}/customer_stats/?${params}`);
 }
 
 /**
  * Get order statistics
  */
-export async function getOrderStats(period = '30days') {
+export async function getOrderStats(period = '30days', tenantId = null) {
 	const params = new URLSearchParams({ period });
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
 	return authFetch(`${BASE_URL}/order_stats/?${params}`);
 }
 
@@ -84,16 +103,22 @@ export async function getRevenueTrend(period = '30days', groupBy = 'day') {
 /**
  * Get payment method breakdown
  */
-export async function getPaymentMethods(period = '30days') {
+export async function getPaymentMethods(period = '30days', tenantId = null) {
 	const params = new URLSearchParams({ period });
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
 	return authFetch(`${BASE_URL}/payment_methods/?${params}`);
 }
 
 /**
  * Get hourly sales
  */
-export async function getHourlySales(period = '7days') {
+export async function getHourlySales(period = '7days', tenantId = null) {
 	const params = new URLSearchParams({ period });
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
 	return authFetch(`${BASE_URL}/hourly_sales/?${params}`);
 }
 

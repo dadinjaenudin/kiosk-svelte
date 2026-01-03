@@ -14,6 +14,7 @@ from .serializers import (
     ProductSimpleSerializer
 )
 from apps.products.models import Product
+from apps.core.permissions import is_admin_user
 
 
 class PromotionViewSet(viewsets.ModelViewSet):
@@ -30,9 +31,19 @@ class PromotionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # Super admins can see all
-        if user.role == 'admin':
+        # Get tenant filter from query params (for admin users)
+        tenant_id = self.request.query_params.get('tenant')
+        
+        # Super admins can see all promotions
+        if is_admin_user(user):
             queryset = Promotion.objects.all()
+            
+            # Apply tenant filter for admin if provided
+            if tenant_id:
+                try:
+                    queryset = queryset.filter(tenant_id=int(tenant_id))
+                except (ValueError, TypeError):
+                    pass
         # Tenant owners/managers see their tenant's promos
         elif user.tenant:
             queryset = Promotion.objects.filter(tenant=user.tenant)
@@ -224,6 +235,7 @@ class PromotionUsageViewSet(viewsets.ReadOnlyModelViewSet):
 class ProductSelectorViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for product selector in promotion form
+    Uses _base_manager to bypass tenant filtering
     """
     serializer_class = ProductSimpleSerializer
     permission_classes = [IsAuthenticated]
@@ -234,11 +246,21 @@ class ProductSelectorViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        if user.role == 'admin':
-            queryset = Product.objects.all()
+        # Use _base_manager to bypass TenantManager filtering
+        from apps.products.models import Product
+        
+        # Admin can see all products or filter by tenant
+        if user.is_superuser or user.role in ['admin', 'super_admin']:
+            queryset = Product._base_manager.all()
         elif user.tenant:
-            queryset = Product.objects.filter(tenant=user.tenant)
+            queryset = Product._base_manager.filter(tenant=user.tenant)
         else:
-            queryset = Product.objects.none()
+            queryset = Product._base_manager.none()
+        
+        # Filter by tenant from query parameter if provided (for admin users)
+        tenant_id = self.request.query_params.get('tenant')
+        if tenant_id and (user.is_superuser or user.role in ['admin', 'super_admin']):
+            queryset = queryset.filter(tenant_id=tenant_id)
         
         return queryset.filter(is_available=True).select_related('tenant')
+

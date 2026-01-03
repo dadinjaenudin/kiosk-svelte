@@ -18,8 +18,10 @@ export async function getPromotions(filters = {}) {
 	if (filters.date_from) params.append('date_from', filters.date_from);
 	if (filters.date_to) params.append('date_to', filters.date_to);
 	if (filters.page) params.append('page', filters.page);
+	if (filters.page_size) params.append('page_size', filters.page_size);
 	if (filters.is_active !== undefined) params.append('is_active', filters.is_active);
 	if (filters.is_featured !== undefined) params.append('is_featured', filters.is_featured);
+	if (filters.tenant) params.append('tenant', filters.tenant);
 	
 	const url = `${API_BASE}/promotions/${params.toString() ? '?' + params.toString() : ''}`;
 	return await authFetch(url);
@@ -114,7 +116,7 @@ export async function getPromotionStats() {
 
 /**
  * Get products for selector (searchable, filterable)
- * Fixed: Use correct endpoint /api/promotions/product-selector/
+ * Fixed: Use correct endpoint /api/product-selector/
  */
 export async function getProductsForSelector(filters = {}) {
 	const params = new URLSearchParams();
@@ -123,8 +125,8 @@ export async function getProductsForSelector(filters = {}) {
 	if (filters.tenant) params.append('tenant', filters.tenant);
 	if (filters.is_available !== undefined) params.append('is_available', filters.is_available);
 	
-	// Fixed: Use the correct endpoint from promotions app
-	const url = `${API_BASE}/promotions/product-selector/${params.toString() ? '?' + params.toString() : ''}`;
+	// Use the correct endpoint - product-selector is at root level, not under promotions
+	const url = `${API_BASE}/product-selector/${params.toString() ? '?' + params.toString() : ''}`;
 	return await authFetch(url);
 }
 

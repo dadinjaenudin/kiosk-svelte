@@ -16,13 +16,23 @@ export async function authFetch(url, options = {}) {
 	
 	// Build headers
 	const headers = {
-		'Content-Type': 'application/json',
 		...options.headers
 	};
+	
+	// Don't set Content-Type for FormData - browser will set it with boundary
+	// Only set for non-FormData requests
+	if (!(options.body instanceof FormData)) {
+		headers['Content-Type'] = 'application/json';
+	}
 	
 	// Add token if available
 	if (token) {
 		headers['Authorization'] = `Token ${token}`;
+	}
+	
+	// Add tenant ID if available (not required for super_admin)
+	if (currentUser?.tenant_id) {
+		headers['X-Tenant-ID'] = currentUser.tenant_id.toString();
 	}
 	
 	// Make request
@@ -47,18 +57,52 @@ export async function authFetch(url, options = {}) {
 		
 		try {
 			const error = JSON.parse(errorText);
-			errorMessage = error.message || error.error || error.detail || errorMessage;
+			console.error('API Error Response:', JSON.stringify(error, null, 2));
+			
+			// Try to extract meaningful error message
+			if (typeof error === 'string') {
+				errorMessage = error;
+			} else if (error.message) {
+				errorMessage = error.message;
+			} else if (error.error) {
+				errorMessage = typeof error.error === 'object' ? JSON.stringify(error.error) : error.error;
+			} else if (error.detail) {
+				errorMessage = typeof error.detail === 'object' ? JSON.stringify(error.detail) : error.detail;
+			} else {
+				errorMessage = JSON.stringify(error, null, 2);
+			}
 		} catch (e) {
+			console.error('Error parsing error response:', e);
+			console.error('Response text:', errorText);
 			if (errorText) {
 				errorMessage = errorText;
 			}
 		}
 		
+		console.error('Final error message:', errorMessage);
 		throw new Error(errorMessage);
 	}
 	
+	// Handle 204 No Content (successful DELETE, etc)
+	if (response.status === 204) {
+		return null;
+	}
+	
 	// Parse and return JSON
-	return await response.json();
+	try {
+		const data = await response.json();
+		return data;
+	} catch (e) {
+		console.error('Error parsing success response as JSON:', e);
+		console.error('Response status:', response.status);
+		
+		// If response is empty or not JSON, return null for success
+		if (response.status >= 200 && response.status < 300) {
+			return null;
+		}
+		
+		throw new Error(`Failed to parse response: ${e.message}`);
+	}
 }
 
 /**
@@ -129,8 +173,20 @@ export async function logout() {
 	isLoading.set(true);
 
 	try {
+		const currentUser = get(user);
+		const token = currentUser?.token;
+		
+		const headers = {
+			'Content-Type': 'application/json'
+		};
+		
+		if (token) {
+			headers['Authorization'] = `Token ${token}`;
+		}
+		
 		await fetch(`${API_BASE}/auth/logout/`, {
 			method: 'POST',
+			headers,
 			credentials: 'include'
 		});
 	} catch (error) {

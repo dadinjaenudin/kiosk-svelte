@@ -2,6 +2,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { selectedTenant } from '$lib/stores/auth';
+	import RoleGuard from '$lib/components/RoleGuard.svelte';
+	import PermissionButton from '$lib/components/PermissionButton.svelte';
 	import {
 		getPromotions,
 		deletePromotion,
@@ -12,6 +15,7 @@
 	// State
 	let promotions = [];
 	let loading = true;
+	let mounted = false;
 	let error = '';
 	let searchQuery = '';
 	let statusFilter = '';
@@ -42,7 +46,15 @@
 
 	onMount(() => {
 		loadPromotions();
+		mounted = true;
 	});
+
+	// Reactive: reload when tenant filter changes
+	$: if (mounted) {
+		const tenantId = $selectedTenant;
+		currentPage = 1;
+		loadPromotions();
+	}
 
 	async function loadPromotions() {
 		try {
@@ -55,20 +67,28 @@
 				promo_type: typeFilter,
 				date_from: dateFrom,
 				date_to: dateTo,
-				page: currentPage
+				page: currentPage,
+				page_size: 10
 			};
+
+			// Add tenant filter
+			if ($selectedTenant) {
+				filters.tenant = $selectedTenant;
+			}
+
+			console.log('Loading promotions with filters:', filters);
 
 			const data = await getPromotions(filters);
 			
 			// Handle paginated response
 			if (data.results) {
 				promotions = data.results;
-				totalPages = Math.ceil(data.count / 20);
+				totalPages = Math.ceil(data.count / 10);
 			} else {
 				promotions = data;
 			}
 
-			console.log('✅ Loaded promotions:', promotions.length);
+			console.log('✅ Loaded promotions:', promotions.length, 'Tenant filter:', $selectedTenant);
 		} catch (err) {
 			console.error('❌ Error loading promotions:', err);
 			error = err.message;
@@ -157,9 +177,10 @@
 			<h1 class="text-2xl font-bold text-gray-900">Promotions</h1>
 			<p class="text-gray-600 mt-1">Manage discounts and special offers</p>
 		</div>
-		<button
+		<PermissionButton
+			action="create"
+			resource="promotions"
 			on:click={() => goto('/promotions/create')}
-			class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
 		>
 			<svg
 				class="w-5 h-5"
@@ -175,46 +196,27 @@
 				/>
 			</svg>
 			Create Promotion
-		</button>
+		</PermissionButton>
 	</div>
-
-	<!-- Filters -->
-	<div class="bg-white rounded-lg shadow-sm p-4 mb-6">
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+	
+	<!-- Search and Filters -->
+	<div class="bg-white rounded-lg shadow p-6 mb-6">
+		<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
 			<!-- Search -->
-			<div class="lg:col-span-2">
-				<label class="block text-sm font-medium text-gray-700 mb-1">
-					Search
-				</label>
-				<div class="relative">
-					<input
-						type="text"
-						bind:value={searchQuery}
-						on:keyup={(e) => e.key === 'Enter' && handleSearch()}
-						placeholder="Search promotions..."
-						class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-					/>
-					<svg
-						class="absolute left-3 top-2.5 w-5 h-5 text-gray-400"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
-				</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+				<input
+					type="text"
+					bind:value={searchQuery}
+					on:keyup={(e) => e.key === 'Enter' && handleSearch()}
+					placeholder="Search promotions..."
+					class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+				/>
 			</div>
 
 			<!-- Status Filter -->
 			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-1">
-					Status
-				</label>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
 				<select
 					bind:value={statusFilter}
 					on:change={handleFilterChange}
@@ -231,9 +233,7 @@
 
 			<!-- Type Filter -->
 			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-1">
-					Type
-				</label>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
 				<select
 					bind:value={typeFilter}
 					on:change={handleFilterChange}
@@ -246,14 +246,12 @@
 				</select>
 			</div>
 
-			<!-- Date Range (optional for future) -->
+			<!-- Apply Button -->
 			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-1">
-					Actions
-				</label>
+				<label class="block text-sm font-medium text-gray-700 mb-2">Actions</label>
 				<button
 					on:click={handleSearch}
-					class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+					class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
 				>
 					Apply Filters
 				</button>
@@ -303,28 +301,31 @@
 		<!-- Promotions Table -->
 		<div class="bg-white rounded-lg shadow-sm overflow-hidden">
 			<div class="overflow-x-auto">
-				<table class="min-w-full divide-y divide-gray-200">
+				<table class="w-full divide-y divide-gray-200">
 					<thead class="bg-gray-50">
 						<tr>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Promotion
 							</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+								Tenant
+							</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Type
 							</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Discount
 							</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Schedule
 							</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Status
 							</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Usage
 							</th>
-							<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
 								Actions
 							</th>
 						</tr>
@@ -338,9 +339,9 @@
 											<div class="text-sm font-medium text-gray-900">
 												{promo.name}
 											</div>
-											{#if promo.tenant_name}
-												<div class="text-sm text-gray-500">
-													{promo.tenant_name}
+											{#if promo.code}
+												<div class="text-xs text-gray-500 font-mono mt-1">
+													{promo.code}
 												</div>
 											{/if}
 											{#if promo.product_count}
@@ -350,6 +351,13 @@
 											{/if}
 										</div>
 									</div>
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap">
+									{#if promo.tenant_name}
+										<span class="text-sm text-gray-900">{promo.tenant_name}</span>
+									{:else}
+										<span class="text-sm text-gray-400">-</span>
+									{/if}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<span class="text-sm text-gray-900">
@@ -440,47 +448,68 @@
 
 			<!-- Pagination (if needed) -->
 			{#if totalPages > 1}
-				<div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
-					<div class="flex-1 flex justify-between sm:hidden">
+				<div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+					<div class="text-sm text-gray-700">
+						Showing page {currentPage} of {totalPages}
+					</div>
+					<div class="flex gap-2">
 						<button
 							on:click={() => handlePageChange(currentPage - 1)}
 							disabled={currentPage === 1}
-							class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+							class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							Previous
 						</button>
+						
+						{#if currentPage > 3}
+							<button
+								on:click={() => handlePageChange(1)}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
+							>
+								1
+							</button>
+							{#if currentPage > 4}
+								<span class="px-3 py-1">...</span>
+							{/if}
+						{/if}
+						
+						{#each Array(Math.min(5, totalPages)) as _, i}
+							{@const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4))}
+							{@const page = startPage + i}
+							{#if page <= totalPages}
+								<button
+									on:click={() => handlePageChange(page)}
+									class="px-3 py-1 border rounded-lg {currentPage === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}"
+								>
+									{page}
+								</button>
+							{/if}
+						{/each}
+						
+						{#if currentPage < totalPages - 2}
+							{#if currentPage < totalPages - 3}
+								<span class="px-3 py-1">...</span>
+							{/if}
+							<button
+								on:click={() => handlePageChange(totalPages)}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
+							>
+								{totalPages}
+							</button>
+						{/if}
+						
 						<button
 							on:click={() => handlePageChange(currentPage + 1)}
 							disabled={currentPage === totalPages}
-							class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+							class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							Next
 						</button>
-					</div>
-					<div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-						<div>
-							<p class="text-sm text-gray-700">
-								Page <span class="font-medium">{currentPage}</span> of <span class="font-medium">{totalPages}</span>
-							</p>
-						</div>
-						<div>
-							<nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-								{#each Array(totalPages) as _, i}
-									<button
-										on:click={() => handlePageChange(i + 1)}
-										class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium {currentPage === i + 1 ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}"
-									>
-										{i + 1}
-									</button>
-								{/each}
-							</nav>
-						</div>
 					</div>
 				</div>
 			{/if}
 		</div>
 	{/if}
-</div>
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal}
@@ -511,3 +540,4 @@
 		</div>
 	</div>
 {/if}
+</div>

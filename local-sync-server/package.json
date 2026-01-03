@@ -1,0 +1,39 @@
+{
+  "name": "kitchen-sync-server",
+  "version": "1.0.0",
+  "description": "Local network WebSocket server for POS-Kitchen communication (offline-first)",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "pkg . --compress Brotli",
+    "build:win": "pkg . --targets node18-win-x64 --output dist/kitchen-sync-server-win.exe --compress Brotli",
+    "build:mac": "pkg . --targets node18-macos-x64 --output dist/kitchen-sync-server-mac --compress Brotli",
+    "build:linux": "pkg . --targets node18-linux-x64 --output dist/kitchen-sync-server-linux --compress Brotli",
+    "build:all": "npm run build:win && npm run build:mac && npm run build:linux"
+  },
+  "keywords": [
+    "websocket",
+    "pos",
+    "kitchen",
+    "offline",
+    "sync"
+  ],
+  "author": "YOGYA Kiosk Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "dist",
+    "assets": []
+  }
+}

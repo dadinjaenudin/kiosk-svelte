@@ -1,7 +1,7 @@
 """
 Admin views for Customer Management
 """
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -12,7 +12,11 @@ from datetime import timedelta
 
 from apps.customers.models import Customer
 from apps.customers.serializers import CustomerSerializer, CustomerDetailSerializer
-from apps.core.permissions import IsAdminOrTenantOwnerOrManager
+from apps.core.permissions import (
+    IsAdminOrTenantOwnerOrManager,
+    IsManagerOrAbove,
+    is_admin_user
+)
 from apps.core.context import get_current_tenant
 
 
@@ -35,7 +39,7 @@ class CustomerManagementViewSet(viewsets.ModelViewSet):
     
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrTenantOwnerOrManager]
+    permission_classes = [IsAuthenticated, IsManagerOrAbove]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['membership_tier', 'is_active', 'gender', 'is_subscribed', 'preferred_outlet']
     search_fields = ['name', 'email', 'phone', 'membership_number']
@@ -44,9 +48,12 @@ class CustomerManagementViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """
-        Filter customers by current tenant
+        Filter customers by current tenant.
+        Admin/Superuser can see all customers.
         """
-        if self.request.user.is_superuser:
+        user = self.request.user
+        
+        if is_admin_user(user):
             return Customer.objects.all()
         
         tenant = get_current_tenant()
@@ -63,15 +70,69 @@ class CustomerManagementViewSet(viewsets.ModelViewSet):
             return CustomerDetailSerializer
         return CustomerSerializer
     
+    def create(self, request, *args, **kwargs):
+        """
+        Override create to add debug logging
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.warning(f"🔍 CREATE REQUEST - Data: {request.data}")
+        
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            logger.warning(f"❌ VALIDATION ERRORS: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
     def perform_create(self, serializer):
         """
         Auto-set tenant when creating customer
         """
-        tenant = get_current_tenant()
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Log request data for debugging
+        logger.warning(f"🔍 CREATE CUSTOMER - Request data: {self.request.data}")
+        logger.warning(f"🔍 CREATE CUSTOMER - User: {self.request.user.username}, Is superuser: {self.request.user.is_superuser}")
+        
+        # Get tenant from request data or context
+        tenant = None
+        
+        # If tenant is provided in request data, use it (for superuser)
+        if 'tenant' in self.request.data:
+            from apps.tenants.models import Tenant
+            tenant_id = self.request.data.get('tenant')
+            try:
+                tenant = Tenant.objects.get(id=tenant_id)
+                logger.warning(f"✅ Using tenant from request: {tenant.name}")
+            except Tenant.DoesNotExist:
+                logger.warning(f"❌ Tenant {tenant_id} not found")
+                pass
+        
+        # Otherwise, get from context (for tenant-scoped users)
+        if not tenant:
+            tenant = get_current_tenant()
+            if tenant:
+                logger.warning(f"✅ Using tenant from context: {tenant.name}")
+        
+        # For superuser without tenant in context, use first tenant
+        if not tenant and self.request.user.is_superuser:
+            from apps.tenants.models import Tenant
+            tenant = Tenant.objects.first()
+            if tenant:
+                logger.warning(f"✅ Using first tenant for superuser: {tenant.name}")
+        
         if tenant:
             serializer.save(tenant=tenant)
+            logger.warning(f"✅ Customer created successfully for tenant: {tenant.name}")
         else:
-            serializer.save()
+            # This should not happen, but handle gracefully
+            logger.warning("❌ No tenant available!")
+            raise serializers.ValidationError("No tenant available for customer creation")
     
     def destroy(self, request, *args, **kwargs):
         """

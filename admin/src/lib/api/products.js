@@ -25,6 +25,7 @@ export async function getProducts(filters = {}) {
 	if (filters.track_stock !== undefined) params.append('track_stock', filters.track_stock);
 	if (filters.ordering) params.append('ordering', filters.ordering);
 	if (filters.page) params.append('page', filters.page);
+	if (filters.page_size) params.append('page_size', filters.page_size);
 	
 	const url = `${API_BASE}/admin/products/${params.toString() ? '?' + params.toString() : ''}`;
 	return await authFetch(url);
@@ -41,20 +42,12 @@ export async function getProduct(id) {
  * Create new product
  */
 export async function createProduct(data) {
-	// If data contains image file, use FormData
-	if (data.image instanceof File) {
-		const formData = new FormData();
-		Object.keys(data).forEach(key => {
-			if (data[key] !== null && data[key] !== undefined) {
-				formData.append(key, data[key]);
-			}
-		});
-		
+	// If data is FormData (with image), send directly
+	if (data instanceof FormData) {
 		return await authFetch(`${API_BASE}/admin/products/`, {
 			method: 'POST',
-			body: formData,
-			// Don't set Content-Type, let browser set it with boundary
-			headers: {}
+			body: data
+			// Note: Don't set headers for FormData, let authFetch and browser handle it
 		});
 	}
 	
@@ -69,25 +62,22 @@ export async function createProduct(data) {
  * Update product
  */
 export async function updateProduct(id, data) {
-	// If data contains image file, use FormData
-	if (data.image instanceof File) {
-		const formData = new FormData();
-		Object.keys(data).forEach(key => {
-			if (data[key] !== null && data[key] !== undefined) {
-				formData.append(key, data[key]);
-			}
-		});
-		
+	console.log('updateProduct called with data type:', data.constructor.name);
+	
+	// If data is FormData (has image), use it directly with PATCH
+	if (data instanceof FormData) {
+		console.log('Sending as FormData (multipart)');
 		return await authFetch(`${API_BASE}/admin/products/${id}/`, {
-			method: 'PUT',
-			body: formData,
-			headers: {}
+			method: 'PATCH',
+			body: data
+			// Note: Don't set headers for FormData, let authFetch and browser handle it
 		});
 	}
 	
-	// Otherwise use JSON
+	// Otherwise send as JSON
+	console.log('Sending as JSON:', data);
 	return await authFetch(`${API_BASE}/admin/products/${id}/`, {
-		method: 'PUT',
+		method: 'PATCH',
 		body: JSON.stringify(data)
 	});
 }
@@ -159,8 +149,13 @@ export async function bulkUpdateProducts(productIds, updates) {
 /**
  * Get product statistics
  */
-export async function getProductStats() {
-	return await authFetch(`${API_BASE}/admin/products/stats/`);
+export async function getProductStats(tenantId = null) {
+	const params = new URLSearchParams();
+	if (tenantId) {
+		params.append('tenant', tenantId);
+	}
+	const queryString = params.toString();
+	return await authFetch(`${API_BASE}/admin/products/stats/${queryString ? '?' + queryString : ''}`);
 }
 
 // ===== CATEGORIES =====

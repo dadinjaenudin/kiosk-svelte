@@ -1,15 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated } from '$lib/stores/auth';
+	import { isAuthenticated, selectedTenant } from '$lib/stores/auth';
+	import RoleGuard from '$lib/components/RoleGuard.svelte';
 	import { getOrders, formatOrderStatus, formatPaymentStatus, formatCurrency, formatDateTime, getTimeAgo } from '$lib/api/orders';
-	
-	// Authentication check
-	onMount(() => {
-		if (!$isAuthenticated) {
-			goto('/login');
-		}
-	});
 	
 	// State
 	let orders = [];
@@ -18,6 +12,7 @@
 	let currentPage = 1;
 	let totalPages = 1;
 	let totalCount = 0;
+	let mounted = false;
 	
 	// Filters
 	let filters = {
@@ -64,14 +59,20 @@
 		try {
 			const params = {
 				...filters,
-				page: currentPage
+				page: currentPage,
+				page_size: 10
 			};
+			
+			// Add tenant filter if selected (for admin/super_admin)
+			if ($selectedTenant) {
+				params.tenant = $selectedTenant;
+			}
 			
 			const response = await getOrders(params);
 			
 			orders = response.results || [];
 			totalCount = response.count || 0;
-			totalPages = Math.ceil(totalCount / (response.results?.length || 10));
+			totalPages = Math.ceil(totalCount / 10);
 			
 		} catch (err) {
 			console.error('Error loading orders:', err);
@@ -131,11 +132,17 @@
 		goto(`/orders/${orderId}`);
 	}
 	
+	// Reactive: reload orders when tenant filter changes
+	$: if (mounted) {
+		const tenantId = $selectedTenant;
+		currentPage = 1;
+		loadOrders();
+	}
+	
 	// Initial load
 	onMount(() => {
-		if ($isAuthenticated) {
-			loadOrders();
-		}
+		loadOrders();
+		mounted = true;
 	});
 </script>
 
@@ -368,27 +375,67 @@
 			</div>
 			
 			<!-- Pagination -->
-			<div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-				<div class="text-sm text-gray-700">
-					Showing page {currentPage} of {totalPages} ({totalCount} total orders)
+			{#if totalPages > 1}
+				<div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+					<div class="text-sm text-gray-700">
+						Showing page {currentPage} of {totalPages} ({totalCount} total)
+					</div>
+					<div class="flex gap-2">
+						<button
+							on:click={prevPage}
+							disabled={currentPage === 1}
+							class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Previous
+						</button>
+						
+						{#if currentPage > 3}
+							<button
+								on:click={() => { currentPage = 1; loadOrders(); }}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
+							>
+								1
+							</button>
+							{#if currentPage > 4}
+								<span class="px-3 py-1">...</span>
+							{/if}
+						{/if}
+						
+						{#each Array(Math.min(5, totalPages)) as _, i}
+							{@const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4))}
+							{@const page = startPage + i}
+							{#if page <= totalPages}
+								<button
+									on:click={() => { currentPage = page; loadOrders(); }}
+									class="px-3 py-1 border rounded-lg {currentPage === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}"
+								>
+									{page}
+								</button>
+							{/if}
+						{/each}
+						
+						{#if currentPage < totalPages - 2}
+							{#if currentPage < totalPages - 3}
+								<span class="px-3 py-1">...</span>
+							{/if}
+							<button
+								on:click={() => { currentPage = totalPages; loadOrders(); }}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
+							>
+								{totalPages}
+							</button>
+						{/if}
+						
+						<button
+							on:click={nextPage}
+							disabled={currentPage >= totalPages}
+							class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Next
+						</button>
+					</div>
 				</div>
-				<div class="flex gap-2">
-					<button
-						on:click={prevPage}
-						disabled={currentPage === 1}
-						class="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
-					>
-						Previous
-					</button>
-					<button
-						on:click={nextPage}
-						disabled={currentPage >= totalPages}
-						class="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
-					>
-						Next
-					</button>
-				</div>
-			</div>
+			{/if}
 		{/if}
 	</div>
 </div>

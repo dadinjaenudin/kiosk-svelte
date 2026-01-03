@@ -1,11 +1,21 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { login } from '$lib/api/auth';
-	import { authError, isLoading } from '$lib/stores/auth';
+	import { authError, isLoading, isAuthenticated } from '$lib/stores/auth';
 
 	let username = '';
 	let password = '';
 	let error = '';
+	let mounted = false;
+	
+	// Redirect to dashboard if already logged in (only on mount)
+	onMount(() => {
+		mounted = true;
+		if ($isAuthenticated) {
+			goto('/dashboard');
+		}
+	});
 
 	async function handleSubmit() {
 		error = '';

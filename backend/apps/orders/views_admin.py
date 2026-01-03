@@ -12,7 +12,11 @@ from django.db.models import Q, Count, Sum
 from datetime import datetime, timedelta
 from apps.orders.models import Order, OrderItem
 from apps.orders.serializers import OrderSerializer, OrderItemSerializer
-from apps.core.permissions import IsAdminOrTenantOwnerOrManager
+from apps.core.permissions import (
+    IsAdminOrTenantOwnerOrManager,
+    CanManageOrders,
+    is_admin_user
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,7 @@ class OrderManagementViewSet(viewsets.ModelViewSet):
     - Order statistics
     """
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrTenantOwnerOrManager]
+    permission_classes = [IsAuthenticated, CanManageOrders]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'payment_status', 'outlet', 'tenant']
     search_fields = ['order_number', 'customer_name', 'customer_phone', 'table_number']
@@ -79,24 +83,43 @@ class OrderManagementViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """
-        Get orders based on user role:
-        - Admin: all orders
-        - Tenant Owner: only their tenant's orders
-        - Outlet Manager: only their outlet's orders
+        Get orders based on user role and outlet context:
+        - Admin/Superuser: all orders
+        - Tenant Owner: all orders in their tenant
+        - Manager: orders from accessible outlets
+        - Cashier/Kitchen: orders from their assigned outlet
         """
+        from apps.core.context import get_current_tenant, get_current_outlet
+        
         user = self.request.user
         queryset = Order.objects.select_related('tenant', 'outlet', 'cashier').prefetch_related('items')
         
         # Filter by user role
-        if user.role == 'admin':
-            # Admin sees all
+        if is_admin_user(user):
+            # Admin sees all orders
             pass
         elif user.role == 'tenant_owner':
             # Tenant owner sees only their tenant's orders
             queryset = queryset.filter(tenant=user.tenant)
-        elif user.role == 'outlet_manager':
-            # Outlet manager sees only their outlet's orders
-            queryset = queryset.filter(outlet=user.outlet)
+        elif user.role == 'manager':
+            # Manager sees orders from accessible outlets
+            if user.tenant:
+                queryset = queryset.filter(tenant=user.tenant)
+                # Further filter by accessible outlets
+                current_outlet = get_current_outlet()
+                if current_outlet:
+                    queryset = queryset.filter(outlet=current_outlet)
+                elif user.accessible_outlets.exists():
+                    # If no current outlet, show all accessible outlets
+                    queryset = queryset.filter(outlet__in=user.accessible_outlets.all())
+            else:
+                queryset = queryset.none()
+        elif user.role in ['cashier', 'kitchen']:
+            # Cashier/Kitchen see only their outlet's orders
+            if user.outlet:
+                queryset = queryset.filter(outlet=user.outlet)
+            else:
+                queryset = queryset.none()
         else:
             # Other roles see nothing
             queryset = queryset.none()

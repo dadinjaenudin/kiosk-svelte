@@ -31,7 +31,7 @@ urlpatterns = [
     # App APIs
     path('api/', include('apps.tenants.urls')),  # Tenant & Outlet management
     path('api/', include('apps.users.urls')),    # User management
-    path('api/products/', include('apps.products.urls')),
+    path('api/', include('apps.products.urls')),  # Product & Category management
     path('api/', include('apps.orders.urls')),  # Order & Checkout
     path('api/', include('apps.promotions.urls')),  # Promotion management
     path('api/', include('apps.customers.urls')),  # Customer management

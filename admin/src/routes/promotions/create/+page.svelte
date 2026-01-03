@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { createPromotion } from '$lib/api/promotions';
 	import { getProductsForSelector } from '$lib/api/promotions';
+	import { getTenants } from '$lib/api/tenants';
 	import { user } from '$lib/stores/auth';
 	import ProductSelector from '$lib/components/ProductSelector.svelte';
 	import SchedulePicker from '$lib/components/SchedulePicker.svelte';
@@ -42,6 +43,7 @@
 	let error = '';
 	let errors = {};
 	let selectedProducts = [];
+	let tenants = [];
 
 	const promoTypes = [
 		{ value: 'percentage', label: 'Percentage Discount', icon: '%' },
@@ -50,10 +52,21 @@
 		{ value: 'bundle', label: 'Bundle Deal', icon: '📦' }
 	];
 
-	onMount(() => {
+	onMount(async () => {
+		console.log('🎬 Promotion Create Page mounted');
+		// Load tenants
+		try {
+			const response = await getTenants({ page_size: 100, is_active: true });
+			tenants = response.results || [];
+			console.log('✅ Loaded tenants:', tenants.length);
+		} catch (err) {
+			console.error('Error loading tenants:', err);
+		}
+
 		// Auto-set tenant for non-admin users
 		if ($user && $user.tenant_id) {
 			formData.tenant = $user.tenant_id;
+			console.log('✅ Auto-set tenant:', $user.tenant_id);
 		}
 
 		// Set default dates
@@ -66,6 +79,11 @@
 		formData.start_date = formatDateTimeForInput(tomorrow);
 		formData.end_date = formatDateTimeForInput(nextWeek);
 	});
+	
+	// Watch tenant changes
+	$: if (formData.tenant) {
+		console.log('🔄 Tenant changed to:', formData.tenant);
+	}
 
 	function formatDateTimeForInput(date) {
 		const year = date.getFullYear();
@@ -78,6 +96,10 @@
 
 	function validate() {
 		errors = {};
+
+		if (!formData.tenant) {
+			errors.tenant = 'Tenant is required';
+		}
 
 		if (!formData.name.trim()) {
 			errors.name = 'Promotion name is required';
@@ -133,11 +155,25 @@
 			loading = true;
 			error = '';
 
-			// Prepare data for submission
-			const submitData = {
-				...formData,
-				product_ids: selectedProducts.map((p) => p.id),
-				discount_value: parseFloat(formData.discount_value),
+			// Filter valid products only
+			const validProducts = selectedProducts.filter(p => p && p.id && typeof p.id === 'number');
+			const validProductIds = validProducts.map(p => p.id);
+
+			console.log('✅ Valid products:', validProducts.length, 'IDs:', validProductIds);
+		console.log('📦 Products detail:', validProducts);
+		console.log('📝 FormData tenant:', formData.tenant);
+		
+		// Double check - remove any products that don't belong to the selected tenant
+		const tenantProducts = validProducts.filter(p => p.tenant === formData.tenant || !p.tenant);
+		const tenantProductIds = tenantProducts.map(p => p.id);
+		
+		console.log('🏢 Tenant products:', tenantProducts.length, 'IDs:', tenantProductIds);
+
+		// Prepare data for submission
+		const submitData = {
+			...formData,
+			product_ids: tenantProductIds,
+			discount_value: parseFloat(formData.discount_value),
 				max_discount_amount: formData.max_discount_amount
 					? parseFloat(formData.max_discount_amount)
 					: null,
@@ -174,7 +210,10 @@
 
 	function handleProductsChange(event) {
 		selectedProducts = event.detail;
-		formData.product_ids = selectedProducts.map((p) => p.id);
+		// Filter out invalid products
+		const validProducts = selectedProducts.filter(p => p && p.id && typeof p.id === 'number');
+		formData.product_ids = validProducts.map((p) => p.id);
+		console.log('✅ Selected products:', validProducts.length, 'IDs:', formData.product_ids);
 		delete errors.products;
 	}
 
@@ -234,6 +273,27 @@
 			<h2 class="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
 
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				<!-- Tenant -->
+				<div class="md:col-span-2">
+					<label class="block text-sm font-medium text-gray-700 mb-2">
+						Tenant <span class="text-red-500">*</span>
+					</label>
+					<select
+						bind:value={formData.tenant}
+						class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {errors.tenant
+							? 'border-red-500'
+							: 'border-gray-300'}"
+					>
+						<option value={null}>Select Tenant</option>
+						{#each tenants as tenant}
+							<option value={tenant.id}>{tenant.name}</option>
+						{/each}
+					</select>
+					{#if errors.tenant}
+						<p class="mt-1 text-sm text-red-600">{errors.tenant}</p>
+					{/if}
+				</div>
+
 				<!-- Promotion Name -->
 				<div class="md:col-span-2">
 					<label class="block text-sm font-medium text-gray-700 mb-2">
@@ -444,6 +504,13 @@
 		<!-- Product Selection -->
 		<div class="bg-white rounded-lg shadow-sm p-6">
 			<h2 class="text-lg font-semibold text-gray-900 mb-4">Select Products</h2>
+			
+			<!-- Debug Info -->
+			<div class="mb-4 p-3 bg-gray-50 border rounded text-sm">
+				<div>Tenant ID: <strong>{formData.tenant || 'Not selected'}</strong></div>
+				<div>Selected Products: <strong>{selectedProducts.length}</strong></div>
+			</div>
+			
 			<ProductSelector
 				tenantId={formData.tenant}
 				selected={selectedProducts}

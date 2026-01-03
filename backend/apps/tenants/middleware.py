@@ -11,6 +11,8 @@ Headers:
 import logging
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib.auth import get_user_model
+from rest_framework.authtoken.models import Token
 from apps.tenants.models import Tenant, Outlet
 from apps.core.context import (
     set_current_tenant,
@@ -20,6 +22,7 @@ from apps.core.context import (
 )
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
 
 class TenantMiddleware(MiddlewareMixin):
@@ -34,10 +37,16 @@ class TenantMiddleware(MiddlewareMixin):
         '/api/auth/refresh/',
         '/api/health/',
         '/api/public/',  # Public kiosk endpoints (tenants, etc)
+        '/api/admin/tenants/',  # Admin tenant management (superuser only)
+        '/api/admin/settings/',  # Admin settings management (admin access)
+        '/api/admin/users/',  # User management (admin access)
         '/api/products/',  # Public kiosk API - browse all products
+        '/api/product-selector/',  # Product selector for promotions (admin access)
+        '/api/categories/',  # Public categories API
         '/api/orders/',  # Public order API - multi-tenant checkout
-        '/api/admin/',  # Admin panel API endpoints
         '/api/promotions/',  # Promotion management (admin access)
+        '/api/outlets/accessible/',  # Get accessible outlets for current user
+        '/api/outlets/all_outlets/',  # Get all outlets for admin forms
         '/admin/',
         '/static/',
         '/media/',
@@ -58,18 +67,39 @@ class TenantMiddleware(MiddlewareMixin):
         # Get tenant ID from header
         tenant_id = request.headers.get('X-Tenant-ID')
         
-        # If authenticated user, get tenant from user
+        # Try to get user from token if not already authenticated
+        user = None
         if hasattr(request, 'user') and request.user.is_authenticated:
-            set_current_user(request.user)
+            user = request.user
+        else:
+            # Try to get user from Authorization header (for DRF Token auth)
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Token '):
+                token_key = auth_header.split(' ')[1]
+                try:
+                    token = Token.objects.select_related('user').get(key=token_key)
+                    user = token.user
+                    request.user = user  # Set user on request
+                    logger.debug(f"User authenticated from token: {user.username}")
+                except Token.DoesNotExist:
+                    logger.warning(f"Invalid token: {token_key[:10]}...")
+        
+        # If authenticated user, get tenant from user
+        if user:
+            set_current_user(user)
+            logger.debug(f"Authenticated user: {user.username}, role: {user.role}, is_superuser: {user.is_superuser}")
             
-            # Super admins don't need tenant context
-            if request.user.role == 'admin':
-                logger.debug(f"Super admin user: {request.user.username} - tenant not required")
+            # Super admin can bypass tenant requirement
+            if user.is_superuser or user.role in ['super_admin', 'admin']:
+                logger.debug(f"Super admin bypass granted for: {user.username}")
                 return None
             
             # Use user's tenant if header not provided
-            if not tenant_id and hasattr(request.user, 'tenant_id'):
-                tenant_id = request.user.tenant_id
+            if not tenant_id and hasattr(user, 'tenant_id') and user.tenant_id:
+                tenant_id = user.tenant_id
+                logger.debug(f"Using tenant from user: {user.username} -> tenant_id: {tenant_id}")
+        else:
+            logger.debug(f"No authenticated user found for request to {path}")
         
         # If no tenant ID, return error for non-excluded URLs
         if not tenant_id:

@@ -1,9 +1,11 @@
 <script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated } from '$lib/stores/auth';
+	import { isAuthenticated, selectedTenant } from '$lib/stores/auth';
 	import {
 		getModifiers,
+		createModifier,
+		updateModifier,
 		deleteModifier,
 		getModifierStats,
 		bulkUpdateModifiers,
@@ -11,14 +13,22 @@
 		formatPriceAdjustment
 	} from '$lib/api/modifiers';
 	import { getProducts } from '$lib/api/products';
+	import { getTenants } from '$lib/api/tenants';
 
 	export let data = {};
 
 	// State
 	let modifiers = [];
 	let products = [];
+	let tenants = [];
 	let loading = true;
 	let stats = { total: 0, active: 0, inactive: 0 };
+	let mounted = false;
+	
+	// Toast notification state
+	let showToast = false;
+	let toastMessage = '';
+	let toastType = 'success'; // 'success' | 'error' | 'info'
 	
 	// Filters
 	let searchQuery = '';
@@ -51,35 +61,71 @@
 	};
 	let formErrors = {};
 
-	onMount(() => {
-		if (!$isAuthenticated) {
-			goto('/login');
-			return;
-		}
+	// Show alert function with toast
+	function showAlert(message, type = 'success') {
+		toastMessage = message;
+		toastType = type;
+		showToast = true;
 		
+		// Auto hide after 3 seconds
+		setTimeout(() => {
+			showToast = false;
+		}, 3000);
+	}
+
+	onMount(() => {
 		loadModifiers();
 		loadProducts();
+		loadTenants();
 		loadStats();
+		mounted = true;
 	});
+
+	// Reactive: reload when tenant filter changes
+	$: if (mounted) {
+		const tenantId = $selectedTenant;
+		currentPage = 1;
+		loadModifiers();
+	}
 
 	async function loadModifiers() {
 		loading = true;
 		try {
-			const response = await getModifiers({
+			// Build filters object, only include non-empty values
+			const filters = {
 				type: 'topping',
-				search: searchQuery,
-				product: selectedProduct,
-				is_active: isActiveFilter,
 				page: currentPage,
+				page_size: 10,
 				ordering: 'sort_order,name'
-			});
+			};
+			
+			if (searchQuery) filters.search = searchQuery;
+			if (selectedProduct) filters.product = selectedProduct;
+			if ($selectedTenant) filters.tenant = $selectedTenant;
+			if (isActiveFilter !== '') filters.is_active = isActiveFilter;
+			
+			const response = await getModifiers(filters);
 			
 			modifiers = response.results || response;
 			totalCount = response.count || modifiers.length;
-			totalPages = response.next ? Math.ceil(totalCount / 10) : 1;
+			// Calculate total pages properly (default page size is 10)
+			totalPages = totalCount > 0 ? Math.ceil(totalCount / 10) : 1;
+			
+			// If current page exceeds total pages, go to last valid page
+			if (currentPage > totalPages && totalPages > 0) {
+				currentPage = totalPages;
+				loadModifiers();
+				return;
+			}
 		} catch (error) {
 			console.error('Error loading toppings:', error);
-			alert('Failed to load toppings');
+			// If invalid page error and not already on page 1, reset to page 1
+			if (error.message && error.message.includes('Invalid page') && currentPage !== 1) {
+				currentPage = 1;
+				loadModifiers();  // Retry with page 1
+				return;
+			}
+			showAlert('Failed to load toppings', 'error');
 		} finally {
 			loading = false;
 		}
@@ -87,10 +133,24 @@
 
 	async function loadProducts() {
 		try {
+			console.log('Loading products with page_size: 1000');
 			const response = await getProducts({ page_size: 1000 });
+			console.log('Products API response:', response);
+			console.log('Response has results?', !!response.results);
 			products = response.results || response;
+			console.log('Products array length:', products.length);
+			console.log('First 3 products:', products.slice(0, 3));
 		} catch (error) {
 			console.error('Error loading products:', error);
+		}
+	}
+
+	async function loadTenants() {
+		try {
+			const response = await getTenants({ page_size: 100 });
+			tenants = response.results || response;
+		} catch (error) {
+			console.error('Error loading tenants:', error);
 		}
 	}
 
@@ -138,15 +198,21 @@
 	}
 
 	function openEditModal(modifier) {
+		console.log('Opening edit modal for modifier:', modifier);
+		console.log('modifier.product_id:', modifier.product_id);
+		console.log('modifier.product:', modifier.product);
+		console.log('Available products:', products.length);
+		
 		editingModifier = modifier;
 		formData = {
 			name: modifier.name,
 			type: modifier.type,
 			price_adjustment: modifier.price_adjustment,
-			product: modifier.product_id,
+			product: modifier.product_id || modifier.product,
 			is_active: modifier.is_active,
 			sort_order: modifier.sort_order
 		};
+		console.log('Form data after setting:', formData);
 		formErrors = {};
 		showCreateModal = true;
 	}
@@ -171,17 +237,36 @@
 		try {
 			if (editingModifier) {
 				await updateModifier(editingModifier.id, formData);
+				showAlert('Topping updated successfully!', 'success');
 			} else {
 				await createModifier(formData);
+				showAlert('Topping created successfully!', 'success');
 			}
 			
 			showCreateModal = false;
+			currentPage = 1;  // Reset to first page
 			loadModifiers();
 			loadStats();
 		} catch (error) {
 			console.error('Error saving topping:', error);
-			alert('Failed to save topping: ' + (error.message || 'Unknown error'));
+			showAlert('Failed to save topping: ' + (error.message || 'Unknown error'), 'error');
 		}
+	}
+
+	function handleCopy(modifier) {
+		// Open create modal with copied data
+		editingModifier = null;
+		formData = {
+			name: modifier.name + ' (Copy)',
+			type: modifier.type,
+			price_adjustment: modifier.price_adjustment,
+			product: modifier.product || '',
+			is_active: modifier.is_active,
+			sort_order: modifier.sort_order
+		};
+		formErrors = {};
+		showCreateModal = true;
+		showAlert('Topping copied! Modify and save to create.', 'info');
 	}
 
 	function confirmDelete(modifier) {
@@ -194,13 +279,15 @@
 		
 		try {
 			await deleteModifier(modifierToDelete.id);
+			showAlert('Topping deleted successfully!', 'success');
 			showDeleteModal = false;
 			modifierToDelete = null;
+			currentPage = 1;  // Reset to first page
 			loadModifiers();
 			loadStats();
 		} catch (error) {
 			console.error('Error deleting topping:', error);
-			alert('Failed to delete topping');
+			showAlert('Failed to delete topping', 'error');
 		}
 	}
 
@@ -445,6 +532,13 @@
 										✏️
 									</button>
 									<button
+										on:click={() => handleCopy(modifier)}
+										class="text-green-600 hover:text-green-800"
+										title="Copy"
+									>
+										📋
+									</button>
+									<button
 										on:click={() => confirmDelete(modifier)}
 										class="text-red-600 hover:text-red-800"
 										title="Delete"
@@ -472,15 +566,44 @@
 						>
 							Previous
 						</button>
-						{#each Array(Math.min(5, totalPages)) as _, i}
-							{@const page = i + 1}
+						
+						{#if currentPage > 3}
 							<button
-								on:click={() => goToPage(page)}
-								class="px-3 py-1 border rounded-lg {currentPage === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}"
+								on:click={() => goToPage(1)}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
 							>
-								{page}
+								1
 							</button>
+							{#if currentPage > 4}
+								<span class="px-3 py-1">...</span>
+							{/if}
+						{/if}
+						
+						{#each Array(Math.min(5, totalPages)) as _, i}
+							{@const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4))}
+							{@const page = startPage + i}
+							{#if page <= totalPages}
+								<button
+									on:click={() => goToPage(page)}
+									class="px-3 py-1 border rounded-lg {currentPage === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}"
+								>
+									{page}
+								</button>
+							{/if}
 						{/each}
+						
+						{#if currentPage < totalPages - 2}
+							{#if currentPage < totalPages - 3}
+								<span class="px-3 py-1">...</span>
+							{/if}
+							<button
+								on:click={() => goToPage(totalPages)}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
+							>
+								{totalPages}
+							</button>
+						{/if}
+						
 						<button
 							on:click={() => goToPage(currentPage + 1)}
 							disabled={currentPage === totalPages}
@@ -531,7 +654,7 @@
 						bind:value={formData.product}
 						class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
 					>
-						<option value="">Select product</option>
+						<option value="">Select product ({products.length} available)</option>
 						{#each products as product}
 							<option value={product.id}>{product.name}</option>
 						{/each}
@@ -626,6 +749,39 @@
 					class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
 				>
 					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Toast Notification -->
+{#if showToast}
+	<div class="fixed bottom-4 right-4 z-50 animate-fade-in">
+		<div class="bg-white rounded-lg shadow-lg border-l-4 {toastType === 'success' ? 'border-green-500' : toastType === 'error' ? 'border-red-500' : 'border-blue-500'} p-4 min-w-[300px] max-w-md">
+			<div class="flex items-start">
+				<div class="flex-shrink-0">
+					{#if toastType === 'success'}
+						<svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{:else if toastType === 'error'}
+						<svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{:else}
+						<svg class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{/if}
+				</div>
+				<div class="ml-3 flex-1">
+					<p class="text-sm font-medium text-gray-900">{toastMessage}</p>
+				</div>
+				<button on:click={() => showToast = false} class="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600">
+					<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+						<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+					</svg>
 				</button>
 			</div>
 		</div>

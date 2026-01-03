@@ -54,7 +54,8 @@
 			goto('/products');
 		} catch (err) {
 			console.error('Error updating product:', err);
-			error = err.message || 'Failed to update product';
+			console.error('Error details:', err.message, err);
+			error = err.message || err.toString() || 'Failed to update product';
 		} finally {
 			submitting = false;
 		}

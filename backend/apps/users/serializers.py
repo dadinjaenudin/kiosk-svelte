@@ -3,41 +3,71 @@ Serializers for User API
 """
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from apps.core.permissions import get_user_permissions
+from apps.core.permissions import ROLE_HIERARCHY
 
 User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
     """
-    Serializer for User model
+    Serializer for User model with multi-outlet support
     """
     
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     outlet_name = serializers.CharField(source='outlet.name', read_only=True)
-    permissions = serializers.SerializerMethodField()
+    role_level = serializers.SerializerMethodField()
+    accessible_outlets = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'full_name', 'phone_number',
             'tenant', 'tenant_name',
-            'outlet', 'outlet_name',
-            'role', 'permissions',
+            'outlet', 'outlet_name', 'accessible_outlets',
+            'role', 'role_level',
             'is_active', 'is_staff', 'is_superuser',
             'last_login', 'created_at'
         ]
         read_only_fields = [
             'id', 'username', 'tenant', 'tenant_name',
-            'outlet_name', 'permissions',
+            'outlet_name', 'accessible_outlets', 'role_level',
             'is_staff', 'is_superuser', 'last_login', 'created_at'
         ]
     
-    def get_permissions(self, obj):
+    def get_role_level(self, obj):
         """
-        Get user's permissions list
+        Get user's role hierarchy level for frontend
         """
-        return get_user_permissions(obj)
+        if obj.is_superuser:
+            return 100
+        return ROLE_HIERARCHY.get(obj.role, 0)
+    
+    def get_accessible_outlets(self, obj):
+        """
+        Get list of outlets accessible to this user
+        """
+        # Super admin and admin can access all outlets
+        if obj.role in ['super_admin', 'admin']:
+            return 'all'
+        
+        # Tenant owner can access all outlets in tenant
+        if obj.role == 'tenant_owner' and obj.tenant:
+            from apps.tenants.serializers import OutletSerializer
+            outlets = obj.tenant.outlets.filter(is_active=True)
+            return OutletSerializer(outlets, many=True).data
+        
+        # Manager can access their accessible_outlets
+        if obj.role == 'manager':
+            from apps.tenants.serializers import OutletSerializer
+            outlets = obj.accessible_outlets.filter(is_active=True)
+            return OutletSerializer(outlets, many=True).data
+        
+        # Cashier/kitchen: return their primary outlet only
+        if obj.outlet:
+            from apps.tenants.serializers import OutletSerializer
+            return [OutletSerializer(obj.outlet).data]
+        
+        return []
 
 
 class UserProfileSerializer(UserSerializer):

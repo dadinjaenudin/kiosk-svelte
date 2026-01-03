@@ -65,7 +65,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'apps.tenants.middleware.TenantMiddleware',  # Multi-tenant middleware
+    'apps.tenants.middleware.TenantMiddleware',  # Multi-tenant middleware (URL based)
+    'apps.core.middleware.SetTenantContextMiddleware',  # Tenant context for admin (User based)
+    'apps.core.middleware.SetOutletContextMiddleware',  # Outlet context for multi-outlet support
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -149,8 +151,7 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 50,
+    'DEFAULT_PAGINATION_CLASS': 'config.pagination.StandardResultsSetPagination',
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }
@@ -167,16 +168,33 @@ SIMPLE_JWT = {
 }
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
-    'http://localhost:5173',
-    'http://localhost:5174',  # Kiosk frontend port
-    'http://localhost:5175',  # Admin panel port
-    'http://localhost:3000',
-    'http://localhost:8080',
-    'http://localhost:8082',  # Nginx port
-])
+# In development mode, allow all origins. In production, list specific domains.
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    # Explicitly list allowed origins in production
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5173',
+        'http://localhost:5174',  # Kiosk frontend port
+        'http://localhost:5175',  # Admin panel port
+        'http://localhost:3000',
+        'http://localhost:8080',
+        'http://localhost:8082',  # Nginx port
+    ]
+    CORS_ALLOW_ALL_ORIGINS = False
+
+# Enable credentials (cookies, auth headers)
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development
+
+# Allow these HTTP methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
 
 # Allow custom headers for tenant and outlet context
 CORS_ALLOW_HEADERS = [

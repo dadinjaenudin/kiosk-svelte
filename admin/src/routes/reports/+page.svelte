@@ -1,7 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated } from '$lib/stores/auth';
+	import { isAuthenticated, selectedTenant } from '$lib/stores/auth';
 	import {
 		getSalesSummary,
 		getSalesByPeriod,
@@ -22,6 +22,7 @@
 
 	// State
 	let loading = true;
+	let mounted = false;
 	let selectedPeriod = '30days';
 	let customStartDate = '';
 	let customEndDate = '';
@@ -47,16 +48,22 @@
 	let periodOptions = getPeriodOptions();
 
 	onMount(() => {
-		if (!$isAuthenticated) {
-			goto('/login');
-			return;
-		}
 		loadReports();
+		mounted = true;
 	});
+
+	// Reactive: reload when tenant filter changes
+	$: if (mounted) {
+		const tenantId = $selectedTenant;
+		loadReports();
+	}
 
 	async function loadReports() {
 		loading = true;
 		try {
+			const tenantId = $selectedTenant;
+			console.log('Loading reports with tenantId:', tenantId);
+			
 			// Load all reports in parallel
 			const [
 				summary,
@@ -68,16 +75,18 @@
 				payments,
 				hourly
 			] = await Promise.all([
-				getSalesSummary(selectedPeriod, customStartDate, customEndDate),
-				getSalesByPeriod(selectedPeriod, 'day', customStartDate, customEndDate),
-				getTopProducts(selectedPeriod, 5),
-				getTopCategories(selectedPeriod),
-				getCustomerStats(selectedPeriod),
-				getOrderStats(selectedPeriod),
-				getPaymentMethods(selectedPeriod),
-				getHourlySales(selectedPeriod === 'today' ? 'today' : '7days')
+				getSalesSummary(selectedPeriod, customStartDate, customEndDate, tenantId),
+				getSalesByPeriod(selectedPeriod, 'day', customStartDate, customEndDate, tenantId),
+				getTopProducts(selectedPeriod, 5, tenantId),
+				getTopCategories(selectedPeriod, tenantId),
+				getCustomerStats(selectedPeriod, tenantId),
+				getOrderStats(selectedPeriod, tenantId),
+				getPaymentMethods(selectedPeriod, tenantId),
+				getHourlySales(selectedPeriod === 'today' ? 'today' : '7days', tenantId)
 			]);
 
+			console.log('Reports loaded:', { summary, topProducts: products.data });
+			
 			salesSummary = summary.summary || salesSummary;
 			salesTrend = trend.data || [];
 			topProducts = products.data || [];

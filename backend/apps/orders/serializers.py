@@ -82,15 +82,28 @@ class CheckoutSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
     
     def validate_items(self, items):
-        """Validate that products exist"""
+        """Validate that products exist and are available"""
         if not items:
             raise serializers.ValidationError("Cart is empty")
         
         product_ids = [item['product_id'] for item in items]
-        products = Product.all_objects.filter(id__in=product_ids, is_available=True)
+        unique_product_ids = set(product_ids)  # Get unique product IDs to handle duplicates
         
-        if products.count() != len(product_ids):
-            raise serializers.ValidationError("Some products are not available")
+        # Get all products (including unavailable ones) to check existence
+        all_products = Product.all_objects.filter(id__in=unique_product_ids)
+        available_products = all_products.filter(is_available=True)
+        
+        # Check if all products exist
+        if all_products.count() != len(unique_product_ids):
+            missing_ids = unique_product_ids - set(all_products.values_list('id', flat=True))
+            raise serializers.ValidationError(f"Products not found: {list(missing_ids)}")
+        
+        # Check if all products are available
+        if available_products.count() != len(unique_product_ids):
+            unavailable_ids = set(all_products.values_list('id', flat=True)) - set(available_products.values_list('id', flat=True))
+            unavailable_products = all_products.filter(id__in=unavailable_ids)
+            unavailable_names = [f"{p.name} (ID: {p.id})" for p in unavailable_products]
+            raise serializers.ValidationError(f"Products not available: {', '.join(unavailable_names)}")
         
         return items
     

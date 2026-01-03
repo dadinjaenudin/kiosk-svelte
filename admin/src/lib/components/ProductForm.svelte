@@ -1,6 +1,9 @@
 <script>
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { getCategories } from '$lib/api/products';
+	import { getTenants } from '$lib/api/tenants';
+	import { user } from '$lib/stores/auth';
+	import { get } from 'svelte/store';
 
 	export let product = null; // If editing
 	export let submitting = false;
@@ -13,17 +16,19 @@
 		description: '',
 		sku: '',
 		category: '',
-		base_price: '',
-		cost_price: '',
+		tenant: '',
+		price: '',
+		cost: '',
 		promo_price: '',
 		stock_quantity: '',
-		stock_alert_threshold: '',
+		low_stock_alert: '',
 		is_active: true,
 		is_available: true,
 		is_featured: false,
 		is_popular: false,
-		is_promo: false,
-		sort_order: 0,
+		has_promo: false,
+		preparation_time: 10,
+		tags: '',
 		image: null
 	};
 
@@ -32,36 +37,64 @@
 	let imageFile = null;
 	let existingImageUrl = null;
 
-	// Categories
+	// Categories and Tenants
 	let categories = [];
 	let loadingCategories = true;
+	let tenants = [];
+	let loadingTenants = false;
+	let showTenantField = false;
 
 	// Validation
 	let errors = {};
 
+	// Reactive: Update showTenantField when user changes
+	$: {
+		const currentUser = $user;
+		const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+		console.log('Reactive check - User role:', currentUser?.role, 'showTenantField:', isAdmin);
+		showTenantField = isAdmin;
+		
+		// Auto-set tenant for non-admin users
+		if (!isAdmin && currentUser?.tenant_id && !formData.tenant) {
+			formData.tenant = currentUser.tenant_id;
+			console.log('Auto-set tenant from user:', currentUser.tenant_id);
+		}
+	}
+
 	onMount(async () => {
+		console.log('=== ProductForm onMount ===');
+		
+		// Always load categories
 		await loadCategories();
+		
+		// Load tenants for dropdown
+		await loadTenants();
 		
 		// Populate form if editing
 		if (product) {
+			console.log('Populating form with product data:', product);
 			formData = {
 				name: product.name || '',
 				description: product.description || '',
 				sku: product.sku || '',
-				category: product.category?.id || '',
-				base_price: product.base_price || '',
-				cost_price: product.cost_price || '',
+				category: product.category?.id || product.category || '',
+				tenant: product.tenant_id || product.tenant || '',
+				price: product.price || '',
+				cost: product.cost || '',
 				promo_price: product.promo_price || '',
 				stock_quantity: product.stock_quantity || '',
-				stock_alert_threshold: product.stock_alert_threshold || '',
+				low_stock_alert: product.low_stock_alert || '',
 				is_active: product.is_active ?? true,
 				is_available: product.is_available ?? true,
 				is_featured: product.is_featured ?? false,
 				is_popular: product.is_popular ?? false,
-				is_promo: product.is_promo ?? false,
-				sort_order: product.sort_order || 0,
+				has_promo: product.has_promo ?? false,
+				preparation_time: product.preparation_time || 10,
+				tags: product.tags || '',
 				image: null
 			};
+			
+			console.log('Form data after population:', formData);
 			
 			if (product.image) {
 				existingImageUrl = product.image;
@@ -77,6 +110,19 @@
 		} catch (error) {
 			console.error('Error loading categories:', error);
 			loadingCategories = false;
+		}
+	}
+
+	async function loadTenants() {
+		try {
+			loadingTenants = true;
+			const response = await getTenants();
+			tenants = response.results || response;
+			console.log('Loaded tenants:', tenants.length);
+			loadingTenants = false;
+		} catch (error) {
+			console.error('Error loading tenants:', error);
+			loadingTenants = false;
 		}
 	}
 
@@ -117,38 +163,74 @@
 			errors.category = 'Category is required';
 		}
 
-		if (!formData.base_price || parseFloat(formData.base_price) <= 0) {
-			errors.base_price = 'Base price must be greater than 0';
+		// Check tenant for super_admin/admin
+		const currentUser = get(user);
+		if ((currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && !formData.tenant) {
+			errors.tenant = 'Tenant is required';
 		}
 
-		if (formData.promo_price && parseFloat(formData.promo_price) >= parseFloat(formData.base_price)) {
-			errors.promo_price = 'Promo price must be less than base price';
+		if (!formData.price || parseFloat(formData.price) <= 0) {
+			errors.price = 'Price must be greater than 0';
+		}
+
+		if (formData.promo_price && parseFloat(formData.promo_price) >= parseFloat(formData.price)) {
+			errors.promo_price = 'Promo price must be less than price';
 		}
 
 		return Object.keys(errors).length === 0;
 	}
 
 	function handleSubmit() {
+		console.log('=== SUBMIT DEBUG ===');
+		console.log('showTenantField:', showTenantField);
+		console.log('formData.tenant:', formData.tenant);
+		
 		if (!validate()) {
+			console.log('Validation failed, errors:', errors);
 			return;
 		}
 
-		// Prepare submission data
-		const submitData = new FormData();
+		console.log('Form data before submit:', formData);
 		
-		// Add all form fields
-		Object.keys(formData).forEach(key => {
-			if (key !== 'image' && formData[key] !== null && formData[key] !== '') {
-				submitData.append(key, formData[key]);
-			}
-		});
-
-		// Add image if new file selected
+		// If there's an image file, use FormData
 		if (imageFile) {
+			const submitData = new FormData();
+			
+			// Add all form fields
+			Object.keys(formData).forEach(key => {
+				const value = formData[key];
+				// Include tenant even if empty string to get proper validation error from backend
+				if (key === 'tenant' || (key !== 'image' && value !== null && value !== undefined && value !== '')) {
+					console.log(`Adding field: ${key} = ${value} (${typeof value})`);
+					submitData.append(key, value);
+				}
+			});
+			
+			// Add image file
+			console.log('Adding image file:', imageFile.name);
 			submitData.append('image', imageFile);
+			
+			// Debug: show all FormData entries
+			console.log('Sending as FormData with image:');
+			for (let pair of submitData.entries()) {
+				console.log(`  ${pair[0]}: ${pair[1]}`);
+			}
+			
+			dispatch('submit', submitData);
+		} else {
+			// No image - send as JSON object (more reliable)
+			const submitData = {};
+			
+			Object.keys(formData).forEach(key => {
+				const value = formData[key];
+				if (key !== 'image' && value !== null && value !== undefined && value !== '') {
+					submitData[key] = value;
+				}
+			});
+			
+			console.log('Sending as JSON (no image):', submitData);
+			dispatch('submit', submitData);
 		}
-
-		dispatch('submit', submitData);
 	}
 
 	function handleCancel() {
@@ -216,6 +298,29 @@
 				{/if}
 			</div>
 
+			<!-- Tenant -->
+			{#if $user?.role === 'super_admin' || $user?.role === 'admin'}
+			<div>
+				<label for="tenant" class="block text-sm font-medium text-gray-700 mb-1">
+					Tenant <span class="text-red-500">*</span>
+				</label>
+				<select
+					id="tenant"
+					bind:value={formData.tenant}
+					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+					disabled={submitting || loadingTenants}
+				>
+					<option value="">Select tenant</option>
+					{#each tenants as tenant}
+						<option value={tenant.id}>{tenant.name}</option>
+					{/each}
+				</select>
+				{#if errors.tenant}
+					<p class="text-red-500 text-sm mt-1">{errors.tenant}</p>
+				{/if}
+			</div>
+			{/if}
+
 			<!-- Description -->
 			<div class="md:col-span-2">
 				<label for="description" class="block text-sm font-medium text-gray-700 mb-1">
@@ -238,17 +343,17 @@
 		<h2 class="text-xl font-semibold text-gray-900">Pricing</h2>
 		
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			<!-- Base Price -->
+			<!-- Price -->
 			<div>
-				<label for="base_price" class="block text-sm font-medium text-gray-700 mb-1">
-					Base Price <span class="text-red-500">*</span>
+				<label for="price" class="block text-sm font-medium text-gray-700 mb-1">
+					Price <span class="text-red-500">*</span>
 				</label>
 				<div class="relative">
 					<span class="absolute left-3 top-2 text-gray-500">Rp</span>
 					<input
 						type="number"
-						id="base_price"
-						bind:value={formData.base_price}
+						id="price"
+						bind:value={formData.price}
 						min="0"
 						step="100"
 						class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -256,22 +361,22 @@
 						disabled={submitting}
 					/>
 				</div>
-				{#if errors.base_price}
-					<p class="text-red-500 text-sm mt-1">{errors.base_price}</p>
+				{#if errors.price}
+					<p class="text-red-500 text-sm mt-1">{errors.price}</p>
 				{/if}
 			</div>
 
-			<!-- Cost Price -->
+			<!-- Cost -->
 			<div>
-				<label for="cost_price" class="block text-sm font-medium text-gray-700 mb-1">
-					Cost Price
+				<label for="cost" class="block text-sm font-medium text-gray-700 mb-1">
+					Cost
 				</label>
 				<div class="relative">
 					<span class="absolute left-3 top-2 text-gray-500">Rp</span>
 					<input
 						type="number"
-						id="cost_price"
-						bind:value={formData.cost_price}
+						id="cost"
+						bind:value={formData.cost}
 						min="0"
 						step="100"
 						class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -327,15 +432,15 @@
 				/>
 			</div>
 
-			<!-- Stock Alert Threshold -->
+			<!-- Low Stock Alert -->
 			<div>
-				<label for="stock_alert_threshold" class="block text-sm font-medium text-gray-700 mb-1">
-					Stock Alert Threshold
+				<label for="low_stock_alert" class="block text-sm font-medium text-gray-700 mb-1">
+					Low Stock Alert
 				</label>
 				<input
 					type="number"
-					id="stock_alert_threshold"
-					bind:value={formData.stock_alert_threshold}
+					id="low_stock_alert"
+					bind:value={formData.low_stock_alert}
 					min="0"
 					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
 					placeholder="0"
@@ -443,11 +548,11 @@
 				<span class="ml-2 text-sm text-gray-700">Popular Product</span>
 			</label>
 
-			<!-- Is Promo -->
+			<!-- Has Promo -->
 			<label class="flex items-center">
 				<input
 					type="checkbox"
-					bind:checked={formData.is_promo}
+					bind:checked={formData.has_promo}
 					class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
 					disabled={submitting}
 				/>
@@ -456,24 +561,42 @@
 		</div>
 	</div>
 
-	<!-- Sort Order -->
+	<!-- Additional Information -->
 	<div class="space-y-4">
-		<h2 class="text-xl font-semibold text-gray-900">Display Order</h2>
+		<h2 class="text-xl font-semibold text-gray-900">Additional Information</h2>
 		
-		<div>
-			<label for="sort_order" class="block text-sm font-medium text-gray-700 mb-1">
-				Sort Order
-			</label>
-			<input
-				type="number"
-				id="sort_order"
-				bind:value={formData.sort_order}
-				min="0"
-				class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-				placeholder="0"
-				disabled={submitting}
-			/>
-			<p class="text-sm text-gray-500 mt-1">Lower numbers appear first</p>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<!-- Preparation Time -->
+			<div>
+				<label for="preparation_time" class="block text-sm font-medium text-gray-700 mb-1">
+					Preparation Time (minutes)
+				</label>
+				<input
+					type="number"
+					id="preparation_time"
+					bind:value={formData.preparation_time}
+					min="1"
+					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+					placeholder="10"
+					disabled={submitting}
+				/>
+			</div>
+
+			<!-- Tags -->
+			<div>
+				<label for="tags" class="block text-sm font-medium text-gray-700 mb-1">
+					Tags (comma-separated)
+				</label>
+				<input
+					type="text"
+					id="tags"
+					bind:value={formData.tags}
+					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+					placeholder="spicy, vegetarian, halal"
+					disabled={submitting}
+				/>
+				<p class="text-sm text-gray-500 mt-1">Used for search and filtering</p>
+			</div>
 		</div>
 	</div>
 

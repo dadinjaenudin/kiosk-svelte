@@ -15,20 +15,33 @@
 
 	$: selectedIds = selectedProducts.map((p) => p.id);
 
-	onMount(() => {
+	// Load products when tenantId changes
+	$: if (tenantId) {
+		console.log('🔄 TenantId changed to:', tenantId);
 		loadProducts();
+	}
+
+	onMount(() => {
+		console.log('🎬 ProductSelector mounted with tenantId:', tenantId);
+		if (tenantId) {
+			loadProducts();
+		}
 	});
 
 	async function loadProducts() {
+		if (!tenantId) {
+			console.log('⚠️ No tenantId, skipping load');
+			products = [];
+			return;
+		}
+
 		try {
 			loading = true;
+			console.log('📦 Loading products for tenant:', tenantId);
 			const filters = {
-				is_available: true
+				is_available: true,
+				tenant: tenantId
 			};
-
-			if (tenantId) {
-				filters.tenant = tenantId;
-			}
 
 			if (searchQuery) {
 				filters.search = searchQuery;
@@ -36,8 +49,10 @@
 
 			const data = await getProductsForSelector(filters);
 			products = data.results || data;
+			console.log('✅ Loaded products:', products.length, products);
 		} catch (err) {
-			console.error('Error loading products:', err);
+			console.error('❌ Error loading products:', err);
+			products = [];
 		} finally {
 			loading = false;
 		}
@@ -74,6 +89,13 @@
 </script>
 
 <div class="space-y-4">
+	<!-- Debug Info -->
+	{#if !tenantId}
+		<div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+			⚠️ Please select a tenant first to see available products
+		</div>
+	{/if}
+
 	<!-- Search Input -->
 	<div class="relative">
 		<input
@@ -99,12 +121,16 @@
 		</svg>
 
 		<!-- Dropdown -->
-		{#if showDropdown && products.length > 0}
+		{#if showDropdown}
 			<div
 				class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
 			>
 				{#if loading}
 					<div class="p-4 text-center text-gray-500">Loading...</div>
+				{:else if !tenantId}
+					<div class="p-4 text-center text-gray-500">Please select a tenant first</div>
+				{:else if products.length === 0}
+					<div class="p-4 text-center text-gray-500">No products found</div>
 				{:else}
 					{#each products as product}
 						<button

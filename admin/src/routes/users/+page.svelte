@@ -16,6 +16,8 @@
 		formatDate,
 		formatLastLogin
 	} from '$lib/api/users';
+	import { getTenants } from '$lib/api/tenants';
+	import { getAllOutlets } from '$lib/api/outlets';
 
 	export let data = {};
 
@@ -55,7 +57,10 @@
 		phone_number: '',
 		role: 'cashier',
 		password: '',
-		is_active: true
+		is_active: true,
+		tenant: null,
+		outlet: null,
+		accessible_outlets: []
 	};
 	let formErrors = {};
 	
@@ -69,15 +74,60 @@
 	
 	// Role options
 	let roleOptions = getRoleOptions();
+	
+	// Tenant and outlet data
+	let tenants = [];
+	let outlets = [];
+	let filteredOutlets = []; // Outlets filtered by selected tenant
 
 	onMount(() => {
-		if (!$isAuthenticated) {
-			goto('/login');
-			return;
-		}
 		loadUsers();
 		loadStats();
+		loadTenants();
+		loadOutlets();
 	});
+	
+	async function loadTenants() {
+		try {
+			const response = await getTenants();
+			tenants = response.results || response;
+		} catch (error) {
+			console.error('Error loading tenants:', error);
+		}
+	}
+	
+	async function loadOutlets() {
+		try {
+			const response = await getAllOutlets();
+			outlets = response.results || response;
+			console.log('Loaded outlets:', outlets.length, outlets);
+		} catch (error) {
+			console.error('Error loading outlets:', error);
+		}
+	}
+	
+	// Filter outlets when tenant changes
+	$: if (formData.tenant) {
+		const tenantId = typeof formData.tenant === 'string' ? parseInt(formData.tenant) : formData.tenant;
+		filteredOutlets = outlets.filter(o => {
+			const outletTenantId = typeof o.tenant === 'object' ? o.tenant.id : o.tenant;
+			return outletTenantId === tenantId;
+		});
+		console.log('Filtering outlets for tenant:', tenantId, 'Found:', filteredOutlets.length);
+		
+		// Reset outlet if it's not in the filtered list
+		if (formData.outlet && !filteredOutlets.find(o => o.id === parseInt(formData.outlet))) {
+			formData.outlet = null;
+		}
+		// Reset accessible_outlets
+		formData.accessible_outlets = formData.accessible_outlets.filter(id => 
+			filteredOutlets.find(o => o.id === id)
+		);
+	} else {
+		filteredOutlets = [];
+		formData.outlet = null;
+		formData.accessible_outlets = [];
+	}
 
 	async function loadUsers() {
 		loading = true;
@@ -87,6 +137,7 @@
 				role: selectedRole,
 				is_active: isActiveFilter,
 				page: currentPage,
+				page_size: 10,
 				ordering: '-created_at'
 			});
 			
@@ -135,7 +186,10 @@
 			phone_number: '',
 			role: 'cashier',
 			password: '',
-			is_active: true
+			is_active: true,
+			tenant: null,
+			outlet: null,
+			accessible_outlets: []
 		};
 		formErrors = {};
 		showCreateModal = true;
@@ -143,6 +197,23 @@
 
 	function openEditModal(user) {
 		editingUser = user;
+		
+		// Extract outlet IDs from accessible_outlets if it's an array of objects
+		let accessibleOutletIds = [];
+		if (user.accessible_outlets) {
+			if (Array.isArray(user.accessible_outlets)) {
+				// If it's array of objects with 'id' property
+				accessibleOutletIds = user.accessible_outlets.map(o => typeof o === 'object' ? o.id : o);
+			} else if (user.accessible_outlets === 'all') {
+				accessibleOutletIds = [];
+			}
+		}
+		
+		console.log('Opening edit modal for user:', user.username);
+		console.log('User data:', user);
+		console.log('User accessible_outlets:', user.accessible_outlets);
+		console.log('Mapped to IDs:', accessibleOutletIds);
+		
 		formData = {
 			username: user.username,
 			email: user.email || '',
@@ -151,8 +222,16 @@
 			phone_number: user.phone_number || '',
 			role: user.role,
 			password: '', // Don't pre-fill password
-			is_active: user.is_active
+			is_active: user.is_active,
+			tenant: user.tenant || null,
+			outlet: user.outlet || null,
+			accessible_outlets: accessibleOutletIds
 		};
+		
+		console.log('FormData after mapping:', formData);
+		console.log('Role value:', formData.role);
+		console.log('Available roleOptions:', roleOptions);
+		
 		formErrors = {};
 		showCreateModal = true;
 	}
@@ -176,11 +255,23 @@
 			formErrors.email = 'Invalid email format';
 		}
 		
+		// Validate tenant for non-super-admin roles
+		if (formData.role !== 'super_admin' && formData.role !== 'admin') {
+			if (!formData.tenant) {
+				formErrors.tenant = 'Tenant is required for this role';
+			}
+			
+			// Validate outlet for cashier/kitchen
+			if ((formData.role === 'cashier' || formData.role === 'kitchen') && !formData.outlet) {
+				formErrors.outlet = 'Outlet is required for this role';
+			}
+		}
+		
 		return Object.keys(formErrors).length === 0;
 	}
 
 	async function handleSubmit() {
-		if (!validate Form()) return;
+		if (!validateForm()) return;
 		
 		try {
 			const submitData = { ...formData };
@@ -189,6 +280,17 @@
 			if (editingUser && !submitData.password) {
 				delete submitData.password;
 			}
+			
+			// Rename accessible_outlets to accessible_outlet_ids for backend
+			if (submitData.accessible_outlets && submitData.accessible_outlets.length > 0) {
+				submitData.accessible_outlet_ids = submitData.accessible_outlets;
+			} else if (submitData.role === 'manager') {
+				// Send empty array if manager has no outlets selected
+				submitData.accessible_outlet_ids = [];
+			}
+			delete submitData.accessible_outlets;
+			
+			console.log('Submitting user data:', JSON.stringify(submitData, null, 2));
 			
 			if (editingUser) {
 				await updateUser(editingUser.id, submitData);
@@ -704,6 +806,74 @@
 							{/each}
 						</select>
 					</div>
+					
+					<!-- Tenant (only for non-super-admin roles) -->
+					{#if formData.role !== 'super_admin' && formData.role !== 'admin'}
+						<div>
+							<label class="block text-sm font-medium text-gray-700 mb-1">
+								Tenant <span class="text-red-500">*</span>
+							</label>
+							<select
+								bind:value={formData.tenant}
+								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+							>
+								<option value={null}>-- Select Tenant --</option>
+								{#each tenants as tenant}
+									<option value={tenant.id}>{tenant.name}</option>
+								{/each}
+							</select>
+							<p class="text-xs text-gray-500 mt-1">🏢 Which restaurant brand this user belongs to</p>
+						</div>
+					{/if}
+					
+					<!-- Outlet (only for cashier/kitchen roles) -->
+					{#if (formData.role === 'cashier' || formData.role === 'kitchen') && formData.tenant}
+						<div>
+							<label class="block text-sm font-medium text-gray-700 mb-1">
+								Outlet <span class="text-red-500">*</span>
+							</label>
+							<select
+								bind:value={formData.outlet}
+								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+							>
+								<option value={null}>-- Select Outlet --</option>
+								{#each filteredOutlets as outlet}
+									<option value={outlet.id}>{outlet.name}</option>
+								{/each}
+							</select>
+							<p class="text-xs text-gray-500 mt-1">📍 Specific outlet for this {formData.role}</p>
+						</div>
+					{/if}
+					
+					<!-- Accessible Outlets (only for manager role) -->
+					{#if formData.role === 'manager' && formData.tenant}
+						<div class="md:col-span-2">
+							<label class="block text-sm font-medium text-gray-700 mb-2">
+								Accessible Outlets
+							</label>
+							<div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+								{#each filteredOutlets as outlet}
+									<label class="flex items-center space-x-2">
+										<input
+											type="checkbox"
+											value={outlet.id}
+											checked={formData.accessible_outlets.includes(outlet.id)}
+											on:change={(e) => {
+												if (e.target.checked) {
+													formData.accessible_outlets = [...formData.accessible_outlets, outlet.id];
+												} else {
+													formData.accessible_outlets = formData.accessible_outlets.filter(id => id !== outlet.id);
+												}
+											}}
+											class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+										/>
+										<span class="text-sm text-gray-700">{outlet.name}</span>
+									</label>
+								{/each}
+							</div>
+							<p class="text-xs text-gray-500 mt-1">📍 Manager can access multiple outlets</p>
+						</div>
+					{/if}
 
 					<!-- Password -->
 					<div class="md:col-span-2">

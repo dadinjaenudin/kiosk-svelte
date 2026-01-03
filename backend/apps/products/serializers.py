@@ -8,11 +8,11 @@ from .models import Category, Product, ProductModifier
 class ProductModifierSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductModifier
-        fields = ['id', 'name', 'type', 'price_adjustment', 'is_active', 'sort_order']
+        fields = ['id', 'product', 'name', 'type', 'price_adjustment', 'is_active', 'sort_order']
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    modifiers = ProductModifierSerializer(many=True, read_only=True)
+    modifiers = serializers.SerializerMethodField()
     category_name = serializers.CharField(source='category.name', read_only=True)
     
     # Food court: Add tenant info for filtering
@@ -20,6 +20,25 @@ class ProductSerializer(serializers.ModelSerializer):
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     tenant_slug = serializers.CharField(source='tenant.slug', read_only=True)
     tenant_color = serializers.CharField(source='tenant.primary_color', read_only=True)
+    
+    def get_modifiers(self, obj):
+        """
+        Return both product-specific modifiers AND global modifiers (product=null)
+        """
+        # Get product-specific modifiers
+        product_modifiers = obj.modifiers.filter(is_active=True)
+        
+        # Get global modifiers (product=null)
+        global_modifiers = ProductModifier.objects.filter(product__isnull=True, is_active=True)
+        
+        # Combine both querysets
+        all_modifiers = list(product_modifiers) + list(global_modifiers)
+        
+        # Sort by sort_order
+        all_modifiers.sort(key=lambda x: x.sort_order)
+        
+        # Serialize
+        return ProductModifierSerializer(all_modifiers, many=True).data
     
     class Meta:
         model = Product

@@ -4,6 +4,9 @@
 	import { cartItems, cartTotals, loadCart, addProductToCart, updateQuantity, removeCartItem, clearAllCart } from '$stores/cart.js';
 	import { getProducts, getCategories } from '$db/index.js';
 	import { browser } from '$app/environment';
+	import { db, addToSyncQueue, saveOrder } from '$db/index.js';
+	import { isOnline, startSync } from '$stores/offline.js';
+	import { broadcastNewOrder, syncServerConnected } from '$lib/stores/localSync.js';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import SuccessModal from '$lib/components/SuccessModal.svelte';
 	import ModifierModal from '$lib/components/ModifierModal.svelte';
@@ -17,7 +20,7 @@
 	let tenants = [];
 	let selectedCategory = null;
 	let selectedTenant = null;  // For filtering, not selection!
-	let isOnline = writable(browser ? navigator.onLine : true);
+	// isOnline imported from $stores/offline.js
 	let showCart = false;
 	let showPaymentModal = false;
 	let showSuccessModal = false;
@@ -31,6 +34,15 @@
 	let showPopular = false;
 	let showPromo = false;
 	let showAvailable = true; // Default: show available only
+	let pendingSyncCount = 0; // Track pending offline orders
+	
+	// Check pending sync count on mount and update periodically
+	async function updatePendingSyncCount() {
+		if (browser) {
+			const queue = await db.sync_queue.count();
+			pendingSyncCount = queue;
+		}
+	}
 	
 	// Filtered products by tenant, category, search, and quick filters
 	$: filteredProducts = products.filter(p => {
@@ -106,8 +118,26 @@
 	// Calculate grand total from grouped items
 	$: grandTotal = groupedCartItems.reduce((sum, group) => sum + group.total, 0);
 	
-	// API URL
-	const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
+	// API URL - dynamically determine based on hostname
+	const getApiUrl = () => {
+		if (typeof window === 'undefined') return 'http://localhost:8001/api';
+		
+		// Check env variable first
+		if (import.meta.env.PUBLIC_API_URL) {
+			console.log('Kiosk using API URL from env:', import.meta.env.PUBLIC_API_URL);
+			return import.meta.env.PUBLIC_API_URL;
+		}
+		
+		// Construct from current hostname
+		const protocol = window.location.protocol;
+		const hostname = window.location.hostname;
+		const url = `${protocol}//${hostname}:8001/api`;
+		console.log('Kiosk constructed API URL:', url);
+		return url;
+	};
+	
+	const apiUrl = getApiUrl();
+	console.log('Kiosk final API URL:', apiUrl);
 	
 	// Load data on mount
 	onMount(async () => {
@@ -117,6 +147,9 @@
 			
 			// Load kiosk data
 			await loadKioskData();
+			
+			// Update pending sync count
+			await updatePendingSyncCount();
 			
 			loading = false;
 			
@@ -128,38 +161,42 @@
 			window.addEventListener('offline', handleOffline);
 			window.addEventListener('keydown', handleKeyboard);
 			
+			// Update sync count every 10 seconds
+			const syncCountInterval = setInterval(updatePendingSyncCount, 10000);
+			
+			return () => {
+				window.removeEventListener('online', handleOnline);
+				window.removeEventListener('offline', handleOffline);
+				window.removeEventListener('keydown', handleKeyboard);
+				clearInterval(syncCountInterval);
+			};
+			
 		} catch (error) {
 			console.error('Error loading kiosk data:', error);
 			loading = false;
 		}
-		
-		return () => {
-			window.removeEventListener('online', handleOnline);
-			window.removeEventListener('offline', handleOffline);
-			window.removeEventListener('keydown', handleKeyboard);
-		};
 	});
 	
 	/**
 	 * Load ALL kiosk data (products, categories, tenants)
 	 * FOOD COURT MODE: No tenant selection required
+	 * OFFLINE-FIRST: Load from IndexedDB cache first, then sync with server
 	 */
 	async function loadKioskData() {
 		try {
-			console.log('Loading food court data...');
+			console.log('🔄 Loading kiosk data (offline-first)...');
 			
-			// Load ALL products from ALL tenants
-			const productsRes = await fetch(`${apiUrl}/products/products/`);
-			if (productsRes.ok) {
-				const productsData = await productsRes.json();
-				products = productsData.results || productsData || [];
-				console.log('✅ Products loaded:', products.length);
-				console.log('📦 First product:', products[0]);  // Debug: show first product
+			// 1. Load from IndexedDB cache first (instant, works offline)
+			const cachedProducts = await db.products.toArray();
+			const cachedCategories = await db.categories.toArray();
+			
+			if (cachedProducts.length > 0) {
+				products = cachedProducts;
+				console.log('📦 Loaded from cache:', cachedProducts.length, 'products');
 				
-				// Extract unique tenants from products
+				// Extract tenants from cached products
 				const tenantMap = new Map();
 				products.forEach(p => {
-					console.log(`Product: ${p.name}, Tenant ID: ${p.tenant_id}, Tenant Name: ${p.tenant_name}`);  // Debug each product
 					if (p.tenant_id && !tenantMap.has(p.tenant_id)) {
 						tenantMap.set(p.tenant_id, {
 							id: p.tenant_id,
@@ -170,20 +207,76 @@
 					}
 				});
 				tenants = Array.from(tenantMap.values());
-				console.log('✅ Tenants extracted:', tenants.length);
-				console.log('🏪 Tenants:', tenants);  // Debug: show all tenants
 			}
 			
-			// Load ALL categories
-			const categoriesRes = await fetch(`${apiUrl}/products/categories/`);
-			if (categoriesRes.ok) {
-				const categoriesData = await categoriesRes.json();
-				categories = categoriesData.results || categoriesData || [];
-				console.log('Categories loaded:', categories.length);
+			if (cachedCategories.length > 0) {
+				categories = cachedCategories;
+				console.log('📦 Loaded from cache:', cachedCategories.length, 'categories');
+			}
+			
+			// 2. If online, sync with server in background
+			if ($isOnline) {
+				console.log('🌐 Online - syncing with server...');
+				try {
+					// Fetch fresh data from server
+					const productsRes = await fetch(`${apiUrl}/products/`);
+					if (productsRes.ok) {
+						const productsData = await productsRes.json();
+						const freshProducts = productsData.results || productsData || [];
+						
+						if (freshProducts.length > 0) {
+							// Update IndexedDB cache
+							await db.products.clear();
+							await db.products.bulkAdd(freshProducts);
+							
+							// Update UI
+							products = freshProducts;
+							console.log('✅ Synced:', freshProducts.length, 'products from server');
+							
+							// Update tenants
+							const tenantMap = new Map();
+							products.forEach(p => {
+								if (p.tenant_id && !tenantMap.has(p.tenant_id)) {
+									tenantMap.set(p.tenant_id, {
+										id: p.tenant_id,
+										name: p.tenant_name,
+										slug: p.tenant_slug,
+										color: p.tenant_color
+									});
+								}
+							});
+							tenants = Array.from(tenantMap.values());
+						}
+					}
+					
+					// Sync categories
+					const categoriesRes = await fetch(`${apiUrl}/categories/`);
+					if (categoriesRes.ok) {
+						const categoriesData = await categoriesRes.json();
+						const freshCategories = categoriesData.results || categoriesData || [];
+						
+						if (freshCategories.length > 0) {
+							await db.categories.clear();
+							await db.categories.bulkAdd(freshCategories);
+							categories = freshCategories;
+							console.log('✅ Synced:', freshCategories.length, 'categories from server');
+						}
+					}
+				} catch (error) {
+					console.warn('⚠️ Server sync failed, using cached data:', error.message);
+				}
+			} else {
+				console.log('📴 Offline - using cached data only');
+			}
+			
+			// 3. If no data at all (first time), show message
+			if (products.length === 0) {
+				console.warn('⚠️ No products available (cache empty, offline)');
+				alert('Tidak ada data produk. Silakan hubungkan internet untuk pertama kali.');
 			}
 			
 		} catch (error) {
-			console.error('Error loading kiosk data:', error);
+			console.error('❌ Error loading kiosk data:', error);
 		}
 	}
 	
@@ -195,11 +288,20 @@
 	
 	function handleOnline() {
 		isOnline.set(true);
+		console.log('🌐 Connection restored - syncing...');
 		syncWithServer();
+		// Sync pending orders
+		startSync().then(() => {
+			console.log('✅ Background sync completed');
+		}).catch(err => {
+			console.error('❌ Background sync failed:', err);
+		});
 	}
 	
 	function handleOffline() {
 		isOnline.set(false);
+		console.log('📴 Offline mode activated');
+		alert('📴 Mode Offline: Transaksi akan disimpan dan dikirim otomatis saat online');
 	}
 	
 	function selectCategory(categoryId) {
@@ -358,48 +460,71 @@
 			
 			console.log('💳 Processing checkout:', checkoutData);
 			
-			// Call checkout API
-			const response = await fetch(`${apiUrl}/orders/checkout/`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify(checkoutData)
-			});
+			let result;
 			
-			if (!response.ok) {
-				const error = await response.json();
-				console.error('❌ Checkout error response:', error);
-				console.error('❌ Full error object:', JSON.stringify(error, null, 2));
-				
-				// Extract detailed error message
-				let errorMessage = 'Checkout failed';
-				if (error.error) {
-					errorMessage = error.error;
-				} else if (error.detail) {
-					errorMessage = error.detail;
-				} else if (error.items && Array.isArray(error.items)) {
-					errorMessage = error.items.join(', ');
-				} else if (typeof error === 'object') {
-					errorMessage = JSON.stringify(error);
+			// OFFLINE-FIRST: Try online checkout first, fallback to offline queue
+			if ($isOnline) {
+				try {
+					// Try online checkout
+					const response = await fetch(`${apiUrl}/orders/checkout/`, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify(checkoutData)
+					});
+					
+					if (!response.ok) {
+						const error = await response.json();
+						console.error('❌ Checkout error response:', error);
+						
+						// If network error, fallback to offline
+						if (response.status >= 500 || response.status === 0) {
+							throw new Error('Server error - will queue offline');
+						}
+						
+						// Extract detailed error message
+						let errorMessage = 'Checkout failed';
+						if (error.error) {
+							errorMessage = error.error;
+						} else if (error.detail) {
+							errorMessage = error.detail;
+						} else if (error.items && Array.isArray(error.items)) {
+							errorMessage = error.items.join(', ');
+						} else if (typeof error === 'object') {
+							errorMessage = JSON.stringify(error);
+						}
+						
+						throw new Error(errorMessage);
+					}
+					
+					result = await response.json();
+					console.log('✅ Online checkout successful:', result);
+					
+					// 📡 BROADCAST TO KITCHEN SYNC SERVER (Local Network)
+					// Even if online to backend, still broadcast to local kitchen displays
+					if (result.orders && Array.isArray(result.orders)) {
+						result.orders.forEach(order => {
+							broadcastNewOrder(order);
+						});
+					}
+					
+				} catch (fetchError) {
+					console.warn('⚠️ Online checkout failed, queuing offline:', fetchError.message);
+					// Fall through to offline handling
+					result = await handleOfflineCheckout(checkoutData);
 				}
-				
-				throw new Error(errorMessage);
+			} else {
+				// Offline mode - queue for later sync
+				console.log('📴 Offline mode - queuing checkout');
+				result = await handleOfflineCheckout(checkoutData);
 			}
-			
-			const result = await response.json();
-			console.log('✅ Checkout successful:', result);
-			console.log('📦 Orders created:', result.orders?.map(o => ({
-				order_number: o.order_number,
-				tenant_id: o.tenant?.id || o.tenant_id,
-				tenant_name: o.tenant?.name || o.tenant_name,
-				status: o.status,
-				payment_status: o.payment_status,
-				items_count: o.items?.length || 0
-			})));
 			
 			// Clear cart
 			await clearAllCart();
+			
+			// Update pending sync count
+			await updatePendingSyncCount();
 			
 			// Show success modal
 			checkoutResult = result;
@@ -410,6 +535,101 @@
 			console.error('❌ Checkout error:', error);
 			alert(`Checkout gagal: ${error.message}`);
 		}
+	}
+	
+	/**
+	 * Handle offline checkout - save to IndexedDB and queue for sync
+	 */
+	async function handleOfflineCheckout(checkoutData) {
+		console.log('💾 Saving order offline...');
+		
+		// Generate offline order number
+		const timestamp = Date.now();
+		const orderNumber = `OFF-${timestamp}`;
+		
+		// Calculate total from cart
+		const total = $cartTotals.total;
+		
+		// Group items by tenant for multi-tenant orders
+		const itemsByTenant = {};
+		$cartItems.forEach(item => {
+			const tenantId = item.tenant_id || 'unknown';
+			if (!itemsByTenant[tenantId]) {
+				itemsByTenant[tenantId] = {
+					tenant_id: tenantId,
+					tenant_name: item.tenant_name,
+					tenant_color: item.tenant_color,
+					items: []
+				};
+			}
+			itemsByTenant[tenantId].items.push(item);
+		});
+		
+		// Create offline orders (one per tenant)
+		const offlineOrders = [];
+		
+		for (const [tenantId, group] of Object.entries(itemsByTenant)) {
+			const tenantOrderNumber = `${orderNumber}-T${tenantId}`;
+			
+			// Calculate tenant total
+			const tenantTotal = group.items.reduce((sum, item) => {
+				const modifiersTotal = (item.modifiers || []).reduce((mSum, mod) => 
+					mSum + (parseFloat(mod.price_adjustment) || 0), 0);
+				return sum + ((parseFloat(item.product_price) + modifiersTotal) * item.quantity);
+			}, 0);
+			
+			const orderData = {
+				order_number: tenantOrderNumber,
+				tenant_id: group.tenant_id,
+				tenant_name: group.tenant_name,
+				status: 'pending',
+				payment_status: 'paid',
+				payment_method: checkoutData.payment_method,
+				customer_name: checkoutData.customer_name,
+				customer_phone: checkoutData.customer_phone,
+				table_number: checkoutData.table_number,
+				notes: checkoutData.notes,
+				subtotal: tenantTotal,
+				tax: tenantTotal * 0.1,
+				service_charge: tenantTotal * 0.05,
+				total: tenantTotal * 1.15,
+				items: group.items.map(item => ({
+					product_id: item.product_id,
+					product_name: item.product_name,
+					quantity: item.quantity,
+					price: item.product_price,
+					modifiers: item.modifiers || [],
+					notes: item.notes || ''
+				})),
+				created_at: new Date().toISOString(),
+				sync_status: 'pending'
+			};
+			
+			// Save to IndexedDB
+			const orderId = await saveOrder(orderData);
+			console.log(`💾 Saved offline order: ${tenantOrderNumber} (ID: ${orderId})`);
+			
+			// Add to sync queue
+			await addToSyncQueue('order', orderId, 'create', orderData);
+			console.log('📤 Added to sync queue');
+			
+			// 📡 BROADCAST TO KITCHEN SYNC SERVER (Local Network)
+			broadcastNewOrder(orderData);
+			
+			offlineOrders.push({
+				...orderData,
+				id: orderId
+			});
+		}
+		
+		// Return result in same format as online checkout
+		return {
+			orders: offlineOrders,
+			total_amount: total.toString(),
+			payment_method: checkoutData.payment_method,
+			offline: true,
+			message: '📴 Order disimpan offline. Akan dikirim otomatis saat online.'
+		};
 	}
 	
 	function cancelPayment() {
@@ -459,8 +679,13 @@
 					<span class="md:hidden">🍽️ Food Court Kiosk</span>
 				</h1>
 				{#if !$isOnline}
-					<span class="offline-indicator text-kiosk-base">
-						📴 Offline Mode
+					<span class="offline-indicator text-kiosk-base px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full font-semibold shadow-md">
+						📴 Offline
+					</span>
+				{/if}
+				{#if pendingSyncCount > 0}
+					<span class="pending-sync-indicator text-sm px-2 py-1 bg-orange-500 text-white rounded-full font-semibold shadow-md">
+						⏳ {pendingSyncCount} pending
 					</span>
 				{/if}
 			</div>
@@ -880,6 +1105,7 @@
 			payments={checkoutResult.payments}
 			totalAmount={parseFloat(checkoutResult.total_amount)}
 			paymentMethod={checkoutResult.payment_method}
+			offline={checkoutResult.offline || false}
 			on:close={closeSuccessModal}
 		/>
 	{/if}

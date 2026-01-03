@@ -16,8 +16,57 @@ from apps.tenants.serializers import (
     OutletSerializer,
     OutletDetailSerializer
 )
-from apps.core.permissions import IsAdminOrTenantOwnerOrManager
+from apps.core.permissions import IsAdminOrTenantOwnerOrManager, IsSuperAdmin
 from apps.core.context import get_current_tenant
+from config.pagination import StandardResultsSetPagination
+
+
+class TenantManagementViewSet(viewsets.ModelViewSet):
+    """
+    Admin API for Tenant Management (CRUD)
+    
+    Endpoints:
+    - GET /api/admin/tenants/ - List all tenants
+    - POST /api/admin/tenants/ - Create tenant
+    - GET /api/admin/tenants/{id}/ - Get tenant detail
+    - PUT /api/admin/tenants/{id}/ - Update tenant
+    - PATCH /api/admin/tenants/{id}/ - Partial update
+    - DELETE /api/admin/tenants/{id}/ - Delete tenant
+    - GET /api/admin/tenants/stats/ - Tenant statistics
+    """
+    
+    queryset = Tenant.objects.all()
+    serializer_class = TenantSerializer
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name', 'slug', 'phone', 'email']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['-created_at']
+    
+    def get_serializer_class(self):
+        """Use detailed serializer for retrieve actions"""
+        if self.action == 'retrieve':
+            return TenantDetailSerializer
+        return TenantSerializer
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Get tenant statistics
+        
+        GET /api/admin/tenants/stats/
+        """
+        total = Tenant.objects.count()
+        active = Tenant.objects.filter(is_active=True).count()
+        inactive = total - active
+        
+        return Response({
+            'total': total,
+            'active': active,
+            'inactive': inactive
+        })
 
 
 class TenantSettingsViewSet(viewsets.ModelViewSet):
@@ -162,24 +211,30 @@ class OutletManagementViewSet(viewsets.ModelViewSet):
     serializer_class = OutletSerializer
     permission_classes = [IsAuthenticated, IsAdminOrTenantOwnerOrManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'city', 'province']
+    filterset_fields = ['is_active', 'city', 'province', 'tenant']
     search_fields = ['name', 'address', 'city', 'phone', 'email']
     ordering_fields = ['name', 'city', 'created_at']
     ordering = ['name']
     
     def get_queryset(self):
         """
-        Filter outlets by current tenant
-        - Super admin: Can see all outlets
+        Filter outlets by tenant
+        - Super admin: Can filter by tenant parameter or see all
         - Regular admin/owner: Only their tenant's outlets
         """
-        if self.request.user.is_superuser:
-            return Outlet.objects.all()
+        queryset = Outlet.objects.all()
         
-        # Get current tenant
+        # Super admin can filter by tenant parameter
+        if self.request.user.is_superuser or getattr(self.request.user, 'role', None) in ['admin', 'super_admin']:
+            tenant_id = self.request.query_params.get('tenant')
+            if tenant_id:
+                queryset = queryset.filter(tenant_id=tenant_id)
+            return queryset
+        
+        # Regular users: filter by their tenant
         tenant = get_current_tenant()
         if tenant:
-            return Outlet.objects.filter(tenant=tenant)
+            return queryset.filter(tenant=tenant)
         
         return Outlet.objects.none()
     

@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { writable } from 'svelte/store';
+	import { newOrders, syncServerConnected, onNewOrder, acknowledgeOrder } from '$lib/stores/kitchenSync.js';
 	
 	export let tenantId;
 	export let tenantName;
@@ -22,8 +23,41 @@
 	onMount(async () => {
 		await loadOrders();
 		
-		// Refresh every 5 seconds
+		// Refresh every 5 seconds (fallback for when sync server is down)
 		refreshInterval = setInterval(loadOrders, 5000);
+		
+		// 📡 REAL-TIME SYNC: Listen for new orders from Kitchen Sync Server
+		onNewOrder((order) => {
+			console.log('🔔 Real-time order received:', order.order_number);
+			console.log('🔍 Full order object:', JSON.stringify(order, null, 2));
+			console.log('🔍 Tenant check:', {
+				order_tenant_id: order.tenant_id,
+				order_tenant_id_type: typeof order.tenant_id,
+				current_tenant_id: tenantId,
+				current_tenant_id_type: typeof tenantId,
+				loose_match: order.tenant_id == tenantId,
+				strict_match: order.tenant_id === tenantId
+			});
+			
+			// Only add if it's for this tenant (use == for loose comparison to handle string/number)
+			if (order.tenant_id == tenantId) {
+				console.log('✅ Tenant match! Adding order...');
+				// Check if order already exists
+				const exists = orders.find(o => o.order_number === order.order_number);
+				if (!exists) {
+					orders = [order, ...orders];
+					playSound();
+					console.log('✅ Order added to display:', order.order_number);
+				} else {
+					console.log('⚠️ Order already in display:', order.order_number);
+				}
+				
+				// Acknowledge receipt
+				acknowledgeOrder(order.order_number);
+			} else {
+				console.log('❌ Tenant mismatch - order not for this kitchen');
+			}
+		});
 	});
 	
 	onDestroy(() => {
@@ -97,22 +131,43 @@
 	}
 	
 	function playSound() {
-		// Play a simple beep sound
-		const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-		const oscillator = audioContext.createOscillator();
-		const gainNode = audioContext.createGain();
-		
-		oscillator.connect(gainNode);
-		gainNode.connect(audioContext.destination);
-		
-		oscillator.frequency.value = 800;
-		oscillator.type = 'sine';
-		
-		gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-		gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-		
-		oscillator.start(audioContext.currentTime);
-		oscillator.stop(audioContext.currentTime + 0.1);
+		// Play attention-grabbing notification sound (3 beeps)
+		try {
+			const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+			
+			// Multiple beeps for better attention
+			const beeps = [
+				{ frequency: 800, startTime: 0, duration: 0.15 },
+				{ frequency: 1000, startTime: 0.2, duration: 0.15 },
+				{ frequency: 800, startTime: 0.4, duration: 0.15 },
+				{ frequency: 1000, startTime: 0.6, duration: 0.15 },
+				{ frequency: 1200, startTime: 0.8, duration: 0.3 }
+			];
+			
+			beeps.forEach((beep) => {
+				const oscillator = audioContext.createOscillator();
+				const gainNode = audioContext.createGain();
+				
+				oscillator.connect(gainNode);
+				gainNode.connect(audioContext.destination);
+				
+				oscillator.frequency.value = beep.frequency;
+				oscillator.type = 'sine';
+				
+				// Envelope for smooth sound
+				const now = audioContext.currentTime + beep.startTime;
+				gainNode.gain.setValueAtTime(0, now);
+				gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01); // Attack
+				gainNode.gain.exponentialRampToValueAtTime(0.01, now + beep.duration); // Decay
+				
+				oscillator.start(now);
+				oscillator.stop(now + beep.duration);
+			});
+			
+			console.log('🔔 Playing notification sound');
+		} catch (error) {
+			console.error('Failed to play sound:', error);
+		}
 	}
 	
 	function formatCurrency(amount) {
@@ -154,6 +209,19 @@
 		<div class="order-count">
 			<span class="count">{orders.length}</span>
 			<span class="label">Pesanan Aktif</span>
+		</div>
+		
+		<!-- Sync Status Indicator -->
+		<div class="sync-status">
+			{#if $syncServerConnected}
+				<span class="status-connected" title="Connected to Kitchen Sync Server">
+					📡 Live
+				</span>
+			{:else}
+				<span class="status-disconnected" title="Polling mode (5s interval)">
+					🔄 Polling
+				</span>
+			{/if}
 		</div>
 	</div>
 	
@@ -519,6 +587,32 @@
 	.btn-action:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+	}
+	
+	/* Sync Status Indicator */
+	.sync-status {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.2);
+		font-size: 14px;
+		font-weight: 600;
+	}
+	
+	.status-connected {
+		color: #10B981;
+		animation: pulse 2s infinite;
+	}
+	
+	.status-disconnected {
+		color: #F59E0B;
+	}
+	
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.6; }
 	}
 	
 	.btn-start {

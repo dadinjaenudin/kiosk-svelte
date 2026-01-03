@@ -31,8 +31,11 @@ class Category(TenantModel):
 class Product(TenantModel):
     """
     Product/Menu item
+    Multi-outlet: Products can be outlet-specific or shared across all outlets
     """
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='products')
+    outlet = models.ForeignKey(Outlet, on_delete=models.CASCADE, null=True, blank=True, related_name='products',
+                               help_text='If set, product is only available at this outlet. Leave blank for all outlets.')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
     
     sku = models.CharField(max_length=50, unique=True)
@@ -82,6 +85,7 @@ class Product(TenantModel):
 class ProductModifier(models.Model):
     """
     Product modifiers (size, toppings, level pedas, etc)
+    Can be attached to specific products or be global (product=null)
     """
     MODIFIER_TYPES = (
         ('size', 'Size'),
@@ -91,7 +95,7 @@ class ProductModifier(models.Model):
         ('sauce', 'Sauce'),
     )
     
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='modifiers')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='modifiers', null=True, blank=True)
     name = models.CharField(max_length=200)
     type = models.CharField(max_length=20, choices=MODIFIER_TYPES, default='extra')
     price_adjustment = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -103,7 +107,9 @@ class ProductModifier(models.Model):
         ordering = ['sort_order', 'name']
     
     def __str__(self):
-        return f"{self.product.name} - {self.name} (+Rp {self.price_adjustment:,.0f})"
+        if self.product:
+            return f"{self.product.name} - {self.name} (+Rp {self.price_adjustment:,.0f})"
+        return f"{self.name} (+Rp {self.price_adjustment:,.0f})"
 
 
 class OutletProduct(models.Model):

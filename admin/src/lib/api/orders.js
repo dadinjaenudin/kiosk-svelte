@@ -27,6 +27,7 @@ export async function getOrders(params = {}) {
     if (params.outlet) queryParams.append('outlet', params.outlet);
     if (params.ordering) queryParams.append('ordering', params.ordering);
     if (params.page) queryParams.append('page', params.page);
+    if (params.page_size) queryParams.append('page_size', params.page_size);
     
     const url = `${API_BASE}/admin/orders/?${queryParams.toString()}`;
     return await authFetch(url);

@@ -14,9 +14,10 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sku', 'category', 'price', 'is_available', 'created_at')
-    list_filter = ('category', 'is_available', 'created_at')
+    list_display = ('name', 'sku', 'category', 'outlet', 'price', 'is_available', 'created_at')
+    list_filter = ('category', 'outlet', 'is_available', 'created_at')
     search_fields = ('name', 'sku', 'description')
+    raw_id_fields = ('tenant', 'outlet', 'category')  # For better performance with ForeignKey
 
 
 @admin.register(ProductModifier)

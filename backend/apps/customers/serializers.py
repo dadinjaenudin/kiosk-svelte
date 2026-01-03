@@ -30,7 +30,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'last_order_at',
             'total_orders', 'total_spent', 'average_order_value'
         ]
-        read_only_fields = ['id', 'membership_number', 'created_at', 'updated_at', 'last_order_at']
+        read_only_fields = ['id', 'tenant', 'membership_number', 'created_at', 'updated_at', 'last_order_at']
     
     def validate_phone(self, value):
         """Validate phone number"""

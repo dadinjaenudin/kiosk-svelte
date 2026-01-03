@@ -45,10 +45,26 @@ class ReportsViewSet(viewsets.ViewSet):
         user = self.request.user
         queryset = model.objects.all()
         
+        # Check for tenant filter from query params (for admin users)
+        tenant_id = self.request.query_params.get('tenant')
+        
+        # Clean tenant_id - handle empty string, 'null', 'undefined'
+        if tenant_id in ['', 'null', 'undefined', 'None']:
+            tenant_id = None
+        
         # Apply tenant filtering
-        if user.role == 'admin':
-            # Admin sees all
-            pass
+        if user.role in ['admin', 'super_admin']:
+            # Admin can filter by tenant if provided
+            if tenant_id:
+                try:
+                    tenant_id = int(tenant_id)
+                    if hasattr(model, 'tenant'):
+                        queryset = queryset.filter(tenant_id=tenant_id)
+                    elif model == Order:
+                        queryset = queryset.filter(tenant_id=tenant_id)
+                except (ValueError, TypeError):
+                    # Invalid tenant_id, ignore filter
+                    pass
         elif hasattr(user, 'tenant') and user.tenant:
             # Tenant sees only their data
             if hasattr(model, 'tenant'):
@@ -245,7 +261,7 @@ class ReportsViewSet(viewsets.ViewSet):
             'product__image'
         ).annotate(
             quantity_sold=Sum('quantity'),
-            revenue=Sum(F('quantity') * F('price'), output_field=DecimalField()),
+            revenue=Sum('total_price'),
             orders_count=Count('order', distinct=True)
         ).order_by('-quantity_sold')[:limit]
         
@@ -285,7 +301,7 @@ class ReportsViewSet(viewsets.ViewSet):
             'product__category__name'
         ).annotate(
             quantity_sold=Sum('quantity'),
-            revenue=Sum(F('quantity') * F('price'), output_field=DecimalField()),
+            revenue=Sum('total_price'),
             orders_count=Count('order', distinct=True)
         ).order_by('-revenue')
         
@@ -399,15 +415,30 @@ class ReportsViewSet(viewsets.ViewSet):
         
         GET /api/admin/reports/payment_methods/?period=30days
         """
+        from apps.payments.models import Payment
+        
         start_date, end_date = self.get_date_range(request)
         
-        orders = self.get_queryset_for_user(Order, 'created_at', start_date, end_date)
-        completed_orders = orders.filter(status='completed')
+        # Query payments instead of orders
+        user = request.user
+        if user.is_superuser or user.role in ['super_admin', 'admin']:
+            payments = Payment.objects.filter(
+                created_at__gte=start_date,
+                created_at__lte=end_date,
+                status='success'
+            )
+        else:
+            payments = Payment.objects.filter(
+                order__tenant=user.tenant,
+                created_at__gte=start_date,
+                created_at__lte=end_date,
+                status='success'
+            )
         
         # Count by payment method
-        payment_stats = completed_orders.values('payment_method').annotate(
+        payment_stats = payments.values('payment_method').annotate(
             count=Count('id'),
-            revenue=Sum('total_amount')
+            revenue=Sum('amount')
         ).order_by('-revenue')
         
         results = []

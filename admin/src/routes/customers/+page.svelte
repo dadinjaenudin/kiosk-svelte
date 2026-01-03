@@ -25,13 +25,21 @@
 		isValidPhone
 	} from '$lib/api/customers';
 
-	// Safe alert function for SSR compatibility
-	function safeAlert(message) {
-		if (browser && typeof alert !== 'undefined') {
-			alert(message);
-		} else {
-			console.log('[Alert]:', message);
-		}
+	// Toast notification state
+	let showToast = false;
+	let toastMessage = '';
+	let toastType = 'success'; // 'success' | 'error' | 'info'
+
+	// Show alert function with toast
+	function showAlert(message, type = 'success') {
+		toastMessage = message;
+		toastType = type;
+		showToast = true;
+		
+		// Auto hide after 3 seconds
+		setTimeout(() => {
+			showToast = false;
+		}, 3000);
 	}
 
 	// Customers State
@@ -126,7 +134,7 @@
 			allCustomersSelected = false;
 		} catch (error) {
 			console.error('Failed to load customers:', error);
-			safeAlert('Failed to load customers');
+			showAlert('Failed to load customers', 'error');
 		} finally {
 			customersLoading = false;
 		}
@@ -207,23 +215,39 @@
 				errors.email = 'Invalid email format';
 			}
 
+			if (!customerForm.gender || customerForm.gender === '') {
+				errors.gender = 'Gender is required';
+			}
+
 			if (Object.keys(errors).length > 0) {
 				return;
 			}
 
+			// Sanitize data - convert empty strings to null for optional fields
+			const sanitizedData = {
+				...customerForm,
+				email: customerForm.email?.trim() || '',
+				gender: customerForm.gender || '',  // CharField, use empty string not null
+				date_of_birth: customerForm.date_of_birth || null,
+				address: customerForm.address?.trim() || '',
+				city: customerForm.city?.trim() || '',
+				postal_code: customerForm.postal_code?.trim() || '',
+				notes: customerForm.notes?.trim() || ''
+			};
+
 			if (editingCustomer) {
-				await updateCustomer(editingCustomer.id, customerForm);
+				await updateCustomer(editingCustomer.id, sanitizedData);
 			} else {
-				await createCustomer(customerForm);
+				await createCustomer(sanitizedData);
 			}
 
 			showCustomerModal = false;
 			await loadCustomers();
 			await loadCustomerStats();
-			safeAlert(editingCustomer ? 'Customer updated successfully' : 'Customer created successfully');
+			showAlert(editingCustomer ? 'Customer updated successfully' : 'Customer created successfully', 'success');
 		} catch (error) {
 			console.error('Failed to save customer:', error);
-			safeAlert('Failed to save customer');
+			showAlert('Failed to save customer: ' + (error.message || 'Unknown error'), 'error');
 		}
 	}
 
@@ -235,10 +259,10 @@
 			deletingCustomer = null;
 			await loadCustomers();
 			await loadCustomerStats();
-			safeAlert('Customer deleted successfully');
+			showAlert('Customer deleted successfully');
 		} catch (error) {
 			console.error('Failed to delete customer:', error);
-			safeAlert('Failed to delete customer');
+			showAlert('Failed to delete customer', 'error');
 		}
 	}
 
@@ -266,10 +290,10 @@
 
 			if (pointsAction === 'add') {
 				await addCustomerPoints(pointsCustomer.id, pointsForm.points, pointsForm.reason);
-				safeAlert('Points added successfully');
+				showAlert('Points added successfully');
 			} else {
 				await redeemCustomerPoints(pointsCustomer.id, pointsForm.points, pointsForm.reason);
-				safeAlert('Points redeemed successfully');
+				showAlert('Points redeemed successfully');
 			}
 
 			showPointsModal = false;
@@ -277,7 +301,7 @@
 			await loadCustomerStats();
 		} catch (error) {
 			console.error('Failed to process points:', error);
-			safeAlert(error.message || 'Failed to process points');
+			showAlert(error.message || 'Failed to process points', 'error');
 		}
 	}
 
@@ -304,7 +328,7 @@
 	// Bulk activate
 	async function bulkActivate() {
 		if (selectedCustomers.length === 0) {
-			safeAlert('Please select customers to activate');
+			showAlert('Please select customers to activate');
 			return;
 		}
 
@@ -314,17 +338,17 @@
 			await loadCustomerStats();
 			selectedCustomers = [];
 			allCustomersSelected = false;
-			safeAlert('Customers activated successfully');
+			showAlert('Customers activated successfully');
 		} catch (error) {
 			console.error('Failed to activate customers:', error);
-			safeAlert('Failed to activate customers');
+			showAlert('Failed to activate customers', 'error');
 		}
 	}
 
 	// Bulk deactivate
 	async function bulkDeactivate() {
 		if (selectedCustomers.length === 0) {
-			safeAlert('Please select customers to deactivate');
+			showAlert('Please select customers to deactivate');
 			return;
 		}
 
@@ -334,10 +358,10 @@
 			await loadCustomerStats();
 			selectedCustomers = [];
 			allCustomersSelected = false;
-			safeAlert('Customers deactivated successfully');
+			showAlert('Customers deactivated successfully');
 		} catch (error) {
 			console.error('Failed to deactivate customers:', error);
-			safeAlert('Failed to deactivate customers');
+			showAlert('Failed to deactivate customers', 'error');
 		}
 	}
 
@@ -514,10 +538,10 @@
 				</div>
 			{:else}
 				<div class="overflow-x-auto">
-					<table class="table">
-						<thead class="table-header">
+					<table class="min-w-full divide-y divide-gray-200">
+						<thead class="bg-gray-50">
 							<tr>
-								<th class="w-12">
+								<th scope="col" class="w-12 px-4 py-3 text-left">
 									<input
 										type="checkbox"
 										checked={allCustomersSelected}
@@ -525,23 +549,39 @@
 										class="form-checkbox"
 									/>
 								</th>
-								<th>Customer</th>
-								<th>Contact</th>
-								<th>Membership</th>
-								<th>Points</th>
-								<th>Orders</th>
-								<th>Total Spent</th>
-								<th>Status</th>
-								<th class="text-right">Actions</th>
+								<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Customer
+								</th>
+								<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Contact
+								</th>
+								<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Membership
+								</th>
+								<th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Points
+								</th>
+								<th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Orders
+								</th>
+								<th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Total Spent
+								</th>
+								<th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Status
+								</th>
+								<th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+									Actions
+								</th>
 							</tr>
 						</thead>
-						<tbody class="table-body">
+						<tbody class="bg-white divide-y divide-gray-200">
 							{#each customers as customer (customer.id)}
 								{#if true}
 									{@const statusBadge = getStatusBadge(customer.is_active)}
 									{@const tierBadge = formatMembershipTier(customer.membership_tier)}
-									<tr class="hover:bg-gray-50">
-										<td>
+									<tr class="hover:bg-gray-50 transition-colors">
+										<td class="px-4 py-4">
 											<input
 												type="checkbox"
 												checked={selectedCustomers.includes(customer.id)}
@@ -549,71 +589,79 @@
 												class="form-checkbox"
 											/>
 										</td>
-										<td>
+										<td class="px-6 py-4 whitespace-nowrap">
 											<div class="flex items-center">
-												<div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center mr-3">
+												<div class="flex-shrink-0 w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
 													<span class="text-lg font-bold text-primary-600">{customer.name?.[0]?.toUpperCase()}</span>
 												</div>
-												<div>
-													<p class="font-medium text-gray-900">{customer.name}</p>
+												<div class="ml-3">
+													<p class="text-sm font-medium text-gray-900">{customer.name}</p>
 													<p class="text-xs text-gray-500">{customer.membership_number}</p>
 												</div>
 											</div>
 										</td>
-										<td>
+										<td class="px-6 py-4">
 											<p class="text-sm text-gray-900">{formatPhone(customer.phone)}</p>
 											{#if customer.email}
-												<p class="text-xs text-gray-500">{customer.email}</p>
+												<p class="text-xs text-gray-500 truncate max-w-[200px]">{customer.email}</p>
 											{/if}
 										</td>
-										<td>
-											<span class="badge {tierBadge.colorClass}">
+										<td class="px-6 py-4 whitespace-nowrap">
+											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {tierBadge.colorClass}">
 												{tierBadge.label}
 											</span>
 										</td>
-										<td>
-											<p class="text-sm font-medium text-gray-900">{customer.points.toLocaleString()}</p>
+										<td class="px-6 py-4 whitespace-nowrap text-center">
+											<p class="text-sm font-semibold text-gray-900">{customer.points.toLocaleString()}</p>
 										</td>
-										<td>
+										<td class="px-6 py-4 whitespace-nowrap text-center">
 											<p class="text-sm text-gray-900">{customer.total_orders || 0}</p>
 										</td>
-										<td>
-											<p class="text-sm text-gray-900">{formatCurrency(customer.total_spent)}</p>
+										<td class="px-6 py-4 whitespace-nowrap text-right">
+											<p class="text-sm font-medium text-gray-900">{formatCurrency(customer.total_spent)}</p>
 										</td>
-										<td>
-											<span class="badge {statusBadge.colorClass}">
+										<td class="px-6 py-4 whitespace-nowrap text-center">
+											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {statusBadge.colorClass}">
 												{statusBadge.label}
 											</span>
 										</td>
-										<td class="text-right">
-											<div class="flex items-center justify-end space-x-2">
+										<td class="px-6 py-4 whitespace-nowrap text-right">
+											<div class="flex items-center justify-end space-x-1">
 												<button
 													on:click={() => openEditCustomerModal(customer)}
-													class="btn-icon btn-icon-primary"
+													class="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
 													title="Edit"
 												>
-													✏️
+													<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+													</svg>
 												</button>
 												<button
 													on:click={() => openPointsModal(customer, 'add')}
-													class="btn-icon btn-icon-success"
+													class="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors"
 													title="Add Points"
 												>
-													➕
+													<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+													</svg>
 												</button>
 												<button
 													on:click={() => openPointsModal(customer, 'redeem')}
-													class="btn-icon btn-icon-warning"
+													class="p-2 text-orange-600 hover:bg-orange-50 rounded-md transition-colors"
 													title="Redeem Points"
 												>
-													➖
+													<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+													</svg>
 												</button>
 												<button
 													on:click={() => { deletingCustomer = customer; showDeleteModal = true; }}
-													class="btn-icon btn-icon-danger"
+													class="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
 													title="Delete"
 												>
-													🗑️
+													<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+													</svg>
 												</button>
 											</div>
 										</td>
@@ -626,30 +674,63 @@
 
 				<!-- Pagination -->
 				{#if totalPages > 1}
-					<div class="border-t border-gray-200 px-6 py-4">
-						<div class="flex items-center justify-between">
-							<div class="text-sm text-gray-700">
-								Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalCustomers)} of {totalCustomers} customers
-							</div>
-							<div class="flex space-x-2">
+					<div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+						<div class="text-sm text-gray-700">
+							Showing page {currentPage} of {totalPages} ({totalCustomers} total)
+						</div>
+						<div class="flex gap-2">
+							<button
+								on:click={() => goToPage(currentPage - 1)}
+								disabled={currentPage === 1}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								Previous
+							</button>
+							
+							{#if currentPage > 3}
 								<button
-									on:click={() => goToPage(currentPage - 1)}
-									disabled={currentPage === 1}
-									class="btn btn-secondary btn-sm"
+									on:click={() => goToPage(1)}
+									class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
 								>
-									Previous
+									1
 								</button>
-								<span class="px-4 py-2 text-sm text-gray-700">
-									Page {currentPage} of {totalPages}
-								</span>
+								{#if currentPage > 4}
+									<span class="px-3 py-1">...</span>
+								{/if}
+							{/if}
+							
+							{#each Array(Math.min(5, totalPages)) as _, i}
+								{@const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4))}
+								{@const page = startPage + i}
+								{#if page <= totalPages}
+									<button
+										on:click={() => goToPage(page)}
+										class="px-3 py-1 border rounded-lg {currentPage === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}"
+									>
+										{page}
+									</button>
+								{/if}
+							{/each}
+							
+							{#if currentPage < totalPages - 2}
+								{#if currentPage < totalPages - 3}
+									<span class="px-3 py-1">...</span>
+								{/if}
 								<button
-									on:click={() => goToPage(currentPage + 1)}
-									disabled={currentPage === totalPages}
-									class="btn btn-secondary btn-sm"
+									on:click={() => goToPage(totalPages)}
+									class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50"
 								>
-									Next
+									{totalPages}
 								</button>
-							</div>
+							{/if}
+							
+							<button
+								on:click={() => goToPage(currentPage + 1)}
+								disabled={currentPage === totalPages}
+								class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								Next
+							</button>
 						</div>
 					</div>
 				{/if}
@@ -723,6 +804,9 @@
 									<option value={gender.value}>{gender.label}</option>
 								{/each}
 							</select>
+							{#if errors.gender}
+								<p class="form-error">{errors.gender}</p>
+							{/if}
 						</div>
 
 						<div>
@@ -945,3 +1029,53 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Toast Notification -->
+{#if showToast}
+	<div class="fixed top-4 right-4 z-50 animate-slide-in">
+		<div class="bg-white rounded-lg shadow-lg border-l-4 {toastType === 'success' ? 'border-green-500' : toastType === 'error' ? 'border-red-500' : 'border-blue-500'} p-4 min-w-[300px] max-w-md">
+			<div class="flex items-start">
+				<div class="flex-shrink-0">
+					{#if toastType === 'success'}
+						<svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{:else if toastType === 'error'}
+						<svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{:else}
+						<svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					{/if}
+				</div>
+				<div class="ml-3 flex-1">
+					<p class="text-sm font-medium text-gray-900">{toastMessage}</p>
+				</div>
+				<button on:click={() => showToast = false} class="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600">
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<style>
+	@keyframes slide-in {
+		from {
+			transform: translateX(100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
+	}
+	
+	.animate-slide-in {
+		animation: slide-in 0.3s ease-out;
+	}
+</style>

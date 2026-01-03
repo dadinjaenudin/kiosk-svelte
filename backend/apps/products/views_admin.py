@@ -12,27 +12,57 @@ from django.db.models import Q, Count, Sum, F
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.db import models
+from django.core.exceptions import ValidationError
 import os
 
 from apps.products.models import Product, Category, ProductModifier
 from apps.products.serializers import ProductSerializer, CategorySerializer, ProductModifierSerializer
-from apps.core.permissions import IsAdminOrTenantOwnerOrManager
+from apps.tenants.models import Tenant
+from apps.core.permissions import (
+    IsAdminOrTenantOwnerOrManager,
+    CanManageProducts,
+    is_admin_user
+)
 
 logger = logging.getLogger(__name__)
 
 
 class CategoryAdminSerializer(CategorySerializer):
     """Extended category serializer for admin with write support"""
+    tenant = serializers.PrimaryKeyRelatedField(
+        queryset=Tenant.all_objects.all() if hasattr(Tenant, 'all_objects') else Tenant._base_manager.all(),
+        required=True
+    )
     
     class Meta(CategorySerializer.Meta):
-        read_only_fields = ['created_at', 'updated_at']
+        fields = CategorySerializer.Meta.fields + ['tenant']
+        read_only_fields = ['tenant_id', 'tenant_name', 'created_at', 'updated_at']
 
 
 class ProductAdminSerializer(ProductSerializer):
     """Extended product serializer for admin with write support"""
+    tenant = serializers.PrimaryKeyRelatedField(
+        queryset=Tenant.all_objects.all() if hasattr(Tenant, 'all_objects') else Tenant._base_manager.all(),
+        required=True
+    )
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.all_objects.all() if hasattr(Category, 'all_objects') else Category._base_manager.all(),
+        required=True
+    )
     
     class Meta(ProductSerializer.Meta):
-        read_only_fields = ['created_at', 'updated_at']
+        fields = [
+            'id', 'tenant', 'sku', 'name', 'description', 'image', 
+            'price', 'cost', 'category', 'category_name',
+            'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color',
+            'track_stock', 'stock_quantity', 'low_stock_alert',
+            'is_active', 'is_available', 'is_featured', 
+            'is_popular', 'has_promo', 'promo_price',
+            'preparation_time', 'calories', 'tags',
+            'modifiers', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color', 
+                           'category_name', 'modifiers', 'created_at', 'updated_at']
 
 
 class CategoryManagementViewSet(viewsets.ModelViewSet):
@@ -48,7 +78,7 @@ class CategoryManagementViewSet(viewsets.ModelViewSet):
     - DELETE /api/admin/categories/{id}/ - Delete category
     """
     serializer_class = CategoryAdminSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrTenantOwnerOrManager]
+    permission_classes = [IsAuthenticated, CanManageProducts]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['tenant', 'is_active']
@@ -58,13 +88,24 @@ class CategoryManagementViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """
-        Filter categories based on user role
+        Filter categories based on user role.
+        Admin sees all, regular users see only their tenant.
         """
         user = self.request.user
         
-        if user.role == 'admin':
-            # Super admin sees all categories
-            return Category.objects.all().select_related('tenant')
+        if is_admin_user(user):
+            # Admin sees all categories (bypass tenant filtering)
+            queryset = Category.all_objects.all().select_related('tenant')
+            
+            # Allow admin to filter by tenant via query param
+            tenant_id = self.request.query_params.get('tenant')
+            if tenant_id and tenant_id not in ['null', 'undefined', '']:
+                try:
+                    queryset = queryset.filter(tenant_id=int(tenant_id))
+                except (ValueError, TypeError):
+                    pass
+            
+            return queryset
         elif user.tenant:
             # Tenant users see only their categories
             return Category.objects.filter(tenant=user.tenant)
@@ -72,12 +113,30 @@ class CategoryManagementViewSet(viewsets.ModelViewSet):
         return Category.objects.none()
     
     def perform_create(self, serializer):
-        """Auto-assign tenant for tenant users"""
+        """Auto-assign tenant based on user role"""
         user = self.request.user
-        if user.tenant and user.role != 'admin':
+        
+        if is_admin_user(user):
+            # Admin must provide tenant in request data
+            serializer.save()
+        elif user.tenant:
+            # Regular users get their tenant auto-assigned
             serializer.save(tenant=user.tenant)
         else:
-            serializer.save()
+            raise ValidationError({"tenant": "User must have a tenant assigned"})
+    
+    def perform_update(self, serializer):
+        """Validate tenant on update"""
+        user = self.request.user
+        instance = self.get_object()
+        
+        if not is_admin_user(user):
+            # Non-admin cannot change tenant
+            if 'tenant' in serializer.validated_data:
+                if serializer.validated_data['tenant'] != instance.tenant:
+                    raise ValidationError({"tenant": "Cannot change tenant"})
+        
+        serializer.save()
     
     @action(detail=False, methods=['get'])
     def stats(self, request):
@@ -124,35 +183,70 @@ class ProductManagementViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """
-        Filter products based on user role
+        Filter products based on user role and outlet context.
+        
+        - Admin: All products from all tenants
+        - Tenant Owner: All products in their tenant
+        - Manager: Products in accessible outlets + shared products (outlet=null)
+        - Others: Products in their tenant
         """
+        from apps.core.context import get_current_tenant, get_current_outlet
+        
         user = self.request.user
         
-        if user.role == 'admin':
-            # Super admin sees all products
-            queryset = Product.objects.all()
+        if is_admin_user(user):
+            # Admin sees all products from all tenants
+            # Use all_objects to bypass TenantManager filtering
+            queryset = Product.all_objects.all()
+            
+            # Allow admin to filter by tenant via query param
+            tenant_id = self.request.query_params.get('tenant')
+            if tenant_id and tenant_id not in ['null', 'undefined', '']:
+                try:
+                    queryset = queryset.filter(tenant_id=int(tenant_id))
+                except (ValueError, TypeError):
+                    pass
         elif user.tenant:
-            # Tenant users see only their products
+            # Start with tenant-scoped products
             queryset = Product.objects.filter(tenant=user.tenant)
+            
+            # Apply outlet filtering based on role
+            current_outlet = get_current_outlet()
+            
+            if current_outlet and user.role in ['manager', 'cashier', 'kitchen']:
+                # Filter by current outlet OR products available at all outlets
+                queryset = queryset.filter(
+                    models.Q(outlet=current_outlet) | models.Q(outlet__isnull=True)
+                )
         else:
             queryset = Product.objects.none()
         
-        return queryset.select_related('tenant', 'category').prefetch_related('modifiers')
+        return queryset.select_related('tenant', 'category', 'outlet').prefetch_related('modifiers')
     
     def perform_create(self, serializer):
-        """Auto-assign tenant and handle image upload"""
+        """
+        Auto-assign tenant and outlet based on user role and context
+        """
+        from apps.core.context import get_current_tenant, get_current_outlet
+        
         user = self.request.user
         
-        # Auto-assign tenant for tenant users
-        if user.tenant and user.role != 'admin':
-            product = serializer.save(tenant=user.tenant)
+        if is_admin_user(user):
+            # Admin can specify tenant and outlet in request
+            serializer.save()
+        elif user.tenant:
+            # For tenant users, auto-assign their tenant
+            current_outlet = get_current_outlet()
+            
+            # Auto-assign outlet if user has outlet context
+            # Product without outlet = available at all outlets
+            if current_outlet and user.role in ['manager', 'cashier']:
+                serializer.save(tenant=user.tenant, outlet=current_outlet)
+            else:
+                # Tenant owner or no outlet context = available at all outlets
+                serializer.save(tenant=user.tenant)
         else:
-            product = serializer.save()
-        
-        # Log creation
-        logger.info(f"Product created: {product.name} (ID: {product.id}) by {user.username}")
-        
-        return product
+            serializer.save()
     
     def perform_update(self, serializer):
         """Handle image upload on update"""
@@ -375,12 +469,23 @@ class ProductManagementViewSet(viewsets.ModelViewSet):
 
 class ProductModifierAdminSerializer(ProductModifierSerializer):
     """Extended modifier serializer for admin with product info"""
-    product_name = serializers.CharField(source='product.name', read_only=True)
-    product_id = serializers.IntegerField(source='product.id', read_only=True)
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.all_objects.all(),
+        required=False,
+        allow_null=True
+    )
+    product_name = serializers.SerializerMethodField()
+    product_id = serializers.SerializerMethodField()
     
     class Meta(ProductModifierSerializer.Meta):
         fields = ProductModifierSerializer.Meta.fields + ['product_name', 'product_id']
         read_only_fields = []
+    
+    def get_product_name(self, obj):
+        return obj.product.name if obj.product else None
+    
+    def get_product_id(self, obj):
+        return obj.product.id if obj.product else None
 
 
 class ProductModifierManagementViewSet(viewsets.ModelViewSet):
@@ -407,21 +512,32 @@ class ProductModifierManagementViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Filter modifiers based on user role
-        - Admin: sees all modifiers
-        - Tenant: sees modifiers for their products only
+        - Super Admin/Admin: sees all modifiers (including global ones)
+        - Tenant: sees global modifiers + modifiers for their products
+        
+        Also supports filtering by tenant query param
         """
         user = self.request.user
         
-        if user.role == 'admin':
-            # Admin sees all
-            return ProductModifier.objects.select_related('product', 'product__tenant').all()
+        if user.is_superuser or user.role in ['super_admin', 'admin']:
+            # Super admin sees all modifiers
+            queryset = ProductModifier.objects.select_related('product', 'product__tenant').all()
         elif hasattr(user, 'tenant') and user.tenant:
-            # Tenant sees modifiers for their products
-            return ProductModifier.objects.filter(
-                product__tenant=user.tenant
+            # Tenant sees global modifiers (product=null) + modifiers for their products
+            queryset = ProductModifier.objects.filter(
+                Q(product__isnull=True) | Q(product__tenant=user.tenant)
             ).select_related('product', 'product__tenant')
         else:
             return ProductModifier.objects.none()
+        
+        # Filter by tenant if specified (for super_admin filtering)
+        tenant_id = self.request.query_params.get('tenant')
+        if tenant_id:
+            queryset = queryset.filter(
+                Q(product__isnull=True) | Q(product__tenant_id=tenant_id)
+            )
+        
+        return queryset
     
     @action(detail=False, methods=['get'])
     def stats(self, request):

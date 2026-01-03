@@ -4,7 +4,7 @@
 
 import { authFetch } from './auth';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = '/api';
 
 /**
  * Get customers list
