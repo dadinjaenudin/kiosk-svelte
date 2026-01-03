@@ -74,6 +74,9 @@ class OutletSerializer(serializers.ModelSerializer):
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'tenant_name', 'created_at']
+        extra_kwargs = {
+            'postal_code': {'required': False, 'allow_blank': True}
+        }
     
     def get_operating_hours(self, obj):
         """Get formatted operating hours"""
