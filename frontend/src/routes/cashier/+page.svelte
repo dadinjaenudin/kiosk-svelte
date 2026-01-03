@@ -353,11 +353,16 @@
 	on:cancel={() => showPaymentModal = false}
 />
 
-<SuccessModal 
-	bind:show={showSuccessModal}
-	orderData={checkoutResult}
-	on:close={() => showSuccessModal = false}
-/>
+{#if showSuccessModal && checkoutResult}
+	<SuccessModal 
+		orders={checkoutResult.orders}
+		payments={checkoutResult.payments}
+		totalAmount={parseFloat(checkoutResult.total_amount)}
+		paymentMethod={checkoutResult.payment_method}
+		offline={checkoutResult.offline || false}
+		on:close={() => showSuccessModal = false}
+	/>
+{/if}
 
 <style>
 	/* 💰 CASHIER PROFESSIONAL THEME - Gray/Dark (Staff-Facing) */
