@@ -47,6 +47,7 @@
 		email: '',
 		opening_time: '09:00',
 		closing_time: '22:00',
+		websocket_url: 'ws://localhost:3001',
 		is_active: true
 	};
 
@@ -125,6 +126,7 @@
 			email: '',
 			opening_time: '09:00',
 			closing_time: '22:00',
+			websocket_url: 'ws://localhost:3001',
 			is_active: true
 		};
 		errors = {};
@@ -146,6 +148,7 @@
 			email: outlet.email || '',
 			opening_time: outlet.opening_time || '09:00',
 			closing_time: outlet.closing_time || '22:00',
+			websocket_url: outlet.websocket_url || 'ws://localhost:3001',
 			is_active: outlet.is_active !== undefined ? outlet.is_active : true
 		};
 		errors = {};
@@ -705,6 +708,24 @@
 								class="form-input"
 							/>
 						</div>
+					</div>
+
+					<!-- WebSocket Configuration -->
+					<div>
+						<label for="outlet-websocket" class="form-label">
+							WebSocket URL
+							<span class="text-xs text-gray-500 ml-2">(Kitchen Sync Server)</span>
+						</label>
+						<input
+							id="outlet-websocket"
+							type="text"
+							bind:value={outletForm.websocket_url}
+							class="form-input"
+							placeholder="ws://192.168.1.10:3001"
+						/>
+						<p class="text-xs text-gray-500 mt-1">
+							Example: ws://192.168.1.10:3001 (use local network IP for multi-outlet)
+						</p>
 					</div>
 
 					<!-- Status -->

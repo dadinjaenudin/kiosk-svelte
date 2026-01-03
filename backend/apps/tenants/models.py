@@ -70,6 +70,14 @@ class Outlet(models.Model):
     opening_time = models.TimeField(null=True, blank=True)
     closing_time = models.TimeField(null=True, blank=True)
     
+    # Network Configuration
+    websocket_url = models.CharField(
+        max_length=255, 
+        blank=True, 
+        default='ws://localhost:3001',
+        help_text='WebSocket URL for Kitchen Sync Server (e.g., ws://192.168.1.10:3001)'
+    )
+    
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -4,7 +4,7 @@
  * for real-time order updates when offline
  */
 
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 // WebSocket connection state
 export const syncServerConnected = writable(false);
@@ -12,18 +12,52 @@ export const syncServerConnected = writable(false);
 // New orders received from POS (via sync server)
 export const newOrders = writable([]);
 
+// Outlet settings with WebSocket URL
+export const outletSettings = writable(null);
+
 let ws = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_DELAY = 3000; // 3 seconds
 
-// Server configuration
-const SYNC_SERVER_URL = import.meta.env.VITE_SYNC_SERVER_URL || 'ws://localhost:3001';
+// Default fallback
+const DEFAULT_SYNC_SERVER_URL = 'ws://localhost:3001';
 
 // Order notification callback
 let onNewOrderCallback = null;
 let onOrderStatusCallback = null;
+
+/**
+ * Get WebSocket URL from outlet settings or fallback
+ */
+function getWebSocketURL() {
+	const settings = get(outletSettings);
+	const wsUrl = settings?.websocket_url || DEFAULT_SYNC_SERVER_URL;
+	console.log('[KitchenSync] Using WebSocket URL:', wsUrl);
+	return wsUrl;
+}
+
+/**
+ * Load outlet settings from API
+ */
+export async function loadOutletSettings(outletId) {
+	try {
+		const response = await fetch(`http://localhost:8000/api/tenants/outlets/${outletId}/`);
+		if (response.ok) {
+			const data = await response.json();
+			outletSettings.set(data);
+			console.log('[KitchenSync] Outlet settings loaded:', {
+				outlet: data.name,
+				websocket_url: data.websocket_url
+			});
+			return data;
+		}
+	} catch (error) {
+		console.error('[KitchenSync] Failed to load outlet settings:', error);
+	}
+	return null;
+}
 
 /**
  * Connect to Kitchen Sync Server
@@ -34,6 +68,7 @@ export function connectToSyncServer() {
 		return;
 	}
 
+	const SYNC_SERVER_URL = getWebSocketURL();
 	console.log(`[KitchenSync] Connecting to ${SYNC_SERVER_URL}...`);
 
 	try {

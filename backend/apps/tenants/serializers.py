@@ -70,6 +70,7 @@ class OutletSerializer(serializers.ModelSerializer):
             'phone', 'email',
             'latitude', 'longitude',
             'opening_time', 'closing_time', 'operating_hours',
+            'websocket_url',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'tenant_name', 'created_at']
