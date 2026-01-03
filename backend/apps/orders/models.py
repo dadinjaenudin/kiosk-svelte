@@ -49,6 +49,15 @@ class Order(models.Model):
     payment_status = models.CharField(max_length=20, default='unpaid', db_index=True)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     
+    # Source tracking
+    SOURCE_CHOICES = (
+        ('kiosk', 'Kiosk'),
+        ('web', 'Web/Mobile'),
+        ('cashier', 'Cashier POS'),
+    )
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='web', db_index=True)
+    device_id = models.CharField(max_length=50, blank=True, null=True, help_text='Device identifier (e.g., kiosk-001)')
+    
     # Staff
     cashier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='orders_as_cashier')
     

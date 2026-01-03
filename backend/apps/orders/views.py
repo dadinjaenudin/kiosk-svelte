@@ -117,10 +117,21 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         
         try:
             with transaction.atomic():
+                # Get source from header or body
+                source = request.headers.get('X-Source') or request.data.get('source', 'web')
+                device_id = request.headers.get('X-Device-ID') or request.data.get('device_id')
+                
+                # Validate source
+                valid_sources = ['kiosk', 'web', 'cashier']
+                if source not in valid_sources:
+                    source = 'web'
+                
                 # Create orders grouped by tenant
                 orders_and_payments = serializer.create_orders(
                     serializer.validated_data,
-                    outlet
+                    outlet,
+                    source=source,
+                    device_id=device_id
                 )
                 
                 orders = [op[0] for op in orders_and_payments]

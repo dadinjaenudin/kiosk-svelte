@@ -35,8 +35,8 @@ class OrderSerializer(serializers.ModelSerializer):
             'outlet', 'status', 'customer_name', 'customer_phone',
             'table_number', 'notes', 'subtotal', 'tax_amount',
             'service_charge_amount', 'discount_amount', 'total_amount',
-            'payment_status', 'paid_amount', 'items', 'created_at',
-            'updated_at', 'completed_at'
+            'payment_status', 'paid_amount', 'source', 'device_id',
+            'items', 'created_at', 'updated_at', 'completed_at'
         ]
         read_only_fields = [
             'order_number', 'subtotal', 'tax_amount', 
@@ -107,10 +107,16 @@ class CheckoutSerializer(serializers.Serializer):
         
         return items
     
-    def create_orders(self, validated_data, outlet):
+    def create_orders(self, validated_data, outlet, source='web', device_id=None):
         """
         Create multiple orders grouped by tenant
         Returns: list of (order, payment) tuples
+        
+        Args:
+            validated_data: Validated checkout data
+            outlet: Outlet instance
+            source: Order source ('kiosk', 'web', 'cashier')
+            device_id: Device identifier (optional)
         """
         items_data = validated_data['items']
         payment_method = validated_data['payment_method']
@@ -167,7 +173,9 @@ class CheckoutSerializer(serializers.Serializer):
                 table_number=table_number,
                 notes=notes,
                 status='pending',
-                payment_status='unpaid'
+                payment_status='unpaid',
+                source=source,
+                device_id=device_id
             )
             
             # Create order items

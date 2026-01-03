@@ -98,7 +98,7 @@ class APIClient {
 	}
 	
 	/**
-	 * Get authorization headers (including tenant context)
+	 * Get authorization headers (including tenant context and source tracking)
 	 */
 	getAuthHeaders() {
 		const headers = {
@@ -116,6 +116,30 @@ class APIClient {
 		
 		if (this.outletId) {
 			headers['X-Outlet-ID'] = String(this.outletId);
+		}
+		
+		// Add source tracking headers
+		if (typeof window !== 'undefined') {
+			// Detect source from URL path
+			const path = window.location.pathname;
+			let source = 'web'; // default
+			
+			if (path.includes('/kiosk')) {
+				source = 'kiosk';
+			} else if (path.includes('/cashier') || path.includes('/admin')) {
+				source = 'cashier';
+			}
+			
+			headers['X-Source'] = source;
+			
+			// Add device ID (from localStorage or generate)
+			let deviceId = localStorage.getItem('device_id');
+			if (!deviceId) {
+				// Generate device ID once
+				deviceId = `${source}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+				localStorage.setItem('device_id', deviceId);
+			}
+			headers['X-Device-ID'] = deviceId;
 		}
 		
 		return headers;
