@@ -1,15 +1,17 @@
 # 🔄 Kitchen Sync Server
 
-Local network WebSocket server untuk komunikasi real-time antara POS dan Kitchen Display saat offline (tanpa internet).
+Local network **Socket.IO** server untuk komunikasi real-time antara POS dan Kitchen Display saat offline (tanpa internet).
 
 ## 📋 Fitur
 
-- ✅ WebSocket server untuk broadcast order real-time
-- ✅ HTTP health check endpoint
-- ✅ Auto-reconnect jika koneksi terputus
+- ✅ **Socket.IO** untuk reliable WebSocket connections
+- ✅ **Room-based broadcasting** per outlet
+- ✅ **Auto-reconnect** jika koneksi terputus
+- ✅ HTTP health check & statistics endpoints
 - ✅ Package sebagai standalone executable (.exe)
 - ✅ Tidak perlu Node.js di production
 - ✅ Auto-start on Windows boot (optional)
+- ✅ Support multiple outlets dengan room isolation
 
 ## 🚀 Quick Start
 
@@ -24,9 +26,10 @@ npm start
 ```
 
 Server akan berjalan di:
-- **WebSocket**: `ws://localhost:3001`
-- **HTTP**: `http://localhost:3002`
+- **Socket.IO**: `http://localhost:3002`
+- **WebSocket Path**: `ws://localhost:3002/socket.io/`
 - **Health Check**: `http://localhost:3002/health`
+- **Outlet Stats**: `http://localhost:3002/outlets`
 
 ### 2️⃣ Production Mode (Standalone Executable)
 
@@ -106,48 +109,146 @@ Expected response:
 ```json
 {
   "status": "ok",
-  "timestamp": "2026-01-03T10:30:00.000Z",
-  "connections": 0,
+  "timestamp": "2026-01-04T10:30:00.000Z",
+  "connections": 2,
+  "rooms": {
+    "outlet_1": 2
+  },
   "uptime": 123.456
 }
 ```
 
-### Test WebSocket Connection
+### Test Outlet Statistics
 
-Buka browser console dan jalankan:
+```bash
+curl http://localhost:3002/outlets
+```
+
+Expected response:
+```json
+{
+  "outlets": [
+    {
+      "outletId": "1",
+      "connections": 2,
+      "clients": [
+        {
+          "socketId": "abc123",
+          "type": "pos",
+          "connectedAt": "2026-01-04T10:30:00.000Z"
+        },
+        {
+          "socketId": "def456",
+          "type": "kitchen",
+          "connectedAt": "2026-01-04T10:31:00.000Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Test Socket.IO Connection (Frontend)
 
 ```javascript
-const ws = new WebSocket('ws://localhost:3001');
+import io from 'socket.io-client';
 
-ws.onopen = () => {
-  console.log('Connected!');
-  ws.send(JSON.stringify({ type: 'test', message: 'Hello' }));
-};
+const socket = io('http://localhost:3002', {
+  transports: ['websocket', 'polling']
+});
 
-ws.onmessage = (event) => {
-  console.log('Received:', event.data);
-};
+socket.on('connect', () => {
+  console.log('✅ Connected:', socket.id);
+  
+  // Subscribe to outlet
+  socket.emit('subscribe_outlet', 1);
+  
+  // Identify as POS or Kitchen
+  socket.emit('identify', { type: 'pos' });
+});
+
+socket.on('subscribed', (data) => {
+  console.log('📍 Subscribed to outlet:', data.outletId);
+});
+
+// Send new order
+socket.emit('new_order', {
+  id: 123,
+  order_number: 'ORD-001',
+  outlet_id: 1,
+  items: [{ name: 'Nasi Goreng', quantity: 2 }],
+  total: 50000
+});
+
+// Listen for order updates
+socket.on('order_created', (order) => {
+  console.log('📦 New order:', order);
+});
+
+socket.on('order_updated', (update) => {
+  console.log('🔄 Order updated:', update);
+});
 ```
+
+## 📊 Socket.IO Events
+
+### Client → Server
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `subscribe_outlet` | `outletId: number` | Join outlet-specific room |
+| `identify` | `{ type: 'pos' \| 'kitchen' }` | Identify client type |
+| `new_order` | `Order` object | Broadcast new order |
+| `update_status` | `{ id, order_number, outlet_id, status }` | Update order status |
+| `complete_order` | `{ id, order_number, outlet_id }` | Mark order completed |
+| `cancel_order` | `{ id, order_number, outlet_id }` | Cancel order |
+| `broadcast` | `any` | Generic broadcast to outlet |
+
+### Server → Client
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `connected` | `{ message, socketId, timestamp }` | Connection established |
+| `subscribed` | `{ outletId, timestamp }` | Successfully subscribed to outlet |
+| `order_created` | `Order` object | New order broadcasted |
+| `order_updated` | `{ id, status, timestamp }` | Order status updated |
+| `order_completed` | `{ id, order_number }` | Order completed |
+| `order_cancelled` | `{ id, order_number }` | Order cancelled |
+| `order_sent` | `{ orderId, timestamp }` | Acknowledgment |
+| `status_updated` | `{ orderId, timestamp }` | Acknowledgment |
+| `message` | `any` | Generic message |
 
 ## 📊 Architecture
 
 ```
 ┌─────────────┐                    ┌──────────────────┐                    ┌─────────────┐
 │  POS Kiosk  │                    │  Sync Server     │                    │   Kitchen   │
-│  (Svelte)   │◄──────────────────►│  (Node.js)       │◄──────────────────►│  Display    │
-│             │   WebSocket        │  ws://localhost  │   WebSocket        │  (Svelte)   │
-│  Checkout   │   Port 3001        │  :3001           │   Port 3001        │  Receives   │
+│  (Svelte)   │◄──────────────────►│  (Socket.IO)     │◄──────────────────►│  Display    │
+│             │   Socket.IO        │  Node.js         │   Socket.IO        │  (Svelte)   │
+│  Checkout   │   Port 3002        │  Port 3002       │   Port 3002        │  Receives   │
 │  Broadcast  │                    │                  │                    │  Orders     │
 └─────────────┘                    └──────────────────┘                    └─────────────┘
+       │                                    │                                      │
+       │                                    │                                      │
+       └────── outlet_1 room ───────────────┴──────────────────────────────────────┘
+                (isolated broadcast)
+
                                             │
-                                            │ HTTP Health Check
-                                            │ Port 3002
+                                            │ HTTP Endpoints
+                                            │ /health, /outlets
                                             ▼
                                    ┌─────────────────┐
                                    │  Monitoring     │
                                    │  (Optional)     │
                                    └─────────────────┘
 ```
+
+### Room-Based Broadcasting
+
+Each outlet has its own room (`outlet_1`, `outlet_2`, etc.):
+- Orders from Outlet 1 only go to Kitchen Display subscribed to Outlet 1
+- Complete isolation between outlets
+- Scalable to hundreds of outlets
 
 ## 🔐 Security Notes
 
@@ -164,7 +265,6 @@ ws.onmessage = (event) => {
 
 ```bash
 # Windows: Check port usage
-netstat -ano | findstr :3001
 netstat -ano | findstr :3002
 
 # Kill process
@@ -174,9 +274,8 @@ taskkill /PID <PID> /F
 ### Firewall Blocking
 
 ```bash
-# Windows: Allow ports (run as Admin)
-netsh advfirewall firewall add rule name="Kitchen Sync WS" dir=in action=allow protocol=TCP localport=3001
-netsh advfirewall firewall add rule name="Kitchen Sync HTTP" dir=in action=allow protocol=TCP localport=3002
+# Windows: Allow port (run as Admin)
+netsh advfirewall firewall add rule name="Kitchen Sync" dir=in action=allow protocol=TCP localport=3002
 ```
 
 ### Cannot Connect from Other PC
@@ -192,13 +291,31 @@ Server logs akan ditampilkan di console:
 ```
 ✅ WebSocket Server: ws://localhost:3001
 ✅ HTTP Server:      http://localhost:3002
-📡 Waiting for connections...
+╔════════════════════════════════════════════════════════════╗
+║     Kitchen Sync Server - RUNNING                          ║
+║     Socket.IO + Express                                    ║
+╚════════════════════════════════════════════════════════════╝
 
-[2026-01-03T10:30:00.000Z] New connection from 192.168.1.100
-[2026-01-03T10:30:05.000Z] Received: new_order
-[2026-01-03T10:30:05.000Z] Client disconnected from 192.168.1.100
-```
+✅ Socket.IO Server: http://localhost:3002
+✅ WebSocket Path:   ws://localhost:3002/socket.io/
+✅ Health Check:     http://localhost:3002/health
+✅ Outlet Stats:     http://localhost:3002/outlets
 
+📡 Waiting for connections from POS and Kitchen displays...
+
+Events Supported:
+  - subscribe_outlet  : Join outlet-specific room
+  - new_order        : Broadcast new order to kitchen
+  - update_status    : Update order status
+  - complete_order   : Mark order as completed
+  - cancel_order     : Cancel order
+
+[2026-01-04T10:30:00.000Z] ✅ New connection: abc123 from 192.168.1.100
+[2026-01-04T10:30:05.000Z] 📍 abc123 subscribed to outlet_1
+[2026-01-04T10:30:10.000Z] 🏷️  abc123 identified as pos
+[2026-01-04T10:31:00.000Z] 📦 New order #ORD-001 from outlet 1
+[2026-01-04T10:32:00.000Z] 🔄 Order #ORD-001 status: preparing
+[2026-01-04T10:35:00.000Z] ✅ Order #ORD-001 completed
 ## 📚 Related Documentation
 
 - [OFFLINE_KITCHEN_SOLUTION.md](../markdown/OFFLINE_KITCHEN_SOLUTION.md) - Complete offline solution guide
