@@ -216,30 +216,24 @@
 	
 	async function loadOutlets() {
 		try {
-			// Try public endpoint first, fallback to authenticated endpoint
-			let response = await fetch(`${apiUrl}/public/outlets/`);
-			if (!response.ok) {
-				// Fallback: try to get from products endpoint (public)
-				response = await fetch(`${apiUrl}/products/`);
-			}
+			// Get outlets from products endpoint (public)
+			const response = await fetch(`${apiUrl}/products/`);
 			if (response.ok) {
 				const data = await response.json();
-				// Check if we got products (need to extract outlets)
-				if (data.results && data.results.length > 0 && data.results[0].outlet_id) {
-					// Extract unique outlets from products
-					const outletMap = new Map();
-					data.results.forEach(p => {
-						if (p.outlet_id && !outletMap.has(p.outlet_id)) {
-							outletMap.set(p.outlet_id, {
-								id: p.outlet_id,
-								name: p.outlet_name || `Outlet ${p.outlet_id}`
-							});
-						}
-					});
-					outlets = Array.from(outletMap.values());
-				} else {
-					outlets = data.results || data || [];
-				}
+				// Extract unique outlets from products
+				const outletMap = new Map();
+				const products = data.results || data || [];
+				
+				products.forEach(p => {
+					if (p.outlet_id && !outletMap.has(p.outlet_id)) {
+						outletMap.set(p.outlet_id, {
+							id: p.outlet_id,
+							name: p.outlet_name || `Outlet ${p.outlet_id}`
+						});
+					}
+				});
+				
+				outlets = Array.from(outletMap.values());
 				console.log('[Kitchen Display] Loaded outlets:', outlets.length);
 			} else {
 				console.error('[Kitchen Display] Failed to load outlets:', response.status);
