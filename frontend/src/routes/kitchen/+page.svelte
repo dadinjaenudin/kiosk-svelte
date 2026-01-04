@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';;
 	import { io } from 'socket.io-client';
+	import { page } from '$app/stores';
 	
 	let socket = null;
 	let orders = [];
@@ -8,6 +9,14 @@
 	let outletId = null;
 	let outlets = [];
 	let selectedOutletId = null;
+	let kitchenType = 'all'; // 'food', 'drink', 'all'
+	
+	// Kitchen type options
+	const kitchenTypes = [
+		{ value: 'all', label: '🍽️ All Items', color: 'blue' },
+		{ value: 'food', label: '🍔 Food Only', color: 'green' },
+		{ value: 'drink', label: '🥤 Drink Only', color: 'orange' }
+	];
 	
 	// Helper functions
 	function formatCurrency(amount) {
@@ -26,10 +35,41 @@
 		});
 	}
 	
-	// Group orders by status
-	$: pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'confirmed');
-	$: preparingOrders = orders.filter(o => o.status === 'preparing');
-	$: readyOrders = orders.filter(o => o.status === 'ready');
+	// Filter orders by kitchen type
+	function filterOrdersByType(order) {
+		if (kitchenType === 'all') return true;
+		
+		// Check if order has items
+		if (!order.items || !Array.isArray(order.items)) return true;
+		
+		// Filter based on product categories
+		const hasMatchingItems = order.items.some(item => {
+			const category = (item.category || '').toLowerCase();
+			const productName = (item.product_name || '').toLowerCase();
+			
+			if (kitchenType === 'food') {
+				// Include if category is food-related or NOT drink
+				return !category.includes('drink') && !category.includes('beverage') && 
+				       !productName.includes('drink') && !productName.includes('juice') &&
+				       !productName.includes('coffee') && !productName.includes('tea');
+			} else if (kitchenType === 'drink') {
+				// Include if category is drink-related
+				return category.includes('drink') || category.includes('beverage') ||
+				       productName.includes('drink') || productName.includes('juice') ||
+				       productName.includes('coffee') || productName.includes('tea');
+			}
+			
+			return false;
+		});
+		
+		return hasMatchingItems;
+	}
+	
+	// Group orders by status with kitchen type filter
+	$: filteredOrders = orders.filter(filterOrdersByType);
+	$: pendingOrders = filteredOrders.filter(o => o.status === 'pending' || o.status === 'confirmed');
+	$: preparingOrders = filteredOrders.filter(o => o.status === 'preparing');
+	$: readyOrders = filteredOrders.filter(o => o.status === 'ready');
 	
 	// Connect to Kitchen Sync Server
 	function connectToKitchenSync(useOutletId = null) {
@@ -47,12 +87,16 @@
 			console.log('[Kitchen Display] ✅ Connected');
 			connected = true;
 			
-			// Identify as kitchen display
-			socket.emit('identify', { type: 'kitchen' });
+			// Identify as kitchen display with type
+			socket.emit('identify', { 
+				type: 'kitchen',
+				kitchenType: kitchenType,
+				outletId: outletId
+			});
 			
 			// Subscribe to outlet
 			socket.emit('subscribe_outlet', outletId);
-			console.log('[Kitchen Display] 📍 Subscribed to outlet:', outletId);
+			console.log('[Kitchen Display] 📍 Subscribed to outlet:', outletId, '| Kitchen Type:', kitchenType);
 		});
 		
 		socket.on('disconnect', () => {
@@ -131,11 +175,28 @@
 	
 	function changeOutlet(newOutletId) {
 		selectedOutletId = parseInt(newOutletId);
+		// Save to localStorage
+		localStorage.setItem('kitchen_outlet', selectedOutletId);
 		// Disconnect current connection
 		disconnectFromKitchenSync();
 		// Clear orders
 		orders = [];
 		// Reconnect to new outlet
+		connectToKitchenSync(selectedOutletId);
+	}
+	
+	function changeKitchenType(newType) {
+		kitchenType = newType;
+		// Save to localStorage
+		localStorage.setItem('kitchen_type', kitchenType);
+		// Update URL
+		const url = new URL(window.location);
+		url.searchParams.set('type', kitchenType);
+		url.searchParams.set('outlet', selectedOutletId);
+		window.history.replaceState({}, '', url);
+		// Reconnect to update server
+		disconnectFromKitchenSync();
+		orders = [];
 		connectToKitchenSync(selectedOutletId);
 	}
 	
@@ -157,8 +218,37 @@
 	}
 	
 	onMount(async () => {
+		// Load from URL params or localStorage
+		const urlParams = new URLSearchParams(window.location.search);
+		const outletParam = urlParams.get('outlet');
+		const typeParam = urlParams.get('type');
+		
 		// Load outlets
 		await loadOutlets();
+		
+		// Set outlet from URL or localStorage or default
+		if (outletParam) {
+			selectedOutletId = parseInt(outletParam);
+			localStorage.setItem('kitchen_outlet', selectedOutletId);
+		} else {
+			const savedOutlet = localStorage.getItem('kitchen_outlet');
+			selectedOutletId = savedOutlet ? parseInt(savedOutlet) : 1;
+		}
+		
+		// Set kitchen type from URL or localStorage or default
+		if (typeParam && ['food', 'drink', 'all'].includes(typeParam)) {
+			kitchenType = typeParam;
+			localStorage.setItem('kitchen_type', kitchenType);
+		} else {
+			const savedType = localStorage.getItem('kitchen_type');
+			kitchenType = savedType || 'all';
+		}
+		
+		// Update URL to reflect current state
+		const url = new URL(window.location);
+		url.searchParams.set('outlet', selectedOutletId);
+		url.searchParams.set('type', kitchenType);
+		window.history.replaceState({}, '', url);
 		
 		// Connect to Kitchen Sync Server
 		connectToKitchenSync();
@@ -189,13 +279,29 @@
 				<select 
 					bind:value={selectedOutletId}
 					on:change={(e) => changeOutlet(e.target.value)}
-					class="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
 				>
 					{#each outlets as outlet (outlet.id)}
 						<option value={outlet.id}>{outlet.name}</option>
 					{/each}
 				</select>
 			{/if}
+			
+			<!-- Kitchen Type Selector -->
+			<div class="flex gap-2 bg-white border border-gray-300 rounded-lg p-1">
+				{#each kitchenTypes as kt}
+					<button
+						on:click={() => changeKitchenType(kt.value)}
+						class="px-3 py-1 text-sm font-medium rounded transition-colors {kitchenType === kt.value ? `bg-${kt.color}-500 text-white` : 'text-gray-700 hover:bg-gray-100'}"
+						class:bg-blue-500={kitchenType === kt.value && kt.color === 'blue'}
+						class:bg-green-500={kitchenType === kt.value && kt.color === 'green'}
+						class:bg-orange-500={kitchenType === kt.value && kt.color === 'orange'}
+						class:text-white={kitchenType === kt.value}
+					>
+						{kt.label}
+					</button>
+				{/each}
+			</div>
 			
 			{#if connected}
 				<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
@@ -227,8 +333,27 @@
 			</div>
 		</div>
 	{/if}
+	
+	<!-- Kitchen Type Info Badge -->
+	{#if kitchenType !== 'all'}
+		<div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+			<div class="flex items-center">
+				<div class="text-2xl mr-3">
+					{#if kitchenType === 'food'}🍔{:else}🥤{/if}
+				</div>
+				<div>
+					<p class="text-sm font-medium text-blue-800">
+						{kitchenType === 'food' ? 'Food Kitchen' : 'Drink Kitchen'} Mode
+					</p>
+					<p class="text-xs text-blue-600 mt-1">
+						Showing only {kitchenType} items. Switch to "All Items" to see everything.
+					</p>
+				</div>
+			</div>
+		</div>
+	{/if}
 
-	{#if orders.length === 0}
+	{#if filteredOrders.length === 0}
 		<div class="text-center py-12">
 			<svg class="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
