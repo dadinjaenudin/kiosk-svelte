@@ -85,6 +85,17 @@ export function connectToSyncServer() {
 			syncServerConnected.set(true);
 			reconnectAttempts = 0;
 
+			// Identify as POS client
+			socket.emit('identify', { type: 'pos' });
+			console.log('[LocalSync] 📍 Identified as POS client');
+
+			// Subscribe to outlet (will be set when outlet is selected)
+			const settings = get(outletSettings);
+			if (settings?.id) {
+				socket.emit('subscribe_outlet', settings.id);
+				console.log(`[LocalSync] 📍 Subscribed to outlet: ${settings.id}`);
+			}
+
 			// Send queued messages
 			if (messageQueue.length > 0) {
 				console.log(`[LocalSync] Sending ${messageQueue.length} queued messages...`);
@@ -125,6 +136,16 @@ export function connectToSyncServer() {
 		socket.on('connected', (data) => {
 			console.log('[LocalSync] ✅ Server welcome:', data.message);
 		});
+
+		// Handle subscribed confirmation
+		socket.on('subscribed', (data) => {
+			console.log(`[LocalSync] ✅ Subscribed to outlet: ${data.outletId}`);
+		});
+
+		// Handle order_created event (acknowledgment from server)
+		socket.on('order_created', (data) => {
+			console.log('[LocalSync] ✅ Order created in kitchen:', data);
+		});
 	} catch (error) {
 		console.error('[LocalSync] Error creating WebSocket:', error);
 		syncServerConnected.set(false);
@@ -154,29 +175,38 @@ export function disconnectFromSyncServer() {
  * @param {Object} order - Order data
  */
 export function broadcastNewOrder(order) {
+	// Get outlet settings for tenant_id
+	const settings = get(outletSettings);
+	const tenantId = order.tenant_id || order.tenant || settings?.tenant || 1;
+
 	const message = {
 		type: 'new_order',
 		timestamp: new Date().toISOString(),
 		data: {
-			order_number: order.order_number,
-			tenant_id: order.tenant_id || order.tenant, // API returns 'tenant', not 'tenant_id'
-			tenant_name: order.tenant_name,
-			tenant_color: order.tenant_color,
-			items: order.items,
-			total: order.total,
+			order_number: order.order_number || `ORD-${Date.now()}`,
+			tenant_id: tenantId,
+			tenant_name: order.tenant_name || 'Unknown Tenant',
+			tenant_color: order.tenant_color || '#3b82f6',
+			items: order.items || [],
+			total: order.total || order.total_amount || 0,
 			status: order.status || 'pending',
 			payment_status: order.payment_status || 'paid',
-			payment_method: order.payment_method,
-			customer_name: order.customer_name,
-			customer_phone: order.customer_phone,
-			table_number: order.table_number,
-			notes: order.notes,
+			payment_method: order.payment_method || 'cash',
+			customer_name: order.customer_name || 'Guest',
+			customer_phone: order.customer_phone || '',
+			table_number: order.table_number || '',
+			notes: order.notes || '',
 			created_at: order.created_at || new Date().toISOString()
 		}
 	};
 
+	// Subscribe to outlet if not already subscribed
+	if (socket && socket.connected && tenantId) {
+		socket.emit('subscribe_outlet', tenantId);
+	}
+
 	sendMessage(message);
-	console.log('[LocalSync] 📤 Broadcasted new order:', order.order_number, 'for tenant:', message.data.tenant_id);
+	console.log('[LocalSync] 📤 Broadcasted new order:', message.data.order_number, 'for tenant:', tenantId);
 }
 
 /**
