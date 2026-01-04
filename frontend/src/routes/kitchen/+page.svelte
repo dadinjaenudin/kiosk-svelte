@@ -3,12 +3,16 @@
 	import { io } from 'socket.io-client';
 	import { page } from '$app/stores';
 	
+	const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
+	
 	let socket = null;
 	let orders = [];
 	let connected = false;
 	let outletId = null;
 	let outlets = [];
 	let selectedOutletId = null;
+	let tenants = [];
+	let selectedTenantId = null;
 	let kitchenType = 'all'; // 'food', 'drink', 'all'
 	
 	// Kitchen type options
@@ -35,8 +39,16 @@
 		});
 	}
 	
-	// Filter orders by kitchen type
+	// Filter orders by kitchen type and tenant
 	function filterOrdersByType(order) {
+		// Filter by tenant first
+		if (selectedTenantId && selectedTenantId !== 'all') {
+			if (order.tenant_id !== parseInt(selectedTenantId)) {
+				return false;
+			}
+		}
+		
+		// Then filter by kitchen type
 		if (kitchenType === 'all') return true;
 		
 		// Check if order has items
@@ -201,30 +213,79 @@
 	}
 	
 	async function loadOutlets() {
-		// Simplified version for frontend - manually define outlets
-		outlets = [
-			{ id: 1, name: 'Outlet 1' },
-			{ id: 2, name: 'Outlet 2' },
-			{ id: 3, name: 'Outlet 3' },
-			{ id: 4, name: 'Outlet 4' },
-			{ id: 5, name: 'Outlet 5' },
-			{ id: 6, name: 'Outlet 6' }
-		];
+		try {
+			const response = await fetch(`${apiUrl}/outlets/all_outlets/`);
+			if (response.ok) {
+				const data = await response.json();
+				outlets = data.results || data || [];
+				console.log('[Kitchen Display] Loaded outlets:', outlets.length);
+			} else {
+				console.error('[Kitchen Display] Failed to load outlets:', response.status);
+				// Fallback to manual outlets
+				outlets = [
+					{ id: 1, name: 'Outlet 1' },
+					{ id: 2, name: 'Outlet 2' },
+					{ id: 3, name: 'Outlet 3' }
+				];
+			}
+		} catch (error) {
+			console.error('[Kitchen Display] Error loading outlets:', error);
+			// Fallback to manual outlets
+			outlets = [
+				{ id: 1, name: 'Outlet 1' },
+				{ id: 2, name: 'Outlet 2' },
+				{ id: 3, name: 'Outlet 3' }
+			];
+		}
 		
 		// Set default outlet
-		if (!selectedOutletId) {
-			selectedOutletId = 1;
+		if (!selectedOutletId && outlets.length > 0) {
+			selectedOutletId = outlets[0].id;
 		}
+	}
+	
+	async function loadTenants() {
+		try {
+			const response = await fetch(`${apiUrl}/tenants/`);
+			if (response.ok) {
+				const data = await response.json();
+				tenants = data.results || data || [];
+				console.log('[Kitchen Display] Loaded tenants:', tenants.length);
+			} else {
+				console.error('[Kitchen Display] Failed to load tenants:', response.status);
+			}
+		} catch (error) {
+			console.error('[Kitchen Display] Error loading tenants:', error);
+		}
+		
+		// Set default tenant (optional - for "All Tenants" filter)
+		if (!selectedTenantId && tenants.length > 0) {
+			selectedTenantId = 'all'; // Show all tenants by default
+		}
+	}
+	
+	function changeTenant(newTenantId) {
+		selectedTenantId = newTenantId === 'all' ? 'all' : parseInt(newTenantId);
+		// Save to localStorage
+		localStorage.setItem('kitchen_tenant', selectedTenantId);
+		// Update URL
+		const url = new URL(window.location);
+		url.searchParams.set('tenant', selectedTenantId);
+		url.searchParams.set('outlet', selectedOutletId);
+		url.searchParams.set('type', kitchenType);
+		window.history.replaceState({}, '', url);
+		// No need to reconnect, just filter locally
 	}
 	
 	onMount(async () => {
 		// Load from URL params or localStorage
 		const urlParams = new URLSearchParams(window.location.search);
 		const outletParam = urlParams.get('outlet');
+		const tenantParam = urlParams.get('tenant');
 		const typeParam = urlParams.get('type');
 		
-		// Load outlets
-		await loadOutlets();
+		// Load outlets and tenants from API
+		await Promise.all([loadOutlets(), loadTenants()]);
 		
 		// Set outlet from URL or localStorage or default
 		if (outletParam) {
@@ -232,7 +293,20 @@
 			localStorage.setItem('kitchen_outlet', selectedOutletId);
 		} else {
 			const savedOutlet = localStorage.getItem('kitchen_outlet');
-			selectedOutletId = savedOutlet ? parseInt(savedOutlet) : 1;
+			if (savedOutlet) {
+				selectedOutletId = parseInt(savedOutlet);
+			} else if (outlets.length > 0) {
+				selectedOutletId = outlets[0].id;
+			}
+		}
+		
+		// Set tenant from URL or localStorage or default
+		if (tenantParam) {
+			selectedTenantId = tenantParam === 'all' ? 'all' : parseInt(tenantParam);
+			localStorage.setItem('kitchen_tenant', selectedTenantId);
+		} else {
+			const savedTenant = localStorage.getItem('kitchen_tenant');
+			selectedTenantId = savedTenant || 'all';
 		}
 		
 		// Set kitchen type from URL or localStorage or default
@@ -247,6 +321,7 @@
 		// Update URL to reflect current state
 		const url = new URL(window.location);
 		url.searchParams.set('outlet', selectedOutletId);
+		url.searchParams.set('tenant', selectedTenantId);
 		url.searchParams.set('type', kitchenType);
 		window.history.replaceState({}, '', url);
 		
@@ -283,6 +358,20 @@
 				>
 					{#each outlets as outlet (outlet.id)}
 						<option value={outlet.id}>{outlet.name}</option>
+					{/each}
+				</select>
+			{/if}
+			
+			<!-- Tenant Selector -->
+			{#if tenants.length > 0}
+				<select 
+					bind:value={selectedTenantId}
+					on:change={(e) => changeTenant(e.target.value)}
+					class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+				>
+					<option value="all">🏪 All Tenants</option>
+					{#each tenants as tenant (tenant.id)}
+						<option value={tenant.id}>{tenant.name}</option>
 					{/each}
 				</select>
 			{/if}
