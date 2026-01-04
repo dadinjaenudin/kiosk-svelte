@@ -12,12 +12,30 @@ from decimal import Decimal
 class OrderItemSerializer(serializers.ModelSerializer):
     """Serializer for order items"""
     
+    # Kitchen Station Info
+    kitchen_station_id = serializers.IntegerField(
+        source='product.kitchen_station.id',
+        read_only=True,
+        allow_null=True
+    )
+    kitchen_station_name = serializers.CharField(
+        source='product.kitchen_station.name',
+        read_only=True,
+        allow_null=True
+    )
+    kitchen_station_code = serializers.CharField(
+        source='product.kitchen_station.code',
+        read_only=True,
+        allow_null=True
+    )
+    
     class Meta:
         model = OrderItem
         fields = [
             'id', 'product', 'product_name', 'product_sku',
             'quantity', 'unit_price', 'modifiers', 'modifiers_price',
-            'total_price', 'notes'
+            'total_price', 'notes',
+            'kitchen_station_id', 'kitchen_station_name', 'kitchen_station_code'
         ]
         read_only_fields = ['total_price']
 

@@ -2,7 +2,7 @@
 Serializers for Tenant API
 """
 from rest_framework import serializers
-from apps.tenants.models import Tenant, Outlet
+from apps.tenants.models import Tenant, Outlet, KitchenStation
 
 
 class TenantSerializer(serializers.ModelSerializer):
@@ -111,3 +111,43 @@ class OutletDetailSerializer(OutletSerializer):
     """
     
     pass
+
+
+class KitchenStationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for KitchenStation model
+    """
+    outlet_name = serializers.CharField(source='outlet.name', read_only=True)
+    product_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = KitchenStation
+        fields = [
+            'id', 'outlet', 'outlet_name', 'name', 'code', 
+            'description', 'is_active', 'sort_order',
+            'product_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_product_count(self, obj):
+        """Get number of products assigned to this station"""
+        return obj.products.filter(is_active=True).count()
+    
+    def validate(self, data):
+        """Validate unique code per outlet"""
+        outlet = data.get('outlet')
+        code = data.get('code')
+        
+        if outlet and code:
+            # Check for existing station with same code in same outlet
+            qs = KitchenStation.objects.filter(outlet=outlet, code=code)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'code': f'Station with code "{code}" already exists in this outlet'
+                })
+        
+        return data
+

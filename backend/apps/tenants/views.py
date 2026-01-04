@@ -5,12 +5,13 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from apps.tenants.models import Tenant, Outlet
+from apps.tenants.models import Tenant, Outlet, KitchenStation
 from apps.tenants.serializers import (
     TenantSerializer,
     TenantDetailSerializer,
     OutletSerializer,
-    OutletDetailSerializer
+    OutletDetailSerializer,
+    KitchenStationSerializer
 )
 from apps.core.context import get_current_tenant
 from apps.core.permissions import (
@@ -309,3 +310,65 @@ class OutletViewSet(viewsets.ModelViewSet):
             'success': True,
             'message': f'Outlet {instance.name} has been deactivated'
         }, status=status.HTTP_200_OK)
+
+
+class KitchenStationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for KitchenStation management
+    
+    list: Get all kitchen stations (filtered by outlet if provided)
+    retrieve: Get specific kitchen station
+    create: Create new kitchen station
+    update: Update kitchen station
+    destroy: Delete kitchen station
+    """
+    serializer_class = KitchenStationSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Filter stations by outlet or accessible outlets for user
+        """
+        queryset = KitchenStation.objects.select_related('outlet')
+        
+        # Filter by outlet if provided in query params
+        outlet_id = self.request.query_params.get('outlet')
+        if outlet_id:
+            queryset = queryset.filter(outlet_id=outlet_id)
+        else:
+            # Filter by user's accessible outlets
+            user = self.request.user
+            if user.role in ['super_admin', 'admin']:
+                # Admin can see all stations
+                pass
+            elif user.role in ['tenant_owner', 'manager']:
+                # Tenant owner/manager can see their tenant's stations
+                tenant = get_current_tenant()
+                if tenant:
+                    queryset = queryset.filter(outlet__tenant=tenant)
+            else:
+                # Other roles see only their outlet's stations
+                if hasattr(user, 'outlet') and user.outlet:
+                    queryset = queryset.filter(outlet=user.outlet)
+        
+        return queryset.filter(is_active=True).order_by('outlet', 'sort_order', 'name')
+    
+    def perform_create(self, serializer):
+        """Create kitchen station with validation"""
+        serializer.save()
+    
+    def perform_update(self, serializer):
+        """Update kitchen station"""
+        serializer.save()
+    
+    def destroy(self, request, *args, **kwargs):
+        """Soft delete kitchen station"""
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        
+        return Response({
+            'success': True,
+            'message': f'Kitchen station {instance.name} has been deactivated'
+        }, status=status.HTTP_200_OK)
+
