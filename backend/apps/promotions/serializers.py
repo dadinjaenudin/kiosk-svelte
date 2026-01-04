@@ -4,7 +4,7 @@ from apps.products.models import Product
 
 
 class PromotionProductSerializer(serializers.ModelSerializer):
-    product_id = serializers.IntegerField(source='product.id', read_only=True)
+    product_id = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
     product_price = serializers.SerializerMethodField()
     product_image = serializers.SerializerMethodField()
@@ -16,24 +16,39 @@ class PromotionProductSerializer(serializers.ModelSerializer):
             'custom_discount_value', 'priority', 'created_at'
         ]
     
+    def get_product_id(self, obj):
+        """Get product ID directly from foreign key field"""
+        return obj.product_id
+    
     def get_product_name(self, obj):
+        """Get product name using all_objects to bypass tenant filtering"""
         try:
-            return obj.product.name if obj.product else None
-        except Exception:
+            if obj.product_id:
+                product = Product.all_objects.filter(id=obj.product_id).first()
+                return product.name if product else f'Product {obj.product_id}'
             return None
+        except Exception as e:
+            return f'Product {obj.product_id}'
     
     def get_product_price(self, obj):
+        """Get product price using all_objects to bypass tenant filtering"""
         try:
-            return float(obj.product.price) if obj.product else None
-        except Exception:
+            if obj.product_id:
+                product = Product.all_objects.filter(id=obj.product_id).first()
+                return float(product.price) if product else 0.0
             return None
+        except Exception as e:
+            return 0.0
     
     def get_product_image(self, obj):
+        """Get product image using all_objects to bypass tenant filtering"""
         try:
-            if obj.product and obj.product.image:
-                request = self.context.get('request')
-                if request:
-                    return request.build_absolute_uri(obj.product.image.url)
+            if obj.product_id:
+                product = Product.all_objects.filter(id=obj.product_id).first()
+                if product and product.image:
+                    request = self.context.get('request')
+                    if request:
+                        return request.build_absolute_uri(product.image.url)
         except Exception:
             pass
         return None

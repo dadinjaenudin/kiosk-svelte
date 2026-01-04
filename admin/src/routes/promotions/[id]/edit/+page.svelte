@@ -98,15 +98,30 @@
 			// Filter out any products that might have been deleted
 			if (promotion.products && promotion.products.length > 0) {
 				console.log('📦 Raw promotion.products from API:', promotion.products);
+				console.log('📦 First product structure:', JSON.stringify(promotion.products[0], null, 2));
 				
 				// Map PromotionProduct objects to product objects for ProductSelector
 				selectedProducts = promotion.products
 					.filter(pp => pp && (pp.product_id || pp.product))
-					.map(pp => ({
-						id: pp.product_id || pp.product,
-						name: pp.product_name || 'Product ' + (pp.product_id || pp.product),
-						price: pp.product_price || 0
-					}));
+					.map(pp => {
+						const productId = pp.product_id || pp.product;
+						const productName = pp.product_name;
+						const productPrice = pp.product_price;
+						
+						console.log(`🔍 Mapping product ${productId}:`, {
+							id: productId,
+							name: productName,
+							price: productPrice,
+							hasName: !!productName,
+							hasPrice: productPrice !== null && productPrice !== undefined
+						});
+						
+						return {
+							id: productId,
+							name: productName || `Product ${productId}`,
+							price: productPrice !== null && productPrice !== undefined ? productPrice : 0
+						};
+					});
 				
 				formData.product_ids = selectedProducts.map(p => p.id);
 				console.log('✅ Loaded products:', selectedProducts);
