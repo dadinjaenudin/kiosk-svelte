@@ -32,11 +32,16 @@ function getWebSocketURL() {
 	const settings = get(outletSettings);
 	let wsUrl = settings?.websocket_url || DEFAULT_SYNC_SERVER_URL;
 	
+	console.log('[LocalSync] DEBUG - Raw URL from settings:', wsUrl);
+	console.log('[LocalSync] DEBUG - Outlet settings:', settings);
+	
 	// Always convert ws:// or wss:// to http:// or https:// for Socket.IO
 	if (wsUrl.startsWith('ws://')) {
 		wsUrl = wsUrl.replace('ws://', 'http://');
+		console.log('[LocalSync] DEBUG - Converted ws:// to http://');
 	} else if (wsUrl.startsWith('wss://')) {
 		wsUrl = wsUrl.replace('wss://', 'https://');
+		console.log('[LocalSync] DEBUG - Converted wss:// to https://');
 	}
 	
 	console.log('[LocalSync] Using WebSocket URL:', wsUrl);

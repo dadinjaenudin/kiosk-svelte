@@ -42,9 +42,8 @@
 		socket.on('disconnect', () => {
 			console.log('[Kitchen Display] 📴 Disconnected');
 			connected = false;
-		});
-		
-		socket.on('subscribed', (data) => {
+		// Clear orders when disconnected to prevent showing stale data
+		orders = [];
 			console.log('[Kitchen Display] ✅ Subscribed:', data);
 		});
 		
@@ -136,22 +135,27 @@
 
 <div class="min-h-screen bg-gray-100 p-4">
 	<!-- Header -->
-	<div class="mb-6 flex items-center justify-between">
-		<div>
+	<div class="mb-6">
+		<div class="flex items-center justify-between mb-2">
 			<h1 class="text-3xl font-bold text-gray-900">🍳 Kitchen Display</h1>
-			<p class="text-gray-600 mt-1">
-				Real-time order display via WebSocket
-				{#if connected}
-					<span class="text-green-600 ml-2">● Connected to Outlet #{outletId}</span>
-				{:else}
-					<span class="text-red-600 ml-2">● Disconnected</span>
-				{/if}
-			</p>
+			<div class="text-right">
+				<div class="text-sm text-gray-600">Total Active Orders</div>
+				<div class="text-3xl font-bold text-gray-900">{orders.length}</div>
+			</div>
 		</div>
-		
-		<div class="text-right">
-			<div class="text-sm text-gray-600">Total Active Orders</div>
-			<div class="text-3xl font-bold text-gray-900">{orders.length}</div>
+		<div class="flex items-center gap-4">
+			<p class="text-gray-600">
+				Real-time order display via WebSocket
+			</p>
+			{#if connected}
+				<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+					● Connected to Outlet #{outletId}
+				</span>
+			{:else}
+				<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+					● Disconnected
+				</span>
+			{/if}
 		</div>
 	</div>
 
