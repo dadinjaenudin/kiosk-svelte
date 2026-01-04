@@ -38,6 +38,16 @@ class Product(TenantModel):
                                help_text='If set, product is only available at this outlet. Leave blank for all outlets.')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
     
+    # Kitchen Station Assignment
+    kitchen_station = models.ForeignKey(
+        'tenants.KitchenStation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='products',
+        help_text='Assign product to specific kitchen station. Leave blank to show in all kitchens.'
+    )
+    
     sku = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)

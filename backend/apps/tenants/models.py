@@ -94,3 +94,31 @@ class Outlet(models.Model):
         if not self.slug:
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
+
+
+class KitchenStation(models.Model):
+    """
+    Kitchen Station - represents a physical kitchen station in an outlet
+    Example: Food Kitchen, Drink Bar, Grill Station, Dessert Station
+    """
+    outlet = models.ForeignKey(Outlet, on_delete=models.CASCADE, related_name='kitchen_stations')
+    name = models.CharField(max_length=100, help_text='Display name (e.g., "Food Kitchen", "Drink Bar")')
+    code = models.CharField(max_length=20, help_text='Short code (e.g., "FOOD", "DRINK", "GRILL")')
+    description = models.TextField(blank=True)
+    
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0, help_text='Display order (lower number = first)')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'kitchen_stations'
+        ordering = ['outlet', 'sort_order', 'name']
+        unique_together = [['outlet', 'code']]
+        indexes = [
+            models.Index(fields=['outlet', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.outlet.name} - {self.name}"
