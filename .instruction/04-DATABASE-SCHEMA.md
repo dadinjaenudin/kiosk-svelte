@@ -293,7 +293,7 @@ CREATE TABLE outlets (
     longitude DECIMAL(9,6),
     opening_time TIME,
     closing_time TIME,
-    websocket_url VARCHAR(255) DEFAULT 'ws://localhost:3001',
+    websocket_url VARCHAR(255) DEFAULT 'http://localhost:3002',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

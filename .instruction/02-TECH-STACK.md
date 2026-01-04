@@ -655,36 +655,120 @@ server {
 
 #### Node.js Kitchen Sync Server
 **Version**: Node.js 18.x  
-**Purpose**: WebSocket server for real-time kitchen updates
+**Purpose**: Socket.IO server for real-time kitchen updates
+**Port**: 3002 (HTTP + WebSocket)  
+**Location**: `local-sync-server/`
 
-**Technology**: Socket.IO
+**Technology**: Socket.IO 4.6.1
+
+**Why Socket.IO**:
+- ✅ Automatic reconnection
+- ✅ Transport fallback (WebSocket → Polling)
+- ✅ Room-based broadcasting
+- ✅ Event-based communication
+- ✅ Better reliability than raw WebSocket
+
+**Server Implementation**:
 ```javascript
-// kitchen-sync-server/server.js
-const io = require('socket.io')(3001, {
+// local-sync-server/server.js
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+
+const app = express();
+const httpServer = http.createServer(app);
+const io = socketIo(httpServer, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+        origin: '*',
+        methods: ['GET', 'POST']
+    },
+    transports: ['websocket', 'polling']
 });
 
-// Handle kitchen display connections
+// Store connected clients per outlet
+const clients = new Map();
+const outletRooms = new Map();
+
+// Socket.IO connection handler
 io.on('connection', (socket) => {
-    console.log('Kitchen display connected:', socket.id);
+    console.log('✅ New connection:', socket.id);
     
-    // Subscribe to outlet-specific orders
+    // Subscribe to outlet-specific room
     socket.on('subscribe_outlet', (outletId) => {
         socket.join(`outlet_${outletId}`);
+        
+        if (!outletRooms.has(outletId)) {
+            outletRooms.set(outletId, new Set());
+        }
+        outletRooms.get(outletId).add(socket.id);
+        
+        socket.emit('subscribed', { outletId });
     });
     
-    // Broadcast new order to outlet
+    // Identify client type (pos/kitchen)
+    socket.on('identify', (data) => {
+        clients.set(socket.id, {
+            type: data.type, // 'pos' or 'kitchen'
+            outletId: data.outletId
+        });
+    });
+    
+    // Broadcast new order to outlet room
     socket.on('new_order', (order) => {
         io.to(`outlet_${order.outlet_id}`).emit('order_created', order);
+        socket.emit('order_sent', { orderId: order.id });
     });
     
     // Update order status
     socket.on('update_status', (update) => {
         io.to(`outlet_${update.outlet_id}`).emit('order_updated', update);
+        socket.emit('status_updated', { orderId: update.id });
     });
+    
+    // Order completion
+    socket.on('complete_order', (data) => {
+        io.to(`outlet_${data.outlet_id}`).emit('order_completed', data);
+    });
+    
+    // Order cancellation
+    socket.on('cancel_order', (data) => {
+        io.to(`outlet_${data.outlet_id}`).emit('order_cancelled', data);
+    });
+});
+
+httpServer.listen(3002);
+```
+
+**Client (POS Terminal)**:
+```javascript
+import io from 'socket.io-client';
+
+const socket = io('http://localhost:3002', {
+    transports: ['websocket', 'polling']
+});
+
+socket.on('connect', () => {
+    console.log('Connected to Kitchen Sync Server');
+    
+    // Subscribe to outlet
+    socket.emit('subscribe_outlet', currentOutletId);
+    
+    // Identify as POS
+    socket.emit('identify', { type: 'pos', outletId: currentOutletId });
+});
+
+// Send new order
+socket.emit('new_order', {
+    id: 123,
+    order_number: 'ORD-001',
+    outlet_id: currentOutletId,
+    items: [...],
+    total: 50000
+});
+
+// Listen for updates
+socket.on('order_updated', (update) => {
+    console.log('Order status updated:', update);
 });
 ```
 
@@ -692,15 +776,20 @@ io.on('connection', (socket) => {
 ```javascript
 import io from 'socket.io-client';
 
-const socket = io('ws://localhost:3001');
+const socket = io('http://localhost:3002');
 
 socket.on('connect', () => {
     socket.emit('subscribe_outlet', currentOutletId);
+    socket.emit('identify', { type: 'kitchen', outletId: currentOutletId });
 });
 
 socket.on('order_created', (order) => {
     addOrderToDisplay(order);
     playNotificationSound();
+});
+
+socket.on('order_updated', (update) => {
+    updateOrderDisplay(update);
 });
 ```
 

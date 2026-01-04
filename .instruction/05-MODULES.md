@@ -444,15 +444,35 @@ stats = {
 - ✅ Order status synchronization
 - ⏱️ Preparation time tracking
 
-### WebSocket Events
+### Socket.IO Events
 
-| Event | Direction | Description |
-|-------|-----------|-------------|
-| `order_created` | Backend → Kitchen | New order received |
-| `order_updated` | Backend → Kitchen | Order status changed |
-| `order_cancelled` | Backend → Kitchen | Order cancelled |
-| `item_ready` | Kitchen → Backend | Item completed |
-| `order_ready` | Kitchen → Backend | Order ready for pickup |
+**Connection**: `http://localhost:3002`  
+**Technology**: Socket.IO 4.6.1 with room-based broadcasting
+
+#### Client → Server Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `subscribe_outlet` | `outletId: number` | Join outlet-specific room |
+| `identify` | `{ type: 'pos'\|'kitchen', outletId }` | Identify client type |
+| `new_order` | `Order object` | Broadcast new order to outlet |
+| `update_status` | `{ id, order_number, outlet_id, status }` | Update order status |
+| `complete_order` | `{ id, order_number, outlet_id }` | Mark order completed |
+| `cancel_order` | `{ id, order_number, outlet_id }` | Cancel order |
+| `broadcast` | `any` | Generic broadcast to outlet |
+
+#### Server → Client Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `connected` | `{ message, socketId, timestamp }` | Connection established |
+| `subscribed` | `{ outletId, timestamp }` | Successfully subscribed |
+| `order_created` | `Order object` | New order received |
+| `order_updated` | `{ id, status, timestamp }` | Order status changed |
+| `order_completed` | `{ id, order_number }` | Order completed |
+| `order_cancelled` | `{ id, order_number }` | Order cancelled |
+| `order_sent` | `{ orderId, timestamp }` | Acknowledgment |
+| `status_updated` | `{ orderId, timestamp }` | Acknowledgment |
 
 ### API Endpoints
 
@@ -463,19 +483,39 @@ stats = {
 | POST | `/api/kitchen/orders/:id/ready/` | kitchen+ | Mark ready |
 
 ### Key Features
-✅ Real-time WebSocket communication  
+✅ Socket.IO real-time communication  
+✅ Room-based broadcasting per outlet  
+✅ Automatic reconnection  
+✅ Transport fallback (WebSocket → Polling)  
 ✅ Order queue display  
 ✅ Priority ordering  
-✅ Status updates  
+✅ Status updates with acknowledgment  
 ✅ Preparation timer  
-✅ Multi-kitchen support
+✅ Multi-outlet isolation
 
 ### Usage Example
 ```javascript
 // Kitchen display client
-const socket = io('ws://localhost:3001');
+import io from 'socket.io-client';
 
-socket.emit('subscribe_outlet', outlet_id);
+const socket = io('http://localhost:3002', {
+    transports: ['websocket', 'polling']
+});
+
+socket.on('connect', () => {
+    // Subscribe to outlet
+    socket.emit('subscribe_outlet', outlet_id);
+    
+    // Identify as kitchen
+    socket.emit('identify', { 
+        type: 'kitchen', 
+        outletId: outlet_id 
+    });
+});
+
+socket.on('subscribed', (data) => {
+    console.log('Subscribed to outlet:', data.outletId);
+});
 
 socket.on('order_created', (order) => {
     displayOrder(order);
@@ -485,6 +525,29 @@ socket.on('order_created', (order) => {
 socket.on('order_updated', (update) => {
     updateOrderStatus(update);
 });
+
+socket.on('order_completed', (data) => {
+    removeOrderFromDisplay(data.id);
+});
+
+// Update order status from kitchen
+function updateStatus(orderId, status) {
+    socket.emit('update_status', {
+        id: orderId,
+        order_number: 'ORD-001',
+        outlet_id: outlet_id,
+        status: status // 'preparing', 'ready', 'completed'
+    });
+}
+
+// Complete order
+function completeOrder(orderId, orderNumber) {
+    socket.emit('complete_order', {
+        id: orderId,
+        order_number: orderNumber,
+        outlet_id: outlet_id
+    });
+}
 ```
 
 ---

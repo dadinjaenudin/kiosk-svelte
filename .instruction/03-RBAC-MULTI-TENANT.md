@@ -150,8 +150,8 @@ class Outlet(models.Model):
     websocket_url = models.CharField(
         max_length=255, 
         blank=True, 
-        default='ws://localhost:3001',
-        help_text='WebSocket URL for Kitchen Sync Server'
+        default='http://localhost:3002',
+        help_text='Socket.IO URL for Kitchen Sync Server (port 3002)'
     )
     
     is_active = models.BooleanField(default=True)

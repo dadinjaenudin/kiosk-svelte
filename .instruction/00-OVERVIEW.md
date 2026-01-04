@@ -475,7 +475,7 @@ For developers new to this project:
 | **Frontend** | SvelteKit |
 | **Backend** | Django REST Framework |
 | **Database** | PostgreSQL |
-| **Real-time** | WebSocket (Kitchen Sync) |
+| **Real-time** | Socket.IO (Kitchen Sync Server) |
 | **Deployment** | Docker Compose |
 | **License** | Proprietary |
 

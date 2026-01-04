@@ -59,10 +59,12 @@ Kiosk POS menggunakan **three-tier architecture** dengan **multi-tenant isolatio
 ┌─────────────────────────────────────────────────────────────────┐
 │                   REAL-TIME LAYER (Optional)                     │
 ├─────────────────────────────────────────────────────────────────┤
-│  Kitchen Sync Server (Node.js WebSocket)                        │
-│  - Port 3001                                                    │
-│  - Real-time order updates                                      │
+│  Kitchen Sync Server (Node.js Socket.IO)                        │
+│  - Port 3002 (HTTP + WebSocket)                                │
+│  - Real-time order updates with room-based broadcasting        │
 │  - Kitchen Display System integration                           │
+│  - POS Terminal real-time sync                                  │
+│  - Auto-reconnection & transport fallback                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -238,11 +240,13 @@ Customer → Cashier Terminal → Backend API → Database
 5. Backend validates order, checks inventory
 6. Backend creates Order in database
 7. Backend triggers payment processing
-8. Backend sends order to Kitchen Sync Server (WebSocket)
-9. Kitchen Sync broadcasts to all connected Kitchen Displays
-10. Kitchen marks items as "in progress"
-11. Kitchen marks order as "complete"
-12. Customer receives notification
+8. Backend sends order to Kitchen Sync Server (Socket.IO HTTP POST or via Socket.IO emit)
+9. Kitchen Sync broadcasts to outlet-specific room via Socket.IO (`outlet_1`, `outlet_2`, etc.)
+10. All Kitchen Displays subscribed to that outlet receive `order_created` event
+11. Kitchen marks items as "in progress" and emits `update_status`
+12. Kitchen marks order as "complete" and emits `complete_order`
+13. POS receives status updates via Socket.IO
+14. Customer receives notification
 
 ---
 
@@ -710,11 +714,25 @@ Cloud Provider (AWS/GCP/Azure)
 **Rationale**: Small bundle size, fast performance, SSR support
 **Trade-off**: Smaller ecosystem than React
 
-### Decision 4: WebSocket for Kitchen Sync
-**Chosen**: Separate Node.js WebSocket server
-**Alternatives**: Django Channels, Polling
-**Rationale**: Real-time, efficient, dedicated service
-**Trade-off**: Additional service to maintain
+### Decision 4: Socket.IO for Kitchen Sync
+**Chosen**: Separate Node.js Socket.IO server (port 3002)
+**Alternatives**: Django Channels, Raw WebSocket, Server-Sent Events, Polling
+**Rationale**: 
+- ✅ Real-time bi-directional communication
+- ✅ Automatic reconnection with exponential backoff
+- ✅ Transport fallback (WebSocket → Polling)
+- ✅ Room-based broadcasting for outlet isolation
+- ✅ Event-based API (easier than raw WebSocket)
+- ✅ Dedicated service, doesn't block Django workers
+- ✅ Better reliability than raw WebSocket
+
+**Trade-off**: Additional service to maintain, extra port to expose
+
+**Implementation**:
+- Server: `local-sync-server/server.js` (Socket.IO 4.6.1)
+- Client: `socket.io-client` in frontend/admin
+- Port: 3002 (HTTP + WebSocket)
+- Features: Room isolation, client identification, acknowledgments
 
 ---
 
@@ -731,8 +749,15 @@ Frontend ←→ Backend
 
 ### Real-Time Communication Pattern
 ```
-Backend → Kitchen Sync Server → Kitchen Display
-  HTTP POST      WebSocket        WebSocket
+POS/Kitchen ←→ Kitchen Sync Server ←→ Kitchen Display
+  Socket.IO      Room Broadcasting      Socket.IO
+  Port 3002      (outlet_1, outlet_2)   Port 3002
+  
+  Events:
+  - subscribe_outlet
+  - new_order → order_created
+  - update_status → order_updated
+  - complete_order → order_completed
 ```
 
 ---
