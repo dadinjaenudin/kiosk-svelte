@@ -56,7 +56,8 @@
 			items: [
 				{ name: 'Users', href: '/users', icon: '👤', feature: 'users' },
 				{ name: 'Tenants', href: '/tenants', icon: '🏢', feature: 'tenants' },
-				{ name: 'Outlets', href: '/outlets', icon: '📍', feature: 'outlets' }
+				{ name: 'Outlets', href: '/outlets', icon: '📍', feature: 'outlets' },
+				{ name: 'Kitchen Stations', href: '/kitchen-stations', icon: '🍳', feature: 'outlets' }
 			]
 		}
 	];
