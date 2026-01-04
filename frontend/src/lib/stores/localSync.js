@@ -1,10 +1,11 @@
 /**
  * Local Sync Store - POS Side
- * Broadcasts orders to Kitchen Sync Server (local network WebSocket)
+ * Broadcasts orders to Kitchen Sync Server (local network Socket.IO)
  * for real-time kitchen display updates when offline
  */
 
 import { writable, get } from 'svelte/store';
+import { io } from 'socket.io-client';
 
 // WebSocket connection state
 export const syncServerConnected = writable(false);
@@ -15,14 +16,14 @@ export const outletSettings = writable(null);
 // Pending messages queue (if disconnected)
 const messageQueue = [];
 
-let ws = null;
+let socket = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_DELAY = 3000; // 3 seconds
 
-// Default fallback
-const DEFAULT_SYNC_SERVER_URL = 'ws://localhost:3001';
+// Default fallback - Socket.IO uses HTTP URL
+const DEFAULT_SYNC_SERVER_URL = 'http://localhost:3001';
 
 /**
  * Get WebSocket URL from outlet settings or fallback
@@ -56,21 +57,30 @@ export async function loadOutletSettings(outletId) {
 }
 
 /**
- * Connect to Kitchen Sync Server
+ * Connect to Kitchen Sync Server using Socket.IO
  */
 export function connectToSyncServer() {
-	if (ws && ws.readyState === WebSocket.OPEN) {
+	if (socket && socket.connected) {
 		console.log('[LocalSync] Already connected');
 		return;
 	}
 
-	const SYNC_SERVER_URL = getWebSocketURL();
+	let SYNC_SERVER_URL = getWebSocketURL();
+	
+	// Convert ws:// to http:// for Socket.IO
+	if (SYNC_SERVER_URL.startsWith('ws://')) {
+		SYNC_SERVER_URL = SYNC_SERVER_URL.replace('ws://', 'http://');
+	}
+	
 	console.log(`[LocalSync] Connecting to ${SYNC_SERVER_URL}...`);
 
 	try {
-		ws = new WebSocket(SYNC_SERVER_URL);
+		socket = io(SYNC_SERVER_URL, {
+			transports: ['websocket', 'polling'],
+			reconnection: false // We handle reconnection manually
+		});
 
-		ws.onopen = () => {
+		socket.on('connect', () => {
 			console.log('[LocalSync] ✅ Connected to Kitchen Sync Server');
 			syncServerConnected.set(true);
 			reconnectAttempts = 0;
@@ -80,39 +90,14 @@ export function connectToSyncServer() {
 				console.log(`[LocalSync] Sending ${messageQueue.length} queued messages...`);
 				while (messageQueue.length > 0) {
 					const message = messageQueue.shift();
-					ws.send(JSON.stringify(message));
+					socket.emit(message.type, message);
 				}
 			}
-		};
+		});
 
-		ws.onmessage = (event) => {
-			try {
-				const data = JSON.parse(event.data);
-				console.log('[LocalSync] Received:', data.type, data);
-
-				// Handle acknowledgments
-				if (data.type === 'ack') {
-					console.log(`[LocalSync] ✅ Server acknowledged: ${data.messageType}`);
-				}
-
-				// Handle connection confirmation
-				if (data.type === 'connected') {
-					console.log('[LocalSync] ✅ Server welcome:', data.message);
-				}
-			} catch (error) {
-				console.error('[LocalSync] Error parsing message:', error);
-			}
-		};
-
-		ws.onerror = (error) => {
-			console.error('[LocalSync] ❌ WebSocket error:', error);
-			syncServerConnected.set(false);
-		};
-
-		ws.onclose = () => {
+		socket.on('disconnect', () => {
 			console.log('[LocalSync] 📴 Disconnected from Kitchen Sync Server');
 			syncServerConnected.set(false);
-			ws = null;
 
 			// Attempt to reconnect
 			if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -124,7 +109,22 @@ export function connectToSyncServer() {
 			} else {
 				console.log('[LocalSync] ⚠️ Max reconnect attempts reached. Please check server.');
 			}
-		};
+		});
+
+		socket.on('connect_error', (error) => {
+			console.error('[LocalSync] ❌ Connection error:', error.message);
+			syncServerConnected.set(false);
+		});
+
+		// Handle server acknowledgments
+		socket.on('ack', (data) => {
+			console.log(`[LocalSync] ✅ Server acknowledged:`, data);
+		});
+
+		// Handle connection confirmation
+		socket.on('connected', (data) => {
+			console.log('[LocalSync] ✅ Server welcome:', data.message);
+		});
 	} catch (error) {
 		console.error('[LocalSync] Error creating WebSocket:', error);
 		syncServerConnected.set(false);
@@ -140,9 +140,9 @@ export function disconnectFromSyncServer() {
 		reconnectTimer = null;
 	}
 
-	if (ws) {
-		ws.close();
-		ws = null;
+	if (socket) {
+		socket.disconnect();
+		socket = null;
 	}
 
 	syncServerConnected.set(false);
@@ -204,14 +204,14 @@ export function broadcastOrderStatus(orderNumber, status) {
  * @param {Object} message - Message object
  */
 function sendMessage(message) {
-	if (ws && ws.readyState === WebSocket.OPEN) {
-		ws.send(JSON.stringify(message));
+	if (socket && socket.connected) {
+		socket.emit(message.type, message);
 	} else {
 		console.warn('[LocalSync] ⚠️ Not connected, queueing message...');
 		messageQueue.push(message);
 
 		// Try to reconnect
-		if (!ws || ws.readyState === WebSocket.CLOSED) {
+		if (!socket || !socket.connected) {
 			connectToSyncServer();
 		}
 	}
@@ -222,8 +222,8 @@ function sendMessage(message) {
  */
 export function getSyncServerStatus() {
 	return {
-		connected: ws && ws.readyState === WebSocket.OPEN,
-		readyState: ws ? ws.readyState : null,
+		connected: socket && socket.connected,
+		socketId: socket?.id || null,
 		queuedMessages: messageQueue.length,
 		reconnectAttempts: reconnectAttempts
 	};

@@ -26,11 +26,11 @@
   },
   "dependencies": {
     "daisyui": "^4.4.24",
-    "idb": "^8.0.0",
+    "date-fns": "^3.0.6",
     "dexie": "^3.2.4",
+    "idb": "^8.0.0",
     "qrcode": "^1.5.3",
-    "socket.io-client": "^4.6.1",
-    "date-fns": "^3.0.6"
+    "socket.io-client": "^4.8.3"
   },
   "type": "module"
 }
