@@ -30,6 +30,7 @@
   "type": "module",
   "dependencies": {
     "chart.js": "^4.4.1",
+    "socket.io-client": "^4.8.3",
     "sweetalert2": "^11.26.17"
   }
 }
