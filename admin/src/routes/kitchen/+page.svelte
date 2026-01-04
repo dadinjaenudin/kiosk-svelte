@@ -4,11 +4,14 @@
 	import { isAuthenticated, user, selectedTenant } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { formatCurrency, formatDateTime } from '$lib/api/orders';
+	import { getAllOutlets } from '$lib/api/outlets';
 	
 	let socket = null;
 	let orders = [];
 	let connected = false;
 	let outletId = null;
+	let outlets = [];
+	let selectedOutletId = null;
 	
 	// Group orders by status
 	$: pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'confirmed');
@@ -16,9 +19,9 @@
 	$: readyOrders = orders.filter(o => o.status === 'ready');
 	
 	// Connect to Kitchen Sync Server
-	function connectToKitchenSync() {
-		// Get outlet ID from user settings or selectedTenant
-		outletId = $user?.outlet || $selectedTenant || 1;
+	function connectToKitchenSync(useOutletId = null) {
+		// Get outlet ID from parameter, selected, user settings, or default to 1
+		outletId = useOutletId || selectedOutletId || $user?.outlet || $selectedTenant || 1;
 		
 		const SYNC_SERVER_URL = 'http://localhost:3001';
 		console.log('[Kitchen Display] Connecting to', SYNC_SERVER_URL);
@@ -113,7 +116,30 @@
 		}, 2000);
 	}
 	
-	onMount(() => {
+	function changeOutlet(newOutletId) {
+		selectedOutletId = parseInt(newOutletId);
+		// Disconnect current connection
+		disconnectFromKitchenSync();
+		// Clear orders
+		orders = [];
+		// Reconnect to new outlet
+		connectToKitchenSync(selectedOutletId);
+	}
+	
+	async function loadOutlets() {
+		try {
+			const response = await getAllOutlets();
+			outlets = response.results || [];
+			// Set initial selected outlet
+			if (outlets.length > 0 && !selectedOutletId) {
+				selectedOutletId = $user?.outlet || $selectedTenant || outlets[0].id;
+			}
+		} catch (error) {
+			console.error('[Kitchen Display] Failed to load outlets:', error);
+		}
+	}
+	
+	onMount(async () => {
 		if (!$isAuthenticated) {
 			goto('/login');
 			return;
@@ -125,6 +151,10 @@
 			return;
 		}
 		
+		// Load outlets first
+		await loadOutlets();
+		
+		// Then connect
 		connectToKitchenSync();
 	});
 	
@@ -143,10 +173,24 @@
 				<div class="text-3xl font-bold text-gray-900">{orders.length}</div>
 			</div>
 		</div>
-		<div class="flex items-center gap-4">
+		<div class="flex items-center gap-4 flex-wrap">
 			<p class="text-gray-600">
 				Real-time order display via WebSocket
 			</p>
+			
+			<!-- Outlet Selector -->
+			{#if outlets.length > 0}
+				<select 
+					bind:value={selectedOutletId}
+					on:change={(e) => changeOutlet(e.target.value)}
+					class="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+				>
+					{#each outlets as outlet (outlet.id)}
+						<option value={outlet.id}>{outlet.name}</option>
+					{/each}
+				</select>
+			{/if}
+			
 			{#if connected}
 				<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
 					● Connected to Outlet #{outletId}
