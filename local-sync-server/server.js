@@ -14,7 +14,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 
-const HTTP_PORT = 3002;
+const HTTP_PORT = 3001;
 
 // Create Express app for HTTP endpoints
 const app = express();

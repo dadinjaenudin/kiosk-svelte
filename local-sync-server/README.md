@@ -26,79 +26,113 @@ npm start
 ```
 
 Server akan berjalan di:
-- **Socket.IO**: `http://localhost:3002`
-- **WebSocket Path**: `ws://localhost:3002/socket.io/`
-- **Health Check**: `http://localhost:3002/health`
-- **Outlet Stats**: `http://localhost:3002/outlets`
+- **WebSocket**: `ws://localhost:3001`
+- **Socket.IO**: `http://localhost:3001` 
+- **Health Check**: `http://localhost:3001/health`
+- **Outlet Stats**: `http://localhost:3001/outlets`
 
-### 2️⃣ Production Mode (Auto-Start on Windows)
+### 2️⃣ Production Mode - EXE (Recommended ✅)
 
-#### Option A: PowerShell (Recommended)
+**PALING MUDAH - One-Click Install:**
 
-**Requirement**: PowerShell (built-in Windows)
-
-```powershell
-# Run PowerShell as Administrator
-# Right-click PowerShell -> Run as Administrator
-
-# Navigate to local-sync-server
-cd D:\YOGYA-Kiosk\kiosk-svelte\local-sync-server
-
-# Install auto-start
-.\INSTALL_AUTOSTART.ps1
-```
-
-**Features**:
-- ✅ Auto-installs dependencies (npm install)
-- ✅ Checks Node.js installation
-- ✅ Creates Windows Task Scheduler entry
-- ✅ Auto-restart on failure (3 retries)
-- ✅ Runs at user logon
-
-**Uninstall**:
-```powershell
-.\INSTALL_AUTOSTART.ps1 -Uninstall
-```
-
-#### Option B: Batch File
-
-**Requirement**: Administrator privileges
-
-1. **Right-click** `INSTALL_AUTOSTART.bat`
+1. **Right-click** `BUILD_AND_INSTALL.bat`
 2. **Select** "Run as Administrator"
-3. Follow the on-screen instructions
+3. **Wait** ~2 menit (npm install + build + install auto-start)
+4. **Done!** Server otomatis jalan saat Windows boot
 
-#### Manual Start (Testing)
+**Script ini akan:**
+- ✅ Install dependencies (npm install)
+- ✅ Build .exe file (~39 MB)
+- ✅ Install auto-start ke Windows Task Scheduler
+- ✅ Start server di background
+
+**File yang dihasilkan:**
+- `dist/kitchen-sync-server-win.exe` - Standalone executable
+- Auto-start configured - Jalan otomatis saat boot
+
+### 3️⃣ Manual Build & Install
+
+#### Opsi A: Build + Install Auto-Start
 
 ```bash
-# Double-click START_KITCHEN_SYNC.bat
-# or run in terminal:
-.\START_KITCHEN_SYNC.bat
-```
-
-### 3️⃣ Standalone Executable (Optional - Future)
-
-#### Build Executable
-
-```bash
-# Install dependencies (hanya sekali)
+# 1. Install dependencies
 npm install
 
-# Build untuk Windows
+# 2. Build executable
 npm run build:win
+
+# 3. Install auto-start (Right-click as Administrator)
+INSTALL_AUTOSTART_EXE.bat
 ```
 
-Output: `dist/kitchen-sync-server-win.exe` (~30 MB)
+#### Opsi B: Build untuk Development
 
-#### Deploy ke Production
+```bash
+# Build Windows executable
+npm run build:win
 
-1. **Copy files** ke PC kasir/dapur:
-   ```
-   local-sync-server/
-   ├── dist/
-   │   └── kitchen-sync-server-win.exe
-   └── START_KITCHEN_SYNC.bat
-   ```
+# Output: dist/kitchen-sync-server-win.exe (~39 MB)
+```
+
+#### Opsi C: Build Semua Platform
+
+```bash
+# Build untuk Windows, Mac, dan Linux
+npm run build:all
+
+# Output:
+# - dist/kitchen-sync-server-win.exe (Windows)
+# - dist/kitchen-sync-server-mac (macOS)
+# - dist/kitchen-sync-server-linux (Linux)
+```
+
+### 4️⃣ Manual Start / Testing
+
+**Start Server (will use .exe if available, otherwise Node.js):**
+```bash
+# Double-click atau run:
+START_KITCHEN_SYNC.bat
+```
+
+**Start in Background (Windows):**
+```bash
+# Right-click as Administrator:
+INSTALL_AUTOSTART_EXE.bat
+```
+
+### 5️⃣ Uninstall Auto-Start
+
+```bash
+# Right-click as Administrator:
+UNINSTALL_AUTOSTART.bat
+```
+
+### 6️⃣ Deploy ke Production (Store/Outlet)
+
+**Cara 1: Copy Folder Lengkap**
+```
+local-sync-server/
+├── dist/
+│   └── kitchen-sync-server-win.exe
+├── BUILD_AND_INSTALL.bat          ← Run this as Admin
+├── START_KITCHEN_SYNC.bat
+├── INSTALL_AUTOSTART_EXE.bat
+└── UNINSTALL_AUTOSTART.bat
+```
+
+**Cara 2: Copy Hanya EXE + Scripts**
+```
+local-sync-server/
+├── dist/
+│   └── kitchen-sync-server-win.exe (~39 MB)
+├── START_KITCHEN_SYNC.bat
+└── INSTALL_AUTOSTART_EXE.bat
+```
+
+**Di PC Toko:**
+1. Copy folder ke `C:\KitchenSync\` atau lokasi lain
+2. Right-click `INSTALL_AUTOSTART_EXE.bat` → Run as Administrator
+3. Done! Server otomatis jalan
 
 2. **Double-click** `START_KITCHEN_SYNC.bat`
 
