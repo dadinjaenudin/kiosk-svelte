@@ -218,6 +218,18 @@ class PromotionProduct(models.Model):
     """
     Many-to-many relationship between Promotions and Products
     """
+    
+    # Product roles for Buy X Get Y promotions
+    ROLE_BUY = 'buy'
+    ROLE_GET = 'get'
+    ROLE_BOTH = 'both'  # Default: product can be both bought and received
+    
+    ROLE_CHOICES = [
+        (ROLE_BUY, 'Buy Product (X)'),
+        (ROLE_GET, 'Get Product (Y)'),
+        (ROLE_BOTH, 'Both Buy and Get'),
+    ]
+    
     promotion = models.ForeignKey(
         Promotion,
         on_delete=models.CASCADE,
@@ -227,6 +239,14 @@ class PromotionProduct(models.Model):
         'products.Product',
         on_delete=models.CASCADE,
         related_name='product_promotions'
+    )
+    
+    # Product role for Buy X Get Y promotions
+    product_role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default=ROLE_BOTH,
+        help_text="Role of this product in Buy X Get Y promotions"
     )
     
     # Optional: specific discount override for this product
@@ -251,7 +271,7 @@ class PromotionProduct(models.Model):
         ordering = ['-priority', 'created_at']
     
     def __str__(self):
-        return f"{self.promotion.name} -> {self.product.name}"
+        return f"{self.promotion.name} -> {self.product.name} ({self.get_product_role_display()})"
 
 
 class PromotionUsage(models.Model):

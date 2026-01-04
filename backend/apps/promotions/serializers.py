@@ -8,11 +8,13 @@ class PromotionProductSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
     product_price = serializers.SerializerMethodField()
     product_image = serializers.SerializerMethodField()
+    product_role_display = serializers.CharField(source='get_product_role_display', read_only=True)
     
     class Meta:
         model = PromotionProduct
         fields = [
             'id', 'product', 'product_id', 'product_name', 'product_price', 'product_image',
+            'product_role', 'product_role_display',
             'custom_discount_value', 'priority', 'created_at'
         ]
     
