@@ -4,27 +4,38 @@ from apps.products.models import Product
 
 
 class PromotionProductSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source='product.name', read_only=True)
-    product_price = serializers.DecimalField(
-        source='product.price',
-        max_digits=10,
-        decimal_places=2,
-        read_only=True
-    )
+    product_id = serializers.IntegerField(source='product.id', read_only=True)
+    product_name = serializers.SerializerMethodField()
+    product_price = serializers.SerializerMethodField()
     product_image = serializers.SerializerMethodField()
     
     class Meta:
         model = PromotionProduct
         fields = [
-            'id', 'product', 'product_name', 'product_price', 'product_image',
+            'id', 'product', 'product_id', 'product_name', 'product_price', 'product_image',
             'custom_discount_value', 'priority', 'created_at'
         ]
     
+    def get_product_name(self, obj):
+        try:
+            return obj.product.name if obj.product else None
+        except Exception:
+            return None
+    
+    def get_product_price(self, obj):
+        try:
+            return float(obj.product.price) if obj.product else None
+        except Exception:
+            return None
+    
     def get_product_image(self, obj):
-        if obj.product.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.product.image.url)
+        try:
+            if obj.product and obj.product.image:
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(obj.product.image.url)
+        except Exception:
+            pass
         return None
 
 

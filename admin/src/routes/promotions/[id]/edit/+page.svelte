@@ -97,9 +97,22 @@
 			// Set selected products only if they exist and are valid
 			// Filter out any products that might have been deleted
 			if (promotion.products && promotion.products.length > 0) {
-				// Only include products that have valid IDs
-				selectedProducts = promotion.products.filter(p => p && p.id);
+				console.log('📦 Raw promotion.products from API:', promotion.products);
+				
+				// Map PromotionProduct objects to product objects for ProductSelector
+				selectedProducts = promotion.products
+					.filter(pp => pp && (pp.product_id || pp.product))
+					.map(pp => ({
+						id: pp.product_id || pp.product,
+						name: pp.product_name || 'Product ' + (pp.product_id || pp.product),
+						price: pp.product_price || 0
+					}));
+				
 				formData.product_ids = selectedProducts.map(p => p.id);
+				console.log('✅ Loaded products:', selectedProducts);
+				console.log('✅ Product IDs:', formData.product_ids);
+			} else {
+				console.log('⚠️ No products found in promotion data');
 			}
 		} catch (err) {
 			console.error('Error loading promotion:', err);

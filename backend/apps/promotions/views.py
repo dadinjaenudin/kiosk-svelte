@@ -4,7 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.db.models import Q, Count, Sum
+from django.db import models
+from django.db.models import Q, Count, Sum, Prefetch
 
 from .models import Promotion, PromotionProduct, PromotionUsage
 from .serializers import (
@@ -63,7 +64,12 @@ class PromotionViewSet(viewsets.ModelViewSet):
         if date_to:
             queryset = queryset.filter(end_date__lte=date_to)
         
-        return queryset.select_related('tenant', 'created_by').prefetch_related('promotion_products__product')
+        return queryset.select_related('tenant', 'created_by').prefetch_related(
+            Prefetch(
+                'promotion_products',
+                queryset=PromotionProduct.objects.select_related('product')
+            )
+        )
     
     def get_serializer_class(self):
         if self.action == 'list':
