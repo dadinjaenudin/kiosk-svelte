@@ -75,6 +75,13 @@ class PromotionSerializer(serializers.ModelSerializer):
         queryset=Product._base_manager.all(),  # Use _base_manager to bypass tenant filtering
         required=False
     )
+    # New field to accept products with roles
+    products_with_roles = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False,
+        help_text="Array of {id: int, role: str} for Buy X Get Y promotions"
+    )
     
     # Computed fields
     is_valid_now = serializers.SerializerMethodField()
@@ -94,7 +101,7 @@ class PromotionSerializer(serializers.ModelSerializer):
             'usage_limit', 'usage_limit_per_customer', 'usage_count',
             'status', 'is_active', 'is_featured',
             'created_at', 'updated_at', 'created_by', 'created_by_username',
-            'products', 'product_ids', 'is_valid_now', 
+            'products', 'product_ids', 'products_with_roles', 'is_valid_now', 
             'days_until_start', 'days_until_end'
         ]
         read_only_fields = ['usage_count', 'created_at', 'updated_at', 'created_by']
@@ -118,6 +125,7 @@ class PromotionSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         product_ids = validated_data.pop('product_ids', [])
+        products_with_roles = validated_data.pop('products_with_roles', None)
         
         # Set created_by from request user
         request = self.context.get('request')
@@ -127,13 +135,32 @@ class PromotionSerializer(serializers.ModelSerializer):
         promotion = Promotion.objects.create(**validated_data)
         
         # Create PromotionProduct relationships
-        for product in product_ids:
-            PromotionProduct.objects.create(promotion=promotion, product=product)
+        if products_with_roles:
+            # Use products_with_roles if provided (has role info)
+            for item in products_with_roles:
+                product_id = item.get('id')
+                role = item.get('role', 'both')
+                if product_id:
+                    product = Product.all_objects.get(id=product_id)
+                    PromotionProduct.objects.create(
+                        promotion=promotion, 
+                        product=product,
+                        product_role=role
+                    )
+        else:
+            # Fallback to product_ids (backward compatibility)
+            for product in product_ids:
+                PromotionProduct.objects.create(
+                    promotion=promotion, 
+                    product=product,
+                    product_role='both'
+                )
         
         return promotion
     
     def update(self, instance, validated_data):
         product_ids = validated_data.pop('product_ids', None)
+        products_with_roles = validated_data.pop('products_with_roles', None)
         
         # Update promotion fields
         for attr, value in validated_data.items():
@@ -141,13 +168,28 @@ class PromotionSerializer(serializers.ModelSerializer):
         instance.save()
         
         # Update products if provided
-        if product_ids is not None:
-            # Clear existing products
+        if products_with_roles is not None:
+            # Use products_with_roles if provided
             instance.promotion_products.all().delete()
-            
-            # Add new products
+            for item in products_with_roles:
+                product_id = item.get('id')
+                role = item.get('role', 'both')
+                if product_id:
+                    product = Product.all_objects.get(id=product_id)
+                    PromotionProduct.objects.create(
+                        promotion=instance,
+                        product=product,
+                        product_role=role
+                    )
+        elif product_ids is not None:
+            # Fallback to product_ids (backward compatibility)
+            instance.promotion_products.all().delete()
             for product in product_ids:
-                PromotionProduct.objects.create(promotion=instance, product=product)
+                PromotionProduct.objects.create(
+                    promotion=instance,
+                    product=product,
+                    product_role='both'
+                )
         
         return instance
     

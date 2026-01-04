@@ -4,6 +4,7 @@
 
 	export let tenantId = null;
 	export let selected = [];
+	export let promoType = 'percentage'; // Add promo type to determine if we need role selector
 
 	const dispatch = createEventDispatcher();
 
@@ -14,6 +15,7 @@
 	let selectedProducts = [...selected];
 
 	$: selectedIds = selectedProducts.map((p) => p.id);
+	$: showRoleSelector = promoType === 'buy_x_get_y';
 
 	// Load products when tenantId changes
 	$: if (tenantId) {
@@ -68,7 +70,11 @@
 		if (index > -1) {
 			selectedProducts = selectedProducts.filter((p) => p.id !== product.id);
 		} else {
-			selectedProducts = [...selectedProducts, product];
+			// Add product with default role
+			selectedProducts = [...selectedProducts, {
+				...product,
+				role: 'both' // Default role
+			}];
 		}
 
 		dispatch('change', selectedProducts);
@@ -76,6 +82,13 @@
 
 	function removeProduct(product) {
 		selectedProducts = selectedProducts.filter((p) => p.id !== product.id);
+		dispatch('change', selectedProducts);
+	}
+	
+	function updateProductRole(product, role) {
+		selectedProducts = selectedProducts.map(p => 
+			p.id === product.id ? { ...p, role } : p
+		);
 		dispatch('change', selectedProducts);
 	}
 
@@ -219,46 +232,75 @@
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 				{#each selectedProducts as product}
 					<div
-						class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+						class="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200"
 					>
-						{#if product.image}
-							<img
-								src={product.image}
-								alt={product.name}
-								class="w-12 h-12 object-cover rounded"
-							/>
-						{:else}
-							<div
-								class="w-12 h-12 bg-gray-300 rounded flex items-center justify-center text-gray-500"
+						<div class="flex items-center gap-3">
+							{#if product.image}
+								<img
+									src={product.image}
+									alt={product.name}
+									class="w-12 h-12 object-cover rounded"
+								/>
+							{:else}
+								<div
+									class="w-12 h-12 bg-gray-300 rounded flex items-center justify-center text-gray-500"
+								>
+									<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+										/>
+									</svg>
+								</div>
+							{/if}
+							<div class="flex-1">
+								<div class="font-medium text-sm text-gray-900">{product.name}</div>
+								<div class="text-sm text-gray-600">{formatCurrency(product.price)}</div>
+							</div>
+							<button
+								type="button"
+								on:click={() => removeProduct(product)}
+								class="text-gray-400 hover:text-red-600 transition-colors"
 							>
-								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-										d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+										d="M6 18L18 6M6 6l12 12"
 									/>
 								</svg>
+							</button>
+						</div>
+						
+						<!-- Role Selector for Buy X Get Y -->
+						{#if showRoleSelector}
+							<div class="flex gap-2 pl-15">
+								<button
+									type="button"
+									on:click={() => updateProductRole(product, 'buy')}
+									class="flex-1 px-2 py-1 text-xs rounded {product.role === 'buy' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border border-gray-300'}"
+								>
+									Buy (X)
+								</button>
+								<button
+									type="button"
+									on:click={() => updateProductRole(product, 'get')}
+									class="flex-1 px-2 py-1 text-xs rounded {product.role === 'get' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 border border-gray-300'}"
+								>
+									Get (Y)
+								</button>
+								<button
+									type="button"
+									on:click={() => updateProductRole(product, 'both')}
+									class="flex-1 px-2 py-1 text-xs rounded {product.role === 'both' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-300'}"
+								>
+									Both
+								</button>
 							</div>
 						{/if}
-						<div class="flex-1">
-							<div class="font-medium text-sm text-gray-900">{product.name}</div>
-							<div class="text-sm text-gray-600">{formatCurrency(product.price)}</div>
-						</div>
-						<button
-							type="button"
-							on:click={() => removeProduct(product)}
-							class="text-gray-400 hover:text-red-600 transition-colors"
-						>
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M6 18L18 6M6 6l12 12"
-								/>
-							</svg>
-						</button>
 					</div>
 				{/each}
 			</div>

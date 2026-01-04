@@ -107,11 +107,13 @@
 						const productId = pp.product_id || pp.product;
 						const productName = pp.product_name;
 						const productPrice = pp.product_price;
+						const productRole = pp.product_role || 'both';
 						
 						console.log(`🔍 Mapping product ${productId}:`, {
 							id: productId,
 							name: productName,
 							price: productPrice,
+							role: productRole,
 							hasName: !!productName,
 							hasPrice: productPrice !== null && productPrice !== undefined
 						});
@@ -119,7 +121,8 @@
 						return {
 							id: productId,
 							name: productName || `Product ${productId}`,
-							price: productPrice !== null && productPrice !== undefined ? productPrice : 0
+							price: productPrice !== null && productPrice !== undefined ? productPrice : 0,
+							role: productRole
 						};
 					});
 				
@@ -200,10 +203,16 @@
 			loading = true;
 			error = '';
 
+			// Prepare products with roles for Buy X Get Y
+			const productsWithRoles = selectedProducts.map(p => ({
+				id: p.id,
+				role: p.role || 'both'
+			}));
+
 			// Prepare data for submission
 			const submitData = {
 				...formData,
-				product_ids: selectedProducts.map((p) => p.id),
+				products_with_roles: productsWithRoles,
 				discount_value: parseFloat(formData.discount_value),
 				max_discount_amount: formData.max_discount_amount
 					? parseFloat(formData.max_discount_amount)
@@ -514,6 +523,7 @@
 				<h2 class="text-lg font-semibold text-gray-900 mb-4">Select Products</h2>
 				<ProductSelector
 					tenantId={formData.tenant}
+					promoType={formData.promo_type}
 					selected={selectedProducts}
 					on:change={handleProductsChange}
 				/>

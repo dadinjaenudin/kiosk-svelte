@@ -157,23 +157,27 @@
 
 			// Filter valid products only
 			const validProducts = selectedProducts.filter(p => p && p.id && typeof p.id === 'number');
-			const validProductIds = validProducts.map(p => p.id);
 
-			console.log('✅ Valid products:', validProducts.length, 'IDs:', validProductIds);
-		console.log('📦 Products detail:', validProducts);
-		console.log('📝 FormData tenant:', formData.tenant);
+			console.log('✅ Valid products:', validProducts.length);
+			console.log('📦 Products detail:', validProducts);
+			console.log('📝 FormData tenant:', formData.tenant);
 		
-		// Double check - remove any products that don't belong to the selected tenant
-		const tenantProducts = validProducts.filter(p => p.tenant === formData.tenant || !p.tenant);
-		const tenantProductIds = tenantProducts.map(p => p.id);
+			// Double check - remove any products that don't belong to the selected tenant
+			const tenantProducts = validProducts.filter(p => p.tenant === formData.tenant || !p.tenant);
 		
-		console.log('🏢 Tenant products:', tenantProducts.length, 'IDs:', tenantProductIds);
+			console.log('🏢 Tenant products:', tenantProducts.length);
+			
+			// Prepare products with roles for Buy X Get Y
+			const productsWithRoles = tenantProducts.map(p => ({
+				id: p.id,
+				role: p.role || 'both'
+			}));
 
-		// Prepare data for submission
-		const submitData = {
-			...formData,
-			product_ids: tenantProductIds,
-			discount_value: parseFloat(formData.discount_value),
+			// Prepare data for submission
+			const submitData = {
+				...formData,
+				products_with_roles: productsWithRoles,
+				discount_value: parseFloat(formData.discount_value),
 				max_discount_amount: formData.max_discount_amount
 					? parseFloat(formData.max_discount_amount)
 					: null,
@@ -513,6 +517,7 @@
 			
 			<ProductSelector
 				tenantId={formData.tenant}
+				promoType={formData.promo_type}
 				selected={selectedProducts}
 				on:change={handleProductsChange}
 			/>
