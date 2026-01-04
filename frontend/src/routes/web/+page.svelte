@@ -303,8 +303,13 @@ async function processCheckout(event) {
 				
 				result = await response.json();
 				
+				console.log('[Web] Checkout result:', result);
+				
 				if (result.orders && Array.isArray(result.orders)) {
-					result.orders.forEach(order => broadcastNewOrder(order));
+					result.orders.forEach(order => {
+						console.log('[Web] Broadcasting order:', order);
+						broadcastNewOrder(order);
+					});
 				}
 			} catch (fetchError) {
 				console.warn('Online checkout failed, using offline:', fetchError.message);

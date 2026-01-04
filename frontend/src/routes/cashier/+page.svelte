@@ -208,8 +208,13 @@
 					
 					result = await response.json();
 					
+					console.log('[Cashier] Checkout result:', result);
+					
 					if (result.orders && Array.isArray(result.orders)) {
-						result.orders.forEach(order => broadcastNewOrder(order));
+						result.orders.forEach(order => {
+							console.log('[Cashier] Broadcasting order:', order);
+							broadcastNewOrder(order);
+						});
 					}
 				} catch (fetchError) {
 					console.warn('Online checkout failed:', fetchError.message);

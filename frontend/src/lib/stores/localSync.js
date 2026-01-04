@@ -30,7 +30,15 @@ const DEFAULT_SYNC_SERVER_URL = 'http://localhost:3001';
  */
 function getWebSocketURL() {
 	const settings = get(outletSettings);
-	const wsUrl = settings?.websocket_url || DEFAULT_SYNC_SERVER_URL;
+	let wsUrl = settings?.websocket_url || DEFAULT_SYNC_SERVER_URL;
+	
+	// Always convert ws:// or wss:// to http:// or https:// for Socket.IO
+	if (wsUrl.startsWith('ws://')) {
+		wsUrl = wsUrl.replace('ws://', 'http://');
+	} else if (wsUrl.startsWith('wss://')) {
+		wsUrl = wsUrl.replace('wss://', 'https://');
+	}
+	
 	console.log('[LocalSync] Using WebSocket URL:', wsUrl);
 	return wsUrl;
 }
@@ -65,12 +73,7 @@ export function connectToSyncServer() {
 		return;
 	}
 
-	let SYNC_SERVER_URL = getWebSocketURL();
-	
-	// Convert ws:// to http:// for Socket.IO
-	if (SYNC_SERVER_URL.startsWith('ws://')) {
-		SYNC_SERVER_URL = SYNC_SERVER_URL.replace('ws://', 'http://');
-	}
+	const SYNC_SERVER_URL = getWebSocketURL(); // Already converted in getWebSocketURL()
 	
 	console.log(`[LocalSync] Connecting to ${SYNC_SERVER_URL}...`);
 
