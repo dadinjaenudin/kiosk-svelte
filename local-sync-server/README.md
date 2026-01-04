@@ -31,7 +31,52 @@ Server akan berjalan di:
 - **Health Check**: `http://localhost:3002/health`
 - **Outlet Stats**: `http://localhost:3002/outlets`
 
-### 2️⃣ Production Mode (Standalone Executable)
+### 2️⃣ Production Mode (Auto-Start on Windows)
+
+#### Option A: PowerShell (Recommended)
+
+**Requirement**: PowerShell (built-in Windows)
+
+```powershell
+# Run PowerShell as Administrator
+# Right-click PowerShell -> Run as Administrator
+
+# Navigate to local-sync-server
+cd D:\YOGYA-Kiosk\kiosk-svelte\local-sync-server
+
+# Install auto-start
+.\INSTALL_AUTOSTART.ps1
+```
+
+**Features**:
+- ✅ Auto-installs dependencies (npm install)
+- ✅ Checks Node.js installation
+- ✅ Creates Windows Task Scheduler entry
+- ✅ Auto-restart on failure (3 retries)
+- ✅ Runs at user logon
+
+**Uninstall**:
+```powershell
+.\INSTALL_AUTOSTART.ps1 -Uninstall
+```
+
+#### Option B: Batch File
+
+**Requirement**: Administrator privileges
+
+1. **Right-click** `INSTALL_AUTOSTART.bat`
+2. **Select** "Run as Administrator"
+3. Follow the on-screen instructions
+
+#### Manual Start (Testing)
+
+```bash
+# Double-click START_KITCHEN_SYNC.bat
+# or run in terminal:
+.\START_KITCHEN_SYNC.bat
+```
+
+### 3️⃣ Standalone Executable (Optional - Future)
 
 #### Build Executable
 
