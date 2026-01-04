@@ -13,14 +13,8 @@
 	let selectedOutletId = null;
 	let tenants = [];
 	let selectedTenantId = null;
-	let kitchenType = 'all'; // 'food', 'drink', 'all'
-	
-	// Kitchen type options
-	const kitchenTypes = [
-		{ value: 'all', label: '🍽️ All Items', color: 'blue' },
-		{ value: 'food', label: '🍔 Food Only', color: 'green' },
-		{ value: 'drink', label: '🥤 Drink Only', color: 'orange' }
-	];
+	let kitchenStations = [];
+	let selectedStationId = null;
 	
 	// Helper functions
 	function formatCurrency(amount) {
@@ -39,8 +33,8 @@
 		});
 	}
 	
-	// Filter orders by kitchen type and tenant
-	function filterOrdersByType(order) {
+	// Filter orders by kitchen station and tenant
+	function filterOrdersByStation(order) {
 		// Filter by tenant first
 		if (selectedTenantId && selectedTenantId !== 'all') {
 			if (order.tenant_id !== parseInt(selectedTenantId)) {
@@ -48,37 +42,36 @@
 			}
 		}
 		
-		// Then filter by kitchen type
-		if (kitchenType === 'all') return true;
+		// If no station selected, show all orders
+		if (!selectedStationId || selectedStationId === 'all') return true;
 		
 		// Check if order has items
 		if (!order.items || !Array.isArray(order.items)) return true;
 		
-		// Filter based on product categories
+		// Filter items by station: show items assigned to this station OR items with no station (null)
 		const hasMatchingItems = order.items.some(item => {
-			const category = (item.category || '').toLowerCase();
-			const productName = (item.product_name || '').toLowerCase();
-			
-			if (kitchenType === 'food') {
-				// Include if category is food-related or NOT drink
-				return !category.includes('drink') && !category.includes('beverage') && 
-				       !productName.includes('drink') && !productName.includes('juice') &&
-				       !productName.includes('coffee') && !productName.includes('tea');
-			} else if (kitchenType === 'drink') {
-				// Include if category is drink-related
-				return category.includes('drink') || category.includes('beverage') ||
-				       productName.includes('drink') || productName.includes('juice') ||
-				       productName.includes('coffee') || productName.includes('tea');
-			}
-			
-			return false;
+			return item.kitchen_station_id === selectedStationId || 
+			       item.kitchen_station_id === null;  // null = show in all kitchens
 		});
 		
 		return hasMatchingItems;
 	}
 	
-	// Group orders by status with kitchen type filter
-	$: filteredOrders = orders.filter(filterOrdersByType);
+	// Filter order items to show only relevant items for this station
+	function getFilteredOrderItems(order) {
+		if (!selectedStationId || selectedStationId === 'all') {
+			return order.items;
+		}
+		
+		// Return only items for this station or items with no station
+		return order.items.filter(item => 
+			item.kitchen_station_id === selectedStationId || 
+			item.kitchen_station_id === null
+		);
+	}
+	
+	// Group orders by status with kitchen station filter
+	$: filteredOrders = orders.filter(filterOrdersByStation);
 	$: pendingOrders = filteredOrders.filter(o => o.status === 'pending' || o.status === 'confirmed');
 	$: preparingOrders = filteredOrders.filter(o => o.status === 'preparing');
 	$: readyOrders = filteredOrders.filter(o => o.status === 'ready');
@@ -99,16 +92,16 @@
 			console.log('[Kitchen Display] ✅ Connected');
 			connected = true;
 			
-			// Identify as kitchen display with type
+			// Identify as kitchen display with station
 			socket.emit('identify', { 
 				type: 'kitchen',
-				kitchenType: kitchenType,
+				stationId: selectedStationId,
 				outletId: outletId
 			});
 			
 			// Subscribe to outlet
 			socket.emit('subscribe_outlet', outletId);
-			console.log('[Kitchen Display] 📍 Subscribed to outlet:', outletId, '| Kitchen Type:', kitchenType);
+			console.log('[Kitchen Display] 📍 Subscribed to outlet:', outletId, '| Station ID:', selectedStationId);
 		});
 		
 		socket.on('disconnect', () => {
@@ -193,7 +186,9 @@
 		// Save to localStorage
 		localStorage.setItem('kitchen_outlet', selectedOutletId);
 		localStorage.setItem('kitchen_tenant', selectedTenantId);
-		localStorage.setItem('kitchen_type', kitchenType);
+		localStorage.setItem('kitchen_station', selectedStationId);
+		// Load stations for new outlet
+		loadKitchenStations(selectedOutletId);
 		// Disconnect current connection
 		disconnectFromKitchenSync();
 		// Clear orders
@@ -202,10 +197,10 @@
 		connectToKitchenSync(selectedOutletId);
 	}
 	
-	function changeKitchenType(newType) {
-		kitchenType = newType;
+	function changeKitchenStation(newStationId) {
+		selectedStationId = newStationId === 'all' ? 'all' : parseInt(newStationId);
 		// Save to localStorage
-		localStorage.setItem('kitchen_type', kitchenType);
+		localStorage.setItem('kitchen_station', selectedStationId);
 		localStorage.setItem('kitchen_outlet', selectedOutletId);
 		localStorage.setItem('kitchen_tenant', selectedTenantId);
 		// Reconnect to update server
@@ -286,8 +281,33 @@
 		// Save to localStorage
 		localStorage.setItem('kitchen_tenant', selectedTenantId);
 		localStorage.setItem('kitchen_outlet', selectedOutletId);
-		localStorage.setItem('kitchen_type', kitchenType);
+		localStorage.setItem('kitchen_station', selectedStationId);
 		// No need to reconnect, just filter locally
+	}
+	
+	async function loadKitchenStations(outletId = null) {
+		const targetOutletId = outletId || selectedOutletId;
+		if (!targetOutletId) return;
+		
+		try {
+			const response = await fetch(`${apiUrl}/kitchen-stations/?outlet=${targetOutletId}`);
+			if (response.ok) {
+				const data = await response.json();
+				kitchenStations = data.results || data || [];
+				console.log('[Kitchen Display] Loaded kitchen stations:', kitchenStations.length);
+			} else {
+				console.error('[Kitchen Display] Failed to load kitchen stations:', response.status);
+				kitchenStations = [];
+			}
+		} catch (error) {
+			console.error('[Kitchen Display] Error loading kitchen stations:', error);
+			kitchenStations = [];
+		}
+		
+		// Set default station if not selected
+		if (!selectedStationId && kitchenStations.length > 0) {
+			selectedStationId = 'all'; // Show all stations by default
+		}
 	}
 	
 	onMount(async () => {
@@ -295,7 +315,7 @@
 		const urlParams = new URLSearchParams(window.location.search);
 		const outletParam = urlParams.get('outlet');
 		const tenantParam = urlParams.get('tenant');
-		const typeParam = urlParams.get('type');
+		const stationParam = urlParams.get('station');
 		
 		// Load outlets and tenants from API
 		await Promise.all([loadOutlets(), loadTenants()]);
@@ -313,6 +333,9 @@
 			}
 		}
 		
+		// Load kitchen stations for selected outlet
+		await loadKitchenStations(selectedOutletId);
+		
 		// Set tenant from URL or localStorage or default
 		if (tenantParam) {
 			selectedTenantId = tenantParam === 'all' ? 'all' : parseInt(tenantParam);
@@ -322,13 +345,13 @@
 			selectedTenantId = savedTenant || 'all';
 		}
 		
-		// Set kitchen type from URL or localStorage or default
-		if (typeParam && ['food', 'drink', 'all'].includes(typeParam)) {
-			kitchenType = typeParam;
-			localStorage.setItem('kitchen_type', kitchenType);
+		// Set kitchen station from URL or localStorage or default
+		if (stationParam) {
+			selectedStationId = stationParam === 'all' ? 'all' : parseInt(stationParam);
+			localStorage.setItem('kitchen_station', selectedStationId);
 		} else {
-			const savedType = localStorage.getItem('kitchen_type');
-			kitchenType = savedType || 'all';
+			const savedStation = localStorage.getItem('kitchen_station');
+			selectedStationId = savedStation ? (savedStation === 'all' ? 'all' : parseInt(savedStation)) : 'all';
 		}
 		
 		// Connect to Kitchen Sync Server
@@ -382,21 +405,28 @@
 				</select>
 			{/if}
 			
-			<!-- Kitchen Type Selector -->
-			<div class="flex gap-2 bg-white border border-gray-300 rounded-lg p-1">
-				{#each kitchenTypes as kt}
-					<button
-						on:click={() => changeKitchenType(kt.value)}
-						class="px-3 py-1 text-sm font-medium rounded transition-colors {kitchenType === kt.value ? `bg-${kt.color}-500 text-white` : 'text-gray-700 hover:bg-gray-100'}"
-						class:bg-blue-500={kitchenType === kt.value && kt.color === 'blue'}
-						class:bg-green-500={kitchenType === kt.value && kt.color === 'green'}
-						class:bg-orange-500={kitchenType === kt.value && kt.color === 'orange'}
-						class:text-white={kitchenType === kt.value}
-					>
-						{kt.label}
-					</button>
-				{/each}
-			</div>
+			<!-- Kitchen Station Selector -->
+			{#if kitchenStations.length > 0}
+				<select 
+					bind:value={selectedStationId}
+					on:change={(e) => changeKitchenStation(e.target.value)}
+					class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+				>
+					<option value="all">🍽️ All Stations</option>
+					{#each kitchenStations as station (station.id)}
+						<option value={station.id}>
+							{station.code} - {station.name}
+							{#if station.product_count}
+								({station.product_count} products)
+							{/if}
+						</option>
+					{/each}
+				</select>
+			{:else}
+				<span class="px-3 py-1.5 text-sm text-gray-500 italic">
+					No stations configured
+				</span>
+			{/if}
 			
 			{#if connected}
 				<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
@@ -472,41 +502,51 @@
 				</h2>
 				<div class="space-y-4">
 					{#each pendingOrders as order (order.order_number)}
-						<div class="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-400">
-							<div class="flex justify-between items-start mb-3">
-								<div>
-									<div class="text-xl font-bold text-gray-900">#{order.order_number}</div>
-									<div class="text-sm text-gray-600">{formatDateTime(order.created_at)}</div>
-								</div>
-								<div class="text-right">
-									<div class="text-sm font-medium px-2 py-1 rounded" style="background-color: {order.tenant_color}20; color: {order.tenant_color}">
-										{order.tenant_name}
+						{@const filteredItems = getFilteredOrderItems(order)}
+						{#if filteredItems.length > 0}
+							<div class="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-400">
+								<div class="flex justify-between items-start mb-3">
+									<div>
+										<div class="text-xl font-bold text-gray-900">#{order.order_number}</div>
+										<div class="text-sm text-gray-600">{formatDateTime(order.created_at)}</div>
+									</div>
+									<div class="text-right">
+										<div class="text-sm font-medium px-2 py-1 rounded" style="background-color: {order.tenant_color}20; color: {order.tenant_color}">
+											{order.tenant_name}
+										</div>
 									</div>
 								</div>
-							</div>
-							
-							<div class="space-y-2 mb-4">
-								{#each order.items || [] as item}
-									<div class="flex justify-between text-sm">
-										<span>{item.quantity}x {item.product_name || item.name}</span>
-										<span class="text-gray-600">{formatCurrency(item.price * item.quantity)}</span>
-									</div>
-								{/each}
-							</div>
-							
-							{#if order.notes}
-								<div class="text-sm bg-yellow-50 p-2 rounded mb-4">
-									<strong>Notes:</strong> {order.notes}
+								
+								<div class="space-y-2 mb-4">
+									{#each filteredItems as item}
+										<div class="flex justify-between text-sm">
+											<div class="flex-1">
+												<span class="font-medium">{item.quantity}x {item.product_name || item.name}</span>
+												{#if item.kitchen_station_code}
+													<span class="ml-2 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{item.kitchen_station_code}</span>
+												{:else}
+													<span class="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded">ALL</span>
+												{/if}
+											</div>
+											<span class="text-gray-600 ml-2">{formatCurrency(item.price * item.quantity)}</span>
+										</div>
+									{/each}
 								</div>
-							{/if}
-							
-							<button
-								on:click={() => updateOrderStatus(order.order_number, 'preparing')}
-								class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
-							>
-								Start Preparing
-							</button>
-						</div>
+								
+								{#if order.notes}
+									<div class="text-sm bg-yellow-50 p-2 rounded mb-4">
+										<strong>Notes:</strong> {order.notes}
+									</div>
+								{/if}
+								
+								<button
+									on:click={() => updateOrderStatus(order.order_number, 'preparing')}
+									class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+								>
+									Start Preparing
+								</button>
+							</div>
+						{/if}
 					{/each}
 				</div>
 			</div>
@@ -519,35 +559,45 @@
 				</h2>
 				<div class="space-y-4">
 					{#each preparingOrders as order (order.order_number)}
-						<div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-							<div class="flex justify-between items-start mb-3">
-								<div>
-									<div class="text-xl font-bold text-gray-900">#{order.order_number}</div>
-									<div class="text-sm text-gray-600">{formatDateTime(order.created_at)}</div>
-								</div>
-								<div class="text-right">
-									<div class="text-sm font-medium px-2 py-1 rounded" style="background-color: {order.tenant_color}20; color: {order.tenant_color}">
-										{order.tenant_name}
+						{@const filteredItems = getFilteredOrderItems(order)}
+						{#if filteredItems.length > 0}
+							<div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+								<div class="flex justify-between items-start mb-3">
+									<div>
+										<div class="text-xl font-bold text-gray-900">#{order.order_number}</div>
+										<div class="text-sm text-gray-600">{formatDateTime(order.created_at)}</div>
+									</div>
+									<div class="text-right">
+										<div class="text-sm font-medium px-2 py-1 rounded" style="background-color: {order.tenant_color}20; color: {order.tenant_color}">
+											{order.tenant_name}
+										</div>
 									</div>
 								</div>
+								
+								<div class="space-y-2 mb-4">
+									{#each filteredItems as item}
+										<div class="flex justify-between text-sm">
+											<div class="flex-1">
+												<span class="font-medium">{item.quantity}x {item.product_name || item.name}</span>
+												{#if item.kitchen_station_code}
+													<span class="ml-2 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{item.kitchen_station_code}</span>
+												{:else}
+													<span class="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded">ALL</span>
+												{/if}
+											</div>
+											<span class="text-gray-600 ml-2">{formatCurrency(item.price * item.quantity)}</span>
+										</div>
+									{/each}
+								</div>
+								
+								<button
+									on:click={() => updateOrderStatus(order.order_number, 'ready')}
+									class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+								>
+									Mark as Ready
+								</button>
 							</div>
-							
-							<div class="space-y-2 mb-4">
-								{#each order.items || [] as item}
-									<div class="flex justify-between text-sm">
-										<span>{item.quantity}x {item.product_name || item.name}</span>
-										<span class="text-gray-600">{formatCurrency(item.price * item.quantity)}</span>
-									</div>
-								{/each}
-							</div>
-							
-							<button
-								on:click={() => updateOrderStatus(order.order_number, 'ready')}
-								class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
-							>
-								Mark as Ready
-							</button>
-						</div>
+						{/if}
 					{/each}
 				</div>
 			</div>
@@ -560,35 +610,45 @@
 				</h2>
 				<div class="space-y-4">
 					{#each readyOrders as order (order.order_number)}
-						<div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-							<div class="flex justify-between items-start mb-3">
-								<div>
-									<div class="text-xl font-bold text-gray-900">#{order.order_number}</div>
-									<div class="text-sm text-gray-600">{formatDateTime(order.created_at)}</div>
-								</div>
-								<div class="text-right">
-									<div class="text-sm font-medium px-2 py-1 rounded" style="background-color: {order.tenant_color}20; color: {order.tenant_color}">
-										{order.tenant_name}
+						{@const filteredItems = getFilteredOrderItems(order)}
+						{#if filteredItems.length > 0}
+							<div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+								<div class="flex justify-between items-start mb-3">
+									<div>
+										<div class="text-xl font-bold text-gray-900">#{order.order_number}</div>
+										<div class="text-sm text-gray-600">{formatDateTime(order.created_at)}</div>
+									</div>
+									<div class="text-right">
+										<div class="text-sm font-medium px-2 py-1 rounded" style="background-color: {order.tenant_color}20; color: {order.tenant_color}">
+											{order.tenant_name}
+										</div>
 									</div>
 								</div>
+								
+								<div class="space-y-2 mb-4">
+									{#each filteredItems as item}
+										<div class="flex justify-between text-sm">
+											<div class="flex-1">
+												<span class="font-medium">{item.quantity}x {item.product_name || item.name}</span>
+												{#if item.kitchen_station_code}
+													<span class="ml-2 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{item.kitchen_station_code}</span>
+												{:else}
+													<span class="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded">ALL</span>
+												{/if}
+											</div>
+											<span class="text-gray-600 ml-2">{formatCurrency(item.price * item.quantity)}</span>
+										</div>
+									{/each}
+								</div>
+								
+								<button
+									on:click={() => completeOrder(order.order_number)}
+									class="w-full bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 transition"
+								>
+									Complete & Remove
+								</button>
 							</div>
-							
-							<div class="space-y-2 mb-4">
-								{#each order.items || [] as item}
-									<div class="flex justify-between text-sm">
-										<span>{item.quantity}x {item.product_name || item.name}</span>
-										<span class="text-gray-600">{formatCurrency(item.price * item.quantity)}</span>
-									</div>
-								{/each}
-							</div>
-							
-							<button
-								on:click={() => completeOrder(order.order_number)}
-								class="w-full bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 transition"
-							>
-								Complete & Remove
-							</button>
-						</div>
+						{/if}
 					{/each}
 				</div>
 			</div>
