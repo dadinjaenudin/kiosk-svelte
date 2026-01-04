@@ -2,7 +2,8 @@
 Complete Test Data Setup Script
 Creates comprehensive sample data for multi-outlet food court system:
 - Tenants (3)
-- Outlets (6) 
+- Outlets (6)
+- Kitchen Stations (12)
 - Categories (12)
 - Products (30)
 - Toppings (20)
@@ -25,13 +26,54 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from apps.tenants.models import Tenant, Outlet
+from apps.tenants.models import Tenant, Outlet, KitchenStation
 from apps.products.models import Category, Product, ProductModifier
 from apps.customers.models import Customer
 from apps.orders.models import Order, OrderItem
 from apps.promotions.models import Promotion
 
 User = get_user_model()
+
+def create_kitchen_stations():
+    """Create default kitchen stations for all outlets"""
+    print("\n🍳 Creating Kitchen Stations...")
+    
+    stations_created = 0
+    
+    for outlet in Outlet.objects.all():
+        print(f"  📍 Processing: {outlet.name}")
+        
+        # Check if outlet already has stations
+        existing = KitchenStation.objects.filter(outlet=outlet).count()
+        if existing > 0:
+            print(f"     ⏭️  Skipped - already has {existing} stations")
+            continue
+        
+        # Create default stations
+        default_stations = [
+            {
+                'name': 'Main Kitchen',
+                'code': 'MAIN',
+                'description': 'Main kitchen for all items',
+                'sort_order': 1
+            },
+            {
+                'name': 'Beverage Station',
+                'code': 'BEVERAGE',
+                'description': 'Drinks and beverages',
+                'sort_order': 2
+            },
+        ]
+        
+        for station_data in default_stations:
+            station = KitchenStation.objects.create(
+                outlet=outlet,
+                **station_data
+            )
+            stations_created += 1
+            print(f"     ✅ Created: {station.name} ({station.code})")
+    
+    print(f"✅ Created {stations_created} new stations, total: {KitchenStation.objects.count()}")
 
 def create_toppings():
     """Create sample toppings for products"""
@@ -595,6 +637,7 @@ def main():
         print(f"  - Categories: {Category.all_objects.count()}")
         print()
         
+        create_kitchen_stations()
         create_toppings()
         create_additions()
         create_promotions()
@@ -607,6 +650,7 @@ def main():
         print("\n📊 Summary:")
         print(f"  - Tenants: {Tenant.objects.count()}")
         print(f"  - Outlets: {Outlet.objects.count()}")
+        print(f"  - Kitchen Stations: {KitchenStation.objects.count()}")
         print(f"  - Categories: {Category.all_objects.count()}")
         print(f"  - Products: {Product.all_objects.count()}")
         print(f"  - Toppings: {ProductModifier.objects.filter(type='topping').count()}")
