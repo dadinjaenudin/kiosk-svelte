@@ -189,6 +189,8 @@
 		selectedOutletId = parseInt(newOutletId);
 		// Save to localStorage
 		localStorage.setItem('kitchen_outlet', selectedOutletId);
+		localStorage.setItem('kitchen_tenant', selectedTenantId);
+		localStorage.setItem('kitchen_type', kitchenType);
 		// Disconnect current connection
 		disconnectFromKitchenSync();
 		// Clear orders
@@ -201,11 +203,8 @@
 		kitchenType = newType;
 		// Save to localStorage
 		localStorage.setItem('kitchen_type', kitchenType);
-		// Update URL
-		const url = new URL(window.location);
-		url.searchParams.set('type', kitchenType);
-		url.searchParams.set('outlet', selectedOutletId);
-		window.history.replaceState({}, '', url);
+		localStorage.setItem('kitchen_outlet', selectedOutletId);
+		localStorage.setItem('kitchen_tenant', selectedTenantId);
 		// Reconnect to update server
 		disconnectFromKitchenSync();
 		orders = [];
@@ -214,10 +213,30 @@
 	
 	async function loadOutlets() {
 		try {
-			const response = await fetch(`${apiUrl}/outlets/all_outlets/`);
+			// Try public endpoint first, fallback to authenticated endpoint
+			let response = await fetch(`${apiUrl}/public/outlets/`);
+			if (!response.ok) {
+				// Fallback: try to get from products endpoint (public)
+				response = await fetch(`${apiUrl}/products/`);
+			}
 			if (response.ok) {
 				const data = await response.json();
-				outlets = data.results || data || [];
+				// Check if we got products (need to extract outlets)
+				if (data.results && data.results.length > 0 && data.results[0].outlet_id) {
+					// Extract unique outlets from products
+					const outletMap = new Map();
+					data.results.forEach(p => {
+						if (p.outlet_id && !outletMap.has(p.outlet_id)) {
+							outletMap.set(p.outlet_id, {
+								id: p.outlet_id,
+								name: p.outlet_name || `Outlet ${p.outlet_id}`
+							});
+						}
+					});
+					outlets = Array.from(outletMap.values());
+				} else {
+					outlets = data.results || data || [];
+				}
 				console.log('[Kitchen Display] Loaded outlets:', outlets.length);
 			} else {
 				console.error('[Kitchen Display] Failed to load outlets:', response.status);
@@ -246,7 +265,8 @@
 	
 	async function loadTenants() {
 		try {
-			const response = await fetch(`${apiUrl}/tenants/`);
+			// Use public endpoint for tenants
+			const response = await fetch(`${apiUrl}/public/tenants/`);
 			if (response.ok) {
 				const data = await response.json();
 				tenants = data.results || data || [];
@@ -268,12 +288,8 @@
 		selectedTenantId = newTenantId === 'all' ? 'all' : parseInt(newTenantId);
 		// Save to localStorage
 		localStorage.setItem('kitchen_tenant', selectedTenantId);
-		// Update URL
-		const url = new URL(window.location);
-		url.searchParams.set('tenant', selectedTenantId);
-		url.searchParams.set('outlet', selectedOutletId);
-		url.searchParams.set('type', kitchenType);
-		window.history.replaceState({}, '', url);
+		localStorage.setItem('kitchen_outlet', selectedOutletId);
+		localStorage.setItem('kitchen_type', kitchenType);
 		// No need to reconnect, just filter locally
 	}
 	
@@ -317,13 +333,6 @@
 			const savedType = localStorage.getItem('kitchen_type');
 			kitchenType = savedType || 'all';
 		}
-		
-		// Update URL to reflect current state
-		const url = new URL(window.location);
-		url.searchParams.set('outlet', selectedOutletId);
-		url.searchParams.set('tenant', selectedTenantId);
-		url.searchParams.set('type', kitchenType);
-		window.history.replaceState({}, '', url);
 		
 		// Connect to Kitchen Sync Server
 		connectToKitchenSync();
