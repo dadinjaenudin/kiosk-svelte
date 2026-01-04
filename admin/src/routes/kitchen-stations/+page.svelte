@@ -1,7 +1,14 @@
 <script>
 	import { onMount } from 'svelte';
 	import { user, currentOutlet, selectedTenant } from '$lib/stores/auth';
-	import api from '$lib/api';
+	import { 
+		getKitchenStations, 
+		createKitchenStation, 
+		updateKitchenStation, 
+		patchKitchenStation,
+		deleteKitchenStation 
+	} from '$lib/api/kitchenStations';
+	import { getOutlets } from '$lib/api/settings';
 
 	let stations = [];
 	let outlets = [];
@@ -24,8 +31,8 @@
 	// Load outlets for dropdown
 	async function loadOutlets() {
 		try {
-			const response = await api.get('/outlets/');
-			outlets = response.data.results || response.data || [];
+			const response = await getOutlets();
+			outlets = response.results || response || [];
 			
 			// Set default outlet from currentOutlet store
 			if ($currentOutlet && outlets.find(o => o.id === $currentOutlet.id)) {
@@ -43,13 +50,13 @@
 		loading = true;
 		error = null;
 		try {
-			let url = '/kitchen-stations/';
+			const params = {};
 			if (filterOutletId) {
-				url += `?outlet=${filterOutletId}`;
+				params.outlet = filterOutletId;
 			}
 			
-			const response = await api.get(url);
-			stations = response.data.results || response.data || [];
+			const response = await getKitchenStations(params);
+			stations = response.results || response || [];
 			
 			// Sort by outlet and sort_order
 			stations.sort((a, b) => {
@@ -111,17 +118,18 @@
 		try {
 			if (editingStation) {
 				// Update existing station
-				await api.put(`/kitchen-stations/${editingStation.id}/`, formData);
+				await updateKitchenStation(editingStation.id, formData);
 			} else {
 				// Create new station
-				await api.post('/kitchen-stations/', formData);
+				await createKitchenStation(formData);
 			}
 			
 			closeModal();
 			await loadStations();
 		} catch (err) {
 			console.error('Error saving station:', err);
-			error = err.response?.data?.detail || err.response?.data?.code?.[0] || 'Failed to save station';
+			const errorData = err.response?.data || err.data || {};
+			error = errorData.detail || errorData.code?.[0] || 'Failed to save station';
 		}
 	}
 
@@ -132,7 +140,7 @@
 		}
 
 		try {
-			await api.delete(`/kitchen-stations/${station.id}/`);
+			await deleteKitchenStation(station.id);
 			await loadStations();
 		} catch (err) {
 			console.error('Error deleting station:', err);
@@ -143,7 +151,7 @@
 	// Toggle station active status
 	async function toggleActive(station) {
 		try {
-			await api.patch(`/kitchen-stations/${station.id}/`, {
+			await patchKitchenStation(station.id, {
 				is_active: !station.is_active
 			});
 			await loadStations();
