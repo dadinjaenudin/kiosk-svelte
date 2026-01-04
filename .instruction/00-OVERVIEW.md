@@ -205,11 +205,53 @@
 - Client-managed infrastructure
 - Higher control
 
-#### 3. Hybrid
-- Cloud backend
-- Local kiosk terminals
-- Offline-capable
-- Sync when connected
+#### 3. Hybrid (Current Implementation)
+- Cloud backend (Django REST API)
+- Local kiosk terminals (SvelteKit PWA)
+- **Offline-First Architecture**: Full POS functionality without internet
+- IndexedDB for local data persistence
+- Background sync when online
+- Best of both worlds:
+  - ✅ **Zero downtime**: Works offline 100%
+  - ✅ **Real-time sync**: Data syncs automatically when online
+  - ✅ **Low latency**: Instant UI response from IndexedDB
+  - ✅ **Data safety**: Persistent local storage, auto-retry sync
+  - ✅ **Better UX**: No "waiting for server" delays
+
+**Offline Capabilities**:
+- Product catalog (synced from server)
+- Cart management (IndexedDB)
+- Order creation (queued for sync)
+- Payment processing (saved locally, synced later)
+- Kitchen display (works with cached orders)
+
+**Sync Strategy**:
+```
+┌──────────────┐
+│  POS Action  │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────────┐
+│  Save to         │
+│  IndexedDB       │  ◄── Instant (5-10ms)
+└──────┬───────────┘
+       │
+       ▼
+┌──────────────────┐
+│  Sync Queue      │
+└──────┬───────────┘
+       │
+       ▼ (when online)
+┌──────────────────┐
+│  POST to API     │
+└──────┬───────────┘
+       │
+       ▼
+┌──────────────────┐
+│  Mark Synced     │
+└──────────────────┘
+```
 
 ---
 

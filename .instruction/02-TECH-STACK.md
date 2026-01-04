@@ -706,6 +706,179 @@ socket.on('order_created', (order) => {
 
 ---
 
+### Offline-First Storage
+
+#### IndexedDB + Dexie.js
+**Version**: Dexie.js 3.x  
+**Purpose**: Local database for offline-first POS operation
+
+**Why Chosen**:
+- ✅ Asynchronous Promise-based API
+- ✅ Cross-browser IndexedDB wrapper
+- ✅ Powerful query capabilities  
+- ✅ Automatic schema migrations
+- ✅ Large storage capacity (hundreds of MB)
+- ✅ Transaction support
+
+**Database Schema**:
+```javascript
+// frontend/src/lib/db/index.js
+import Dexie from 'dexie';
+
+export const db = new Dexie('POSDatabase');
+
+db.version(1).stores({
+    products: '++id, sku, name, category_id, outlet_id, price, *tags, sync_status',
+    categories: '++id, name, outlet_id, sort_order',
+    modifiers: '++id, product_id, name, type, price',
+    cart: '++id, product_id, quantity, modifiers, created_at',
+    orders: '++id, order_number, status, total, payment_status, created_at, sync_status',
+    order_items: '++id, order_id, product_id, quantity, price, modifiers',
+    payments: '++id, order_id, method, amount, status, transaction_id, sync_status',
+    sync_queue: '++id, entity_type, entity_id, action, data, created_at, retry_count',
+    app_settings: 'key, value'
+});
+```
+
+**Core Offline Operations**:
+```javascript
+// Save product offline
+export async function saveProduct(product) {
+    return await db.products.put({
+        ...product,
+        sync_status: 'synced'
+    });
+}
+
+// Get products (instant, works offline)
+export async function getProducts(categoryId = null) {
+    if (categoryId) {
+        return await db.products
+            .where('category_id')
+            .equals(categoryId)
+            .toArray();
+    }
+    return await db.products.toArray();
+}
+
+// Save order offline, queue for sync
+export async function saveOrderOffline(order) {
+    const orderId = await db.orders.add({
+        ...order,
+        sync_status: 'pending',
+        created_at: new Date().toISOString()
+    });
+    
+    await addToSyncQueue('order', orderId, 'create', order);
+    return orderId;
+}
+
+// Sync queue management
+export async function addToSyncQueue(entityType, entityId, action, data) {
+    return await db.sync_queue.add({
+        entity_type: entityType,
+        entity_id: entityId,
+        action: action,
+        data: JSON.stringify(data),
+        created_at: new Date().toISOString(),
+        retry_count: 0
+    });
+}
+```
+
+**Offline-First Pattern**:
+```javascript
+// frontend/src/lib/stores/offline.js
+import { writable } from 'svelte/store';
+import { getPendingSyncItems, removeSyncItem, incrementSyncRetry } from '$db';
+
+export const isOnline = writable(navigator.onLine);
+
+// Auto-sync when connection restored
+window.addEventListener('online', () => {
+    isOnline.set(true);
+    startBackgroundSync();
+});
+
+window.addEventListener('offline', () => {
+    isOnline.set(false);
+});
+
+// Background sync process
+async function startBackgroundSync() {
+    const pendingItems = await getPendingSyncItems();
+    
+    for (const item of pendingItems) {
+        try {
+            await syncItemToServer(item);
+            await removeSyncItem(item.id);
+        } catch (error) {
+            await incrementSyncRetry(item.id);
+            
+            // Max 5 retries
+            if (item.retry_count >= 5) {
+                console.error('Sync failed after 5 retries:', item);
+            }
+        }
+    }
+}
+
+async function syncItemToServer(item) {
+    const data = JSON.parse(item.data);
+    const response = await fetch(`${API_URL}/${item.entity_type}s/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: JSON.stringify(data)
+    });
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+}
+```
+
+**Benefits**:
+- ⚡ **Instant Response**: All reads from IndexedDB (no network wait)
+- 📱 **100% Offline Capable**: POS works without internet
+- 🔄 **Auto Background Sync**: Pushes to server when online
+- 💾 **Persistent Cart**: Never lose customer cart data
+- 🚀 **Better UX**: No loading spinners for data already cached
+
+**Data Flow**:
+```
+┌─────────────────┐
+│   User Action   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Write to       │
+│  IndexedDB      │◄── Instant (5-10ms)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Add to Sync    │
+│  Queue          │
+└────────┬────────┘
+         │
+         ▼ (when online)
+┌─────────────────┐
+│  POST to        │
+│  Django API     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Remove from    │
+│  Sync Queue     │
+└─────────────────┘
+```
+
+---
+
 ## Development Tools
 
 ### Code Quality

@@ -220,7 +220,7 @@ class TenantModel(models.Model):
 
 ## Data Flow Diagrams
 
-### Flow 1: Order Processing
+### Flow 1: Order Processing (Online)
 
 ```
 Customer → Cashier Terminal → Backend API → Database
@@ -243,6 +243,48 @@ Customer → Cashier Terminal → Backend API → Database
 10. Kitchen marks items as "in progress"
 11. Kitchen marks order as "complete"
 12. Customer receives notification
+
+---
+
+### Flow 1b: Order Processing (Offline)
+
+```
+Customer → Cashier Terminal → IndexedDB → Sync Queue
+                 ↓                           ↓ (when online)
+          Cart Saved                    Backend API
+                                             ↓
+                                        Database
+                                             ↓
+                                    Kitchen Sync Server
+```
+
+**Detailed Steps (Offline-First)**:
+1. **Offline Detection**: Frontend detects no network connection
+2. **Local Cart**: Customer adds items → saved to IndexedDB cart table
+3. **Checkout Offline**: 
+   - Frontend saves order to IndexedDB orders table
+   - Adds to sync_queue with action='create'
+   - Shows "Order saved offline, will sync when online"
+4. **Payment Offline**: Saves payment to IndexedDB payments table
+5. **Online Restored**: 
+   - Auto-detect online event
+   - Start background sync process
+6. **Sync to Server**:
+   - Read pending items from sync_queue
+   - POST order to backend API
+   - Backend creates order in PostgreSQL
+   - Sends to Kitchen Sync Server
+7. **Sync Complete**:
+   - Remove from sync_queue
+   - Update order.sync_status = 'synced'
+8. **Kitchen Receives**: Order appears on kitchen display
+
+**Benefits**:
+- ✅ POS never stops working (100% uptime)
+- ✅ No lost orders from connection issues
+- ✅ Automatic retry with exponential backoff
+- ✅ Manual intervention only after 5 failed retries
+- ✅ Cart persists across browser refresh
 
 ---
 
