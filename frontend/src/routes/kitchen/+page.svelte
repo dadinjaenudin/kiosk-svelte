@@ -114,8 +114,11 @@
 		socket.on('disconnect', () => {
 			console.log('[Kitchen Display] 📴 Disconnected');
 			connected = false;
-		// Clear orders when disconnected to prevent showing stale data
-		orders = [];
+			// Clear orders when disconnected to prevent showing stale data
+			orders = [];
+		});
+		
+		socket.on('subscribed', (data) => {
 			console.log('[Kitchen Display] ✅ Subscribed:', data);
 		});
 		
