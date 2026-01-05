@@ -637,19 +637,28 @@
 							Products in this category will route to this station type
 						</p>
 					</div>
-							>
-								<option value="">Select Tenant</option>
-								{#each tenants as tenant}
-									<option value={tenant.id}>{tenant.name}</option>
-								{/each}
-							</select>
-							{#if errors.tenant}
-								<p class="mt-1 text-sm text-red-500">{errors.tenant}</p>
-							{/if}
-						</div>
-						{/if}
 
-						<div>
+					{#if showTenantField}
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">
+							Tenant <span class="text-red-500">*</span>
+						</label>
+						<select
+							bind:value={categoryForm.tenant}
+							class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent {errors.tenant ? 'border-red-500' : 'border-gray-300'}"
+						>
+							<option value="">Select Tenant</option>
+							{#each tenants as tenant}
+								<option value={tenant.id}>{tenant.name}</option>
+							{/each}
+						</select>
+						{#if errors.tenant}
+							<p class="mt-1 text-sm text-red-500">{errors.tenant}</p>
+						{/if}
+					</div>
+					{/if}
+
+					<div>
 							<label class="block text-sm font-medium text-gray-700 mb-1">Sort Order</label>
 							<input
 								type="number"
