@@ -47,6 +47,8 @@ class TenantMiddleware(MiddlewareMixin):
         '/api/promotions/',  # Promotion management (admin access)
         '/api/outlets/accessible/',  # Get accessible outlets for current user
         '/api/outlets/all_outlets/',  # Get all outlets for admin forms
+        '/api/kitchen-station-types/',  # Kitchen station types management (admin access)
+        '/api/kitchen-stations/',  # Kitchen stations management (admin access)
         '/admin/',
         '/static/',
         '/media/',

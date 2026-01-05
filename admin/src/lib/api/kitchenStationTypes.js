@@ -1,6 +1,6 @@
 import { authFetch } from './auth';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+const API_BASE = '/api';
 
 export async function getKitchenStationTypes(tenantId = null) {
 	const params = new URLSearchParams();
@@ -8,12 +8,12 @@ export async function getKitchenStationTypes(tenantId = null) {
 		params.append('tenant', tenantId);
 	}
 	
-	const url = `${BASE_URL}/api/kitchen-station-types/${params.toString() ? '?' + params.toString() : ''}`;
+	const url = `${API_BASE}/kitchen-station-types/${params.toString() ? '?' + params.toString() : ''}`;
 	return await authFetch(url);
 }
 
 export async function createKitchenStationType(data) {
-	return await authFetch(`${BASE_URL}/api/kitchen-station-types/`, {
+	return await authFetch(`${API_BASE}/kitchen-station-types/`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -23,7 +23,7 @@ export async function createKitchenStationType(data) {
 }
 
 export async function updateKitchenStationType(id, data) {
-	return await authFetch(`${BASE_URL}/api/kitchen-station-types/${id}/`, {
+	return await authFetch(`${API_BASE}/kitchen-station-types/${id}/`, {
 		method: 'PUT',
 		headers: {
 			'Content-Type': 'application/json'
@@ -33,7 +33,7 @@ export async function updateKitchenStationType(id, data) {
 }
 
 export async function patchKitchenStationType(id, data) {
-	return await authFetch(`${BASE_URL}/api/kitchen-station-types/${id}/`, {
+	return await authFetch(`${API_BASE}/kitchen-station-types/${id}/`, {
 		method: 'PATCH',
 		headers: {
 			'Content-Type': 'application/json'
@@ -43,7 +43,7 @@ export async function patchKitchenStationType(id, data) {
 }
 
 export async function deleteKitchenStationType(id) {
-	return await authFetch(`${BASE_URL}/api/kitchen-station-types/${id}/`, {
+	return await authFetch(`${API_BASE}/kitchen-station-types/${id}/`, {
 		method: 'DELETE'
 	});
 }
