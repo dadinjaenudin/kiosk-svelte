@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import Swal from 'sweetalert2';
 	import { isAuthenticated } from '$lib/stores/auth';
 	import ProductForm from '$lib/components/ProductForm.svelte';
 	import { getProduct, updateProduct } from '$lib/api/products';
@@ -49,6 +50,9 @@
 			console.log('Updating product with data:', formData);
 			const updated = await updateProduct(productId, formData);
 			console.log('Product updated:', updated);
+			
+			// Show success message
+			await Swal.fire('Success', 'Product updated successfully', 'success');
 			
 			// Redirect to product list
 			goto('/products');

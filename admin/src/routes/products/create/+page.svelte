@@ -1,6 +1,7 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import Swal from 'sweetalert2';
 	import { isAuthenticated } from '$lib/stores/auth';
 	import ProductForm from '$lib/components/ProductForm.svelte';
 	import { createProduct } from '$lib/api/products';
@@ -23,6 +24,9 @@
 			console.log('Creating product with data:', formData);
 			const product = await createProduct(formData);
 			console.log('Product created:', product);
+			
+			// Show success message
+			await Swal.fire('Success', 'Product created successfully', 'success');
 			
 			// Redirect to product list
 			goto('/products');
