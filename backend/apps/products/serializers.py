@@ -31,11 +31,16 @@ class ProductSerializer(serializers.ModelSerializer):
         if obj.image:
             request = self.context.get('request')
             logger.info(f"🖼️ Product {obj.name} - image field: {obj.image}")
-            logger.info(f"🖼️ Request context available: {request is not None}")
             
             if request:
+                # Get the full URL
                 full_url = request.build_absolute_uri(obj.image.url)
-                logger.info(f"🖼️ Full URL: {full_url}")
+                
+                # Replace host.docker.internal with localhost for browser access
+                # This is needed because host.docker.internal only works inside Docker
+                full_url = full_url.replace('host.docker.internal', 'localhost')
+                
+                logger.info(f"🖼️ Full URL (fixed): {full_url}")
                 return full_url
             
             logger.warning(f"⚠️ No request context, returning relative URL: {obj.image.url}")
@@ -87,7 +92,10 @@ class CategorySerializer(serializers.ModelSerializer):
         if obj.image:
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.image.url)
+                full_url = request.build_absolute_uri(obj.image.url)
+                # Replace host.docker.internal with localhost for browser access
+                full_url = full_url.replace('host.docker.internal', 'localhost')
+                return full_url
             return obj.image.url
         return None
     
