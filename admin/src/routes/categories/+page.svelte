@@ -9,6 +9,7 @@
 	
 	let tenants = [];
 	let stationTypes = []; // Kitchen Station Types for routing
+	let categories = []; // Categories list
 	let currentUser = null;
 	let mounted = false;
 	
