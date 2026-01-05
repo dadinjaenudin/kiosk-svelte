@@ -14,6 +14,7 @@ class ProductModifierSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     modifiers = serializers.SerializerMethodField()
     category_name = serializers.CharField(source='category.name', read_only=True)
+    kitchen_station_code = serializers.ReadOnlyField()  # Property from model
     
     # Food court: Add tenant info for filtering
     tenant_id = serializers.IntegerField(source='tenant.id', read_only=True)
@@ -45,6 +46,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sku', 'name', 'description', 'image', 
             'price', 'category', 'category_name',
+            'kitchen_station_code', 'kitchen_station_code_override',  # Kitchen routing
             'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color',  # Food court fields
             'is_available', 'is_featured', 
             'is_popular', 'has_promo', 'promo_price',  # Search filter fields

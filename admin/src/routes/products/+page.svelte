@@ -16,6 +16,7 @@
 		formatDate
 	} from '$lib/api/products';
 	import { getTenants } from '$lib/api/tenants';
+	import { getKitchenStationTypes } from '$lib/api/kitchenStationTypes';
 
 	// Props
 	export let data = {};
@@ -25,6 +26,7 @@
 	let products = [];
 	let categories = [];
 	let tenants = [];
+	let stationTypes = []; // Kitchen Station Types for routing
 	let stats = null;
 	let isLoading = true;
 	let error = null;
@@ -103,6 +105,21 @@
 		} catch (err) {
 			console.error('Error loading tenants:', err);
 		}
+	}
+
+	async function loadStationTypes() {
+		try {
+			const response = await getKitchenStationTypes($selectedTenant);
+			stationTypes = response.results || response || [];
+			stationTypes = stationTypes.filter(t => t.is_active);
+			stationTypes.sort((a, b) => a.sort_order - b.sort_order);
+		} catch (err) {
+			console.error('Error loading station types:', err);
+		}
+	}
+
+	function getStationType(code) {
+		return stationTypes.find(t => t.code === code);
 	}
 
 	async function loadStats() {
@@ -224,6 +241,7 @@
 		loadProducts();
 		loadCategories();
 		loadTenants();
+		loadStationTypes();
 		loadStats();
 		mounted = true;
 	});
@@ -476,8 +494,7 @@
 							</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>						<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kitchen Station</th>							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outlet</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
@@ -514,8 +531,30 @@
 								<td class="px-6 py-4 text-sm text-gray-900">
 									{product.category_name || '-'}
 								</td>
-								<td class="px-6 py-4 text-sm">
-									{#if product.tenant_name}
+								<td class="px-6 py-4 text-sm">								<div class="flex items-center gap-2">
+									{#if getStationType(product.kitchen_station_code)}
+										{@const type = getStationType(product.kitchen_station_code)}
+										<span class="text-lg">{type.icon}</span>
+										<span 
+											class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+											style="background-color: {type.color}20; color: {type.color};"
+										>
+											{product.kitchen_station_code}
+											{#if product.kitchen_station_code_override}
+												<span class="ml-1" title="Override from category">⚙️</span>
+											{/if}
+										</span>
+									{:else}
+										<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+											{product.kitchen_station_code || 'MAIN'}
+											{#if product.kitchen_station_code_override}
+												<span class="ml-1" title="Override from category">⚙️</span>
+											{/if}
+										</span>
+									{/if}
+								</div>
+							</td>
+							<td class="px-6 py-4 text-sm">									{#if product.tenant_name}
 										<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
 											{product.tenant_name}
 										</span>
