@@ -12,9 +12,11 @@
 		deleteKitchenStation 
 	} from '$lib/api/kitchenStations';
 	import { getOutlets } from '$lib/api/settings';
+	import { getKitchenStationTypes } from '$lib/api/kitchenStationTypes';
 
 	let stations = [];
 	let outlets = [];
+	let stationTypes = []; // Available kitchen station types
 	let loading = true;
 	let error = null;
 	let showModal = false;
@@ -45,6 +47,20 @@
 			}
 		} catch (err) {
 			console.error('Error loading outlets:', err);
+		}
+	}
+
+	// Load kitchen station types
+	async function loadStationTypes() {
+		try {
+			const response = await getKitchenStationTypes($selectedTenant);
+			stationTypes = response.results || response || [];
+			// Filter only active types
+			stationTypes = stationTypes.filter(t => t.is_active);
+			// Sort by sort_order
+			stationTypes.sort((a, b) => a.sort_order - b.sort_order);
+		} catch (err) {
+			console.error('Error loading station types:', err);
 		}
 	}
 
@@ -163,6 +179,11 @@
 			error = 'Failed to update station status';
 		}
 	}
+	
+	// Helper function to get station type info by code
+	function getStationType(code) {
+		return stationTypes.find(t => t.code === code);
+	}
 
 	// Filter by outlet
 	async function changeOutletFilter(outletId) {
@@ -178,6 +199,7 @@
 
 	onMount(async () => {
 		await loadOutlets();
+		await loadStationTypes();
 		await loadStations();
 	});
 </script>
@@ -253,12 +275,25 @@
 					<div class="flex justify-between items-start mb-4">
 						<div class="flex-1">
 							<div class="flex items-center gap-2 mb-1">
+								{#if getStationType(station.code)}
+									<span class="text-2xl">{getStationType(station.code).icon}</span>
+								{/if}
 								<h3 class="text-xl font-bold text-gray-900">{station.name}</h3>
-								<span class="px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">
+							</div>
+							<div class="flex items-center gap-2 mt-1">
+								<span 
+									class="px-2 py-0.5 text-xs font-semibold rounded"
+									style="background-color: {getStationType(station.code)?.color}20; color: {getStationType(station.code)?.color || '#666'};"
+								>
 									{station.code}
 								</span>
+								{#if getStationType(station.code)}
+									<span class="text-xs text-gray-500">
+										{getStationType(station.code).name}
+									</span>
+								{/if}
 							</div>
-							<p class="text-sm text-gray-600">{getOutletName(station.outlet)}</p>
+							<p class="text-sm text-gray-600 mt-2">{getOutletName(station.outlet)}</p>
 						</div>
 						<button
 							on:click={() => toggleActive(station)}
@@ -355,16 +390,21 @@
 						<label class="block text-sm font-medium text-gray-700 mb-1">
 							Station Code <span class="text-red-500">*</span>
 						</label>
-						<input
-							type="text"
+						<select
 							bind:value={formData.code}
 							required
-							maxlength="20"
-							placeholder="e.g., MAIN"
-							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-							style="text-transform: uppercase;"
-						/>
-						<p class="text-xs text-gray-500 mt-1">Must be unique per outlet</p>
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+						>
+							<option value="">Select station type</option>
+							{#each stationTypes as type}
+								<option value={type.code}>
+									{type.icon} {type.name} ({type.code})
+								</option>
+							{/each}
+						</select>
+						<p class="text-xs text-gray-500 mt-1">
+							Must match Kitchen Station Type for routing to work
+						</p>
 					</div>
 
 					<!-- Description -->
