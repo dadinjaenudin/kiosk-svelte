@@ -15,12 +15,22 @@ class ProductSerializer(serializers.ModelSerializer):
     modifiers = serializers.SerializerMethodField()
     category_name = serializers.CharField(source='category.name', read_only=True)
     kitchen_station_code = serializers.ReadOnlyField()  # Property from model
+    image = serializers.SerializerMethodField()  # Return full URL for image
     
     # Food court: Add tenant info for filtering
     tenant_id = serializers.IntegerField(source='tenant.id', read_only=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     tenant_slug = serializers.CharField(source='tenant.slug', read_only=True)
     tenant_color = serializers.CharField(source='tenant.primary_color', read_only=True)
+    
+    def get_image(self, obj):
+        """Return full URL for product image"""
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
     
     def get_modifiers(self, obj):
         """
@@ -56,10 +66,20 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class CategorySerializer(serializers.ModelSerializer):
     product_count = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()  # Return full URL for image
     
     # Food court: Add tenant info
     tenant_id = serializers.IntegerField(source='tenant.id', read_only=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
+    
+    def get_image(self, obj):
+        """Return full URL for category image"""
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
     
     class Meta:
         model = Category
