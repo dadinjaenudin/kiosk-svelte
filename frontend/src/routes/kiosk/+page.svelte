@@ -18,6 +18,8 @@
 	let products = [];
 	let categories = [];
 	let tenants = [];
+	let outlets = [];  // Available outlets
+	let selectedOutlet = null;  // Current outlet for this kiosk
 	let selectedCategory = null;
 	let selectedTenant = null;  // For filtering, not selection!
 	// isOnline imported from $stores/offline.js
@@ -41,6 +43,49 @@
 		if (browser) {
 			const queue = await db.sync_queue.count();
 			pendingSyncCount = queue;
+		}
+	}
+	
+	// Load outlets from API
+	async function loadOutlets() {
+		try {
+			const response = await fetch('http://localhost:8001/api/public/outlets/');
+			if (response.ok) {
+				const data = await response.json();
+				outlets = data.results || data || [];
+				console.log('[Kiosk] Loaded outlets:', outlets.length);
+				
+				// Try to restore selected outlet from localStorage
+				const savedOutletId = localStorage.getItem('kiosk_outlet_id');
+				if (savedOutletId) {
+					const outlet = outlets.find(o => o.id === parseInt(savedOutletId));
+					if (outlet) {
+						selectedOutlet = outlet;
+						console.log('[Kiosk] Restored outlet:', outlet.name);
+					}
+				}
+				
+				// If no outlet selected and only 1 outlet available, auto-select
+				if (!selectedOutlet && outlets.length === 1) {
+					selectedOutlet = outlets[0];
+					localStorage.setItem('kiosk_outlet_id', outlets[0].id);
+					console.log('[Kiosk] Auto-selected single outlet:', outlets[0].name);
+				}
+			} else {
+				console.error('[Kiosk] Failed to load outlets:', response.status);
+			}
+		} catch (error) {
+			console.error('[Kiosk] Error loading outlets:', error);
+		}
+	}
+	
+	// Change outlet and save to localStorage
+	function changeOutlet(outletId) {
+		const outlet = outlets.find(o => o.id === parseInt(outletId));
+		if (outlet) {
+			selectedOutlet = outlet;
+			localStorage.setItem('kiosk_outlet_id', outlet.id);
+			console.log('[Kiosk] Changed outlet to:', outlet.name);
 		}
 	}
 	
@@ -147,6 +192,9 @@
 		try {
 			// Load cart from IndexedDB
 			await loadCart();
+			
+			// Load outlets first (needed for sync)
+			await loadOutlets();
 			
 			// Load kiosk data
 			await loadKioskData();
@@ -432,6 +480,12 @@
 			return;
 		}
 		
+		// Check if outlet is selected (required for kitchen routing)
+		if (!selectedOutlet) {
+			if (browser) alert('⚠️ Silahkan pilih outlet terlebih dahulu!\n\nOutlet diperlukan untuk mengirim pesanan ke kitchen yang benar.');
+			return;
+		}
+		
 		// Show payment modal
 		showCart = false;
 		showPaymentModal = true;
@@ -583,6 +637,7 @@
 			
 			const orderData = {
 				order_number: tenantOrderNumber,
+				outlet_id: selectedOutlet?.id || null,  // Add outlet_id for kitchen routing
 				tenant_id: group.tenant_id,
 				tenant_name: group.tenant_name,
 				status: 'pending',
@@ -681,6 +736,23 @@
 					<span class="hidden md:inline">🍽️ Food Court Kiosk</span>
 					<span class="md:hidden">🍽️ Food Court Kiosk</span>
 				</h1>
+				
+				<!-- Outlet Selector -->
+				{#if outlets.length > 0}
+					<select
+						bind:value={selectedOutlet}
+						on:change={(e) => changeOutlet(e.target.value?.id || e.target.value)}
+						class="hidden md:block px-3 py-2 bg-white text-gray-800 rounded-lg border-2 border-white/20 font-medium text-sm shadow-md hover:bg-gray-50 transition-colors"
+					>
+						<option value={null}>Select Outlet...</option>
+						{#each outlets as outlet (outlet.id)}
+							<option value={outlet.id} selected={selectedOutlet?.id === outlet.id}>
+								📍 {outlet.name}
+							</option>
+						{/each}
+					</select>
+				{/if}
+				
 				{#if !$isOnline}
 					<span class="offline-indicator text-kiosk-base px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full font-semibold shadow-md">
 						📴 Offline

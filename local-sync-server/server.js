@@ -128,25 +128,31 @@ io.on('connection', (socket) => {
   });
 
   // Handle new order from POS
-  socket.on('new_order', (order) => {
-    console.log(`[${new Date().toISOString()}] 📦 New order #${order.order_number} from outlet ${order.outlet_id}`);
+  socket.on('new_order', (message) => {
+    const order = message.data || message; // Support both wrapped and direct formats
+    const outletId = order.outlet_id || order.tenant_id;
+    
+    console.log(`[${new Date().toISOString()}] 📦 New order #${order.order_number} from outlet ${outletId}`);
     
     // Broadcast to all clients in the same outlet
-    io.to(`outlet_${order.outlet_id}`).emit('order_created', order);
+    io.to(`outlet_${outletId}`).emit('order_created', order);
     
     // Send acknowledgment to sender
     socket.emit('order_sent', {
-      orderId: order.id,
+      orderId: order.id || order.order_number,
       timestamp: new Date().toISOString()
     });
   });
 
   // Handle order status update from Kitchen
-  socket.on('update_status', (update) => {
+  socket.on('update_status', (message) => {
+    const update = message.data || message; // Support both wrapped and direct formats
+    const outletId = update.outlet_id || update.tenant_id;
+    
     console.log(`[${new Date().toISOString()}] 🔄 Order #${update.order_number} status: ${update.status}`);
     
     // Broadcast to all clients in the same outlet
-    io.to(`outlet_${update.outlet_id}`).emit('order_updated', update);
+    io.to(`outlet_${outletId}`).emit('order_updated', update);
     
     // Send acknowledgment
     socket.emit('status_updated', {

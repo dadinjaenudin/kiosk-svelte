@@ -89,9 +89,10 @@
 	$: readyOrders = filteredOrders.filter(o => o.status === 'ready');
 	
 	// Connect to Kitchen Sync Server
-	function connectToKitchenSync(useOutletId = null) {
-		// Get outlet ID from parameter or selectedOutletId
-		outletId = useOutletId || selectedOutletId || 1;
+	function connectToKitchenSync(useTenantId = null) {
+		// For food court: use tenant_id as room identifier
+		// Each tenant (Burger Station, Pizza Paradise, etc) has own kitchen
+		const roomId = useTenantId || selectedTenantId || selectedOutletId || 1;
 		
 		const SYNC_SERVER_URL = 'http://localhost:3001';
 		console.log('[Kitchen Display] Connecting to', SYNC_SERVER_URL);
@@ -108,12 +109,13 @@
 			socket.emit('identify', { 
 				type: 'kitchen',
 				stationId: selectedStationId,
-				outletId: outletId
+				tenantId: selectedTenantId,
+				outletId: selectedOutletId
 			});
 			
-			// Subscribe to outlet
-			socket.emit('subscribe_outlet', outletId);
-			console.log('[Kitchen Display] 📍 Subscribed to outlet:', outletId, '| Station ID:', selectedStationId);
+			// Subscribe to room (tenant_id for food court, outlet_id for single tenant)
+			socket.emit('subscribe_outlet', roomId);
+			console.log('[Kitchen Display] 📍 Subscribed to room:', roomId, '| Tenant:', selectedTenantId, '| Station:', selectedStationId);
 		});
 		
 		socket.on('disconnect', () => {
@@ -294,7 +296,13 @@
 		localStorage.setItem('kitchen_tenant', selectedTenantId);
 		localStorage.setItem('kitchen_outlet', selectedOutletId);
 		localStorage.setItem('kitchen_station', selectedStationId);
-		// No need to reconnect, just filter locally
+		
+		// Reconnect to sync server with new tenant room (for food court)
+		if (selectedTenantId !== 'all') {
+			disconnectFromKitchenSync();
+			orders = [];
+			connectToKitchenSync(selectedTenantId);
+		}
 	}
 	
 	async function loadKitchenStations(outletId = null) {

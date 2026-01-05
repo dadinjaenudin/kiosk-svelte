@@ -183,15 +183,17 @@ export function disconnectFromSyncServer() {
  * @param {Object} order - Order data
  */
 export function broadcastNewOrder(order) {
-	// Get outlet settings for tenant_id
+	// Get outlet settings for outlet_id and tenant_id
 	const settings = get(outletSettings);
 	const tenantId = order.tenant_id || order.tenant || settings?.tenant || 1;
+	const outletId = order.outlet_id || settings?.id || tenantId; // Use outlet ID from settings, fallback to tenant_id
 
 	const message = {
 		type: 'new_order',
 		timestamp: new Date().toISOString(),
 		data: {
 			order_number: order.order_number || `ORD-${Date.now()}`,
+			outlet_id: outletId, // Add outlet_id for kitchen display routing
 			tenant_id: tenantId,
 			tenant_name: order.tenant_name || 'Unknown Tenant',
 			tenant_color: order.tenant_color || '#3b82f6',
@@ -209,12 +211,12 @@ export function broadcastNewOrder(order) {
 	};
 
 	// Subscribe to outlet if not already subscribed
-	if (socket && socket.connected && tenantId) {
-		socket.emit('subscribe_outlet', tenantId);
+	if (socket && socket.connected && outletId) {
+		socket.emit('subscribe_outlet', outletId);
 	}
 
 	sendMessage(message);
-	console.log('[LocalSync] 📤 Broadcasted new order:', message.data.order_number, 'for tenant:', tenantId);
+	console.log('[LocalSync] 📤 Broadcasted new order:', message.data.order_number, 'for outlet:', outletId, '| tenant:', tenantId);
 }
 
 /**
