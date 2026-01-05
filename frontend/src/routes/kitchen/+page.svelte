@@ -45,13 +45,19 @@
 		// If no station selected, show all orders
 		if (!selectedStationId || selectedStationId === 'all') return true;
 		
+		// Get the station code from selected station
+		const selectedStation = kitchenStations.find(s => s.id === selectedStationId);
+		if (!selectedStation) return true;
+		
+		const stationCode = selectedStation.code;
+		
 		// Check if order has items
 		if (!order.items || !Array.isArray(order.items)) return true;
 		
-		// Filter items by station: show items assigned to this station OR items with no station (null)
+		// Filter items by station code: match kitchen_station_code with station.code
 		const hasMatchingItems = order.items.some(item => {
-			return item.kitchen_station_id === selectedStationId || 
-			       item.kitchen_station_id === null;  // null = show in all kitchens
+			return item.kitchen_station_code === stationCode || 
+			       !item.kitchen_station_code;  // No code = show in all stations
 		});
 		
 		return hasMatchingItems;
@@ -63,10 +69,16 @@
 			return order.items;
 		}
 		
-		// Return only items for this station or items with no station
+		// Get the station code from selected station
+		const selectedStation = kitchenStations.find(s => s.id === selectedStationId);
+		if (!selectedStation) return order.items;
+		
+		const stationCode = selectedStation.code;
+		
+		// Return only items for this station code or items with no code
 		return order.items.filter(item => 
-			item.kitchen_station_id === selectedStationId || 
-			item.kitchen_station_id === null
+			item.kitchen_station_code === stationCode || 
+			!item.kitchen_station_code
 		);
 	}
 	
