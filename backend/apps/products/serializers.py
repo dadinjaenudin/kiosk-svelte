@@ -63,7 +63,11 @@ class CategorySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Category
-        fields = ['id', 'name', 'description', 'image', 'sort_order', 'is_active', 'product_count', 'tenant_id', 'tenant_name']
+        fields = [
+            'id', 'name', 'description', 'image', 'sort_order', 'is_active', 
+            'kitchen_station_code',  # Kitchen routing
+            'product_count', 'tenant_id', 'tenant_name'
+        ]
     
     def get_product_count(self, obj):
         return obj.products.filter(is_available=True).count()
