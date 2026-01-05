@@ -1,19 +1,17 @@
 import { authFetch } from './auth';
 
-const API_BASE = '/api';
-
 export async function getKitchenStationTypes(tenantId = null) {
 	const params = new URLSearchParams();
 	if (tenantId) {
 		params.append('tenant', tenantId);
 	}
 	
-	const url = `${API_BASE}/kitchen-station-types/${params.toString() ? '?' + params.toString() : ''}`;
+	const url = `/api/kitchen-station-types/${params.toString() ? '?' + params.toString() : ''}`;
 	return await authFetch(url);
 }
 
 export async function createKitchenStationType(data) {
-	return await authFetch(`${API_BASE}/kitchen-station-types/`, {
+	return await authFetch(`/api/kitchen-station-types/`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -23,7 +21,7 @@ export async function createKitchenStationType(data) {
 }
 
 export async function updateKitchenStationType(id, data) {
-	return await authFetch(`${API_BASE}/kitchen-station-types/${id}/`, {
+	return await authFetch(`/api/kitchen-station-types/${id}/`, {
 		method: 'PUT',
 		headers: {
 			'Content-Type': 'application/json'
@@ -33,7 +31,7 @@ export async function updateKitchenStationType(id, data) {
 }
 
 export async function patchKitchenStationType(id, data) {
-	return await authFetch(`${API_BASE}/kitchen-station-types/${id}/`, {
+	return await authFetch(`/api/kitchen-station-types/${id}/`, {
 		method: 'PATCH',
 		headers: {
 			'Content-Type': 'application/json'
@@ -43,7 +41,7 @@ export async function patchKitchenStationType(id, data) {
 }
 
 export async function deleteKitchenStationType(id) {
-	return await authFetch(`${API_BASE}/kitchen-station-types/${id}/`, {
+	return await authFetch(`/api/kitchen-station-types/${id}/`, {
 		method: 'DELETE'
 	});
 }
