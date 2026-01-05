@@ -48,7 +48,8 @@
    ┌──────────────────────────────────────┐
    │ • Product: "Big Mac"                  │
    │ • kitchen_station_code: "MAIN"       │
-   │   (dari product property)             │
+   │   (snapshot from product at order)    │
+   │   (stored in database)                │
    └──────────────────────────────────────┘
             ↓ ditampilkan di
             
@@ -57,7 +58,8 @@
    │ Outlet: Burger Station - Central      │
    │ Station: Main Kitchen (code: MAIN)    │
    │                                        │
-   │ Filter: WHERE code = "MAIN"           │
+   │ Filter: WHERE item.kitchen_station_   │
+   │         code = station.code ("MAIN")  │
    │ ↓                                      │
    │ Shows: Big Mac order ✅               │
    └──────────────────────────────────────┘
@@ -330,9 +332,18 @@ When customer orders:
 1. Order created with item "Big Mac"
 2. System reads: Product.kitchen_station_code property
    - Returns override if set
-   - Otherwise returns category.kitchen_station_code
-3. OrderItem.kitchen_station_code = "MAIN"
-4. Kitchen Display filters: WHERE station.code = "MAIN"
+   - Otherwise returns category.kitchen_st (SAVED TO DATABASE)
+   - Snapshot at order creation time
+   - Won't change if product/category changes later
+4. Kitchen Display filters: WHERE item.kitchen_station_code = station.code
+   - Compares OrderItem.kitchen_station_code with KitchenStation.code
+5. Order appears in correct station display
+
+Benefits of Snapshot:
+✅ Orders stay routed correctly even if product changes
+✅ Historical data preserved (audit trail)
+✅ No broken routing from config changes
+✅ Kitchen sees orders as they were at creation timeode = "MAIN"
 5. Order appears in correct station display
 
 No manual intervention required! ✨
