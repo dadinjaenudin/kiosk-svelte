@@ -12,8 +12,6 @@ from decimal import Decimal
 class OrderItemSerializer(serializers.ModelSerializer):
     """Serializer for order items"""
     
-    # Kitchen Station Code (from category or product override)
-    kitchen_station_code = serializers.SerializerMethodField()
     category_name = serializers.CharField(source='product.category.name', read_only=True, allow_null=True)
     
     class Meta:
@@ -24,14 +22,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'total_price', 'notes',
             'kitchen_station_code', 'category_name'
         ]
-        read_only_fields = ['total_price']
-    
-    def get_kitchen_station_code(self, obj):
-        """Get kitchen station code from product (category or override)"""
-        try:
-            return obj.product.kitchen_station_code
-        except:
-            return 'MAIN'
+        read_only_fields = ['total_price', 'kitchen_station_code']
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -196,6 +187,9 @@ class CheckoutSerializer(serializers.Serializer):
                 modifiers = item.get('modifiers', [])
                 modifiers_price = sum(Decimal(str(m.get('price', 0))) for m in modifiers)
                 
+                # Get kitchen station code from product (snapshot at order time)
+                kitchen_station_code = getattr(product, 'kitchen_station_code', 'MAIN')
+                
                 OrderItem.objects.create(
                     order=order,
                     product=product,
@@ -205,7 +199,8 @@ class CheckoutSerializer(serializers.Serializer):
                     unit_price=product.price,
                     modifiers=modifiers,
                     modifiers_price=modifiers_price,
-                    notes=item.get('notes', '')
+                    notes=item.get('notes', ''),
+                    kitchen_station_code=kitchen_station_code  # Save routing snapshot
                 )
             
             # Calculate totals

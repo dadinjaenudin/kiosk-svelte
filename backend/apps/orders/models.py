@@ -109,6 +109,14 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
     
+    # Kitchen routing (snapshot from product at order time)
+    kitchen_station_code = models.CharField(
+        max_length=20, 
+        default='MAIN',
+        db_index=True,
+        help_text='Kitchen station code for routing (snapshot from product)'
+    )
+    
     # Modifiers (stored as JSON)
     modifiers = models.JSONField(default=list, blank=True)
     modifiers_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
