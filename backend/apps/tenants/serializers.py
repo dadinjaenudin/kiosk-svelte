@@ -2,7 +2,7 @@
 Serializers for Tenant API
 """
 from rest_framework import serializers
-from apps.tenants.models import Tenant, Outlet, KitchenStation
+from apps.tenants.models import Tenant, Outlet, KitchenStation, KitchenStationType
 
 
 class TenantSerializer(serializers.ModelSerializer):
@@ -150,4 +150,59 @@ class KitchenStationSerializer(serializers.ModelSerializer):
                 })
         
         return data
+
+
+class KitchenStationTypeSerializer(serializers.ModelSerializer):
+    """
+    Serializer for KitchenStationType model
+    """
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = KitchenStationType
+        fields = [
+            'id',
+            'tenant',
+            'tenant_name',
+            'name',
+            'code',
+            'description',
+            'icon',
+            'color',
+            'is_active',
+            'is_global',
+            'sort_order',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'tenant_name']
+    
+    def validate(self, data):
+        """
+        Ensure either tenant or is_global is set, but not both
+        """
+        tenant = data.get('tenant')
+        is_global = data.get('is_global', False)
+        
+        if is_global and tenant:
+            raise serializers.ValidationError(
+                "Global types cannot be assigned to a specific tenant"
+            )
+        
+        if not is_global and not tenant:
+            raise serializers.ValidationError(
+                "Non-global types must be assigned to a tenant"
+            )
+        
+        return data
+    
+    def validate_code(self, value):
+        """
+        Ensure code is uppercase and alphanumeric
+        """
+        if not value.replace('_', '').isalnum() or not value.isupper():
+            raise serializers.ValidationError(
+                "Code must be uppercase alphanumeric only (e.g., MAIN, BEVERAGE)"
+            )
+        return value
 

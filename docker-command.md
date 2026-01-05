@@ -9,5 +9,6 @@ docker-compose stop frontend; docker-compose rm -f frontend; docker-compose up -
 
 
 git status
+git add admin/  --> directory
 git commit -m "chore: Move COMPLETE_FEATURES_ROADMAP.md to markdown folder"
 git push origin main

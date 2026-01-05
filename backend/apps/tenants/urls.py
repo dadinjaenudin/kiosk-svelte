@@ -15,6 +15,7 @@ router = DefaultRouter()
 router.register(r'tenants', views.TenantViewSet, basename='tenant')
 router.register(r'outlets', views.OutletViewSet, basename='outlet')
 router.register(r'kitchen-stations', views.KitchenStationViewSet, basename='kitchen-station')
+router.register(r'kitchen-station-types', views.KitchenStationTypeViewSet, basename='kitchen-station-type')
 
 # Admin router for settings
 admin_router = DefaultRouter()

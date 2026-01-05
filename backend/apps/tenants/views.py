@@ -5,13 +5,14 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from apps.tenants.models import Tenant, Outlet, KitchenStation
+from apps.tenants.models import Tenant, Outlet, KitchenStation, KitchenStationType
 from apps.tenants.serializers import (
     TenantSerializer,
     TenantDetailSerializer,
     OutletSerializer,
     OutletDetailSerializer,
-    KitchenStationSerializer
+    KitchenStationSerializer,
+    KitchenStationTypeSerializer
 )
 from apps.core.context import get_current_tenant
 from apps.core.permissions import (
@@ -370,5 +371,98 @@ class KitchenStationViewSet(viewsets.ModelViewSet):
         return Response({
             'success': True,
             'message': f'Kitchen station {instance.name} has been deactivated'
+        }, status=status.HTTP_200_OK)
+
+
+class KitchenStationTypeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for KitchenStationType management
+    
+    list: Get all kitchen station types (global + tenant-specific)
+    retrieve: Get specific kitchen station type
+    create: Create new kitchen station type
+    update: Update kitchen station type
+    destroy: Delete kitchen station type
+    """
+    serializer_class = KitchenStationTypeSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Return global types + tenant-specific types for current tenant
+        """
+        user = self.request.user
+        
+        # Start with all global types
+        queryset = KitchenStationType.objects.filter(is_global=True)
+        
+        # Add tenant-specific types
+        tenant_id = self.request.query_params.get('tenant')
+        if tenant_id:
+            # Filter by specific tenant (for admin)
+            tenant_types = KitchenStationType.objects.filter(tenant_id=tenant_id, is_global=False)
+        else:
+            # Get current tenant's types
+            tenant = get_current_tenant()
+            if tenant:
+                tenant_types = KitchenStationType.objects.filter(tenant=tenant, is_global=False)
+            else:
+                tenant_types = KitchenStationType.objects.none()
+        
+        # Combine querysets
+        queryset = queryset | tenant_types
+        
+        # Allow admin to see all types
+        if is_admin_user(user):
+            queryset = KitchenStationType.objects.all()
+        
+        return queryset.order_by('sort_order', 'name')
+    
+    def perform_create(self, serializer):
+        """Create kitchen station type"""
+        # If not global and no tenant specified, use current tenant
+        if not serializer.validated_data.get('is_global') and not serializer.validated_data.get('tenant'):
+            tenant = get_current_tenant()
+            if tenant:
+                serializer.save(tenant=tenant)
+            else:
+                serializer.save()
+        else:
+            serializer.save()
+    
+    def perform_update(self, serializer):
+        """Update kitchen station type"""
+        serializer.save()
+    
+    def destroy(self, request, *args, **kwargs):
+        """Hard delete kitchen station type (only if not in use)"""
+        instance = self.get_object()
+        
+        # Check if type is used in any categories
+        from apps.products.models import Category
+        categories_using = Category.objects.filter(kitchen_station_code=instance.code)
+        
+        if categories_using.exists():
+            return Response({
+                'success': False,
+                'error': f'Cannot delete station type "{instance.name}" - it is used by {categories_using.count()} categories'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if type is used in any product overrides
+        from apps.products.models import Product
+        products_using = Product.objects.filter(kitchen_station_code_override=instance.code)
+        
+        if products_using.exists():
+            return Response({
+                'success': False,
+                'error': f'Cannot delete station type "{instance.name}" - it is used by {products_using.count()} products as override'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Safe to delete
+        instance.delete()
+        
+        return Response({
+            'success': True,
+            'message': f'Kitchen station type {instance.name} has been deleted'
         }, status=status.HTTP_200_OK)
 

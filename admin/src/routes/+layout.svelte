@@ -57,7 +57,8 @@
 				{ name: 'Users', href: '/users', icon: '👤', feature: 'users' },
 				{ name: 'Tenants', href: '/tenants', icon: '🏢', feature: 'tenants' },
 				{ name: 'Outlets', href: '/outlets', icon: '📍', feature: 'outlets' },
-				{ name: 'Kitchen Stations', href: '/kitchen-stations', icon: '🍳', feature: 'outlets' }
+				{ name: 'Kitchen Stations', href: '/kitchen-stations', icon: '🍳', feature: 'outlets' },
+				{ name: 'Kitchen Station Types', href: '/kitchen-station-types', icon: '🏷️', feature: 'outlets' }
 			]
 		}
 	];
