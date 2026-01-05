@@ -16,6 +16,14 @@ class Category(TenantModel):
     image = models.ImageField(upload_to='categories/', null=True, blank=True)
     sort_order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    
+    # Kitchen Station Routing
+    kitchen_station_code = models.CharField(
+        max_length=20,
+        default='MAIN',
+        help_text='Auto-route products in this category to kitchen station (e.g., MAIN, BEVERAGE, GRILL, DESSERT)'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -31,21 +39,17 @@ class Category(TenantModel):
 class Product(TenantModel):
     """
     Product/Menu item
-    Multi-outlet: Products can be outlet-specific or shared across all outlets
+    Category-Based Routing: Products auto-route to kitchen stations based on category
     """
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='products')
-    outlet = models.ForeignKey(Outlet, on_delete=models.CASCADE, null=True, blank=True, related_name='products',
-                               help_text='If set, product is only available at this outlet. Leave blank for all outlets.')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
     
-    # Kitchen Station Assignment
-    kitchen_station = models.ForeignKey(
-        'tenants.KitchenStation',
-        on_delete=models.SET_NULL,
+    # Kitchen Station Override (optional)
+    kitchen_station_code_override = models.CharField(
+        max_length=20,
         null=True,
         blank=True,
-        related_name='products',
-        help_text='Assign product to specific kitchen station. Leave blank to show in all kitchens.'
+        help_text='Override category default routing (e.g., MAIN, BEVERAGE, GRILL). Leave blank to use category default.'
     )
     
     sku = models.CharField(max_length=50, unique=True)
@@ -84,6 +88,13 @@ class Product(TenantModel):
     
     def __str__(self):
         return f"{self.name} - Rp {self.price:,.0f}"
+    
+    @property
+    def kitchen_station_code(self):
+        """Get effective kitchen station code (override or category default)"""
+        if self.kitchen_station_code_override:
+            return self.kitchen_station_code_override
+        return self.category.kitchen_station_code if self.category else 'MAIN'
     
     @property
     def is_low_stock(self):

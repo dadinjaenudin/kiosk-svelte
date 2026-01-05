@@ -96,6 +96,78 @@ class Outlet(models.Model):
         super().save(*args, **kwargs)
 
 
+class KitchenStationType(models.Model):
+    """
+    Kitchen Station Type - Master table for kitchen station types
+    Can be managed by tenant or shared across all tenants
+    
+    Examples:
+    - MAIN: Main Kitchen (general purpose)
+    - BEVERAGE: Drink Station / Bar
+    - GRILL: Grill Station (burgers, steaks)
+    - WOK: Wok Station (stir-fry)
+    - PIZZA: Pizza Oven
+    - DESSERT: Dessert Station
+    - FRY: Fry Station (fries, fried items)
+    - ASSEMBLY: Final Assembly / Packaging
+    """
+    tenant = models.ForeignKey(
+        Tenant, 
+        on_delete=models.CASCADE, 
+        related_name='kitchen_station_types',
+        null=True,
+        blank=True,
+        help_text='Leave empty for global types available to all tenants'
+    )
+    
+    name = models.CharField(
+        max_length=100, 
+        help_text='Display name (e.g., "Main Kitchen", "Grill Station")'
+    )
+    code = models.CharField(
+        max_length=20, 
+        help_text='Unique code (e.g., "MAIN", "GRILL", "BEVERAGE")',
+        db_index=True
+    )
+    description = models.TextField(blank=True)
+    icon = models.CharField(
+        max_length=50, 
+        blank=True,
+        help_text='Icon name or emoji (e.g., "🍳", "☕", "🍔")'
+    )
+    color = models.CharField(
+        max_length=7, 
+        default='#FF6B35',
+        help_text='Hex color code for UI display'
+    )
+    
+    is_active = models.BooleanField(default=True)
+    is_global = models.BooleanField(
+        default=False,
+        help_text='Global types are available to all tenants'
+    )
+    sort_order = models.IntegerField(
+        default=0, 
+        help_text='Display order (lower number = first)'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'kitchen_station_types'
+        ordering = ['sort_order', 'name']
+        unique_together = [['tenant', 'code']]  # Code unique per tenant (or global)
+        indexes = [
+            models.Index(fields=['code', 'is_active']),
+            models.Index(fields=['tenant', 'is_active']),
+        ]
+    
+    def __str__(self):
+        tenant_prefix = f"{self.tenant.name} - " if self.tenant else "Global - "
+        return f"{tenant_prefix}{self.name} ({self.code})"
+
+
 class KitchenStation(models.Model):
     """
     Kitchen Station - represents a physical kitchen station in an outlet

@@ -12,22 +12,9 @@ from decimal import Decimal
 class OrderItemSerializer(serializers.ModelSerializer):
     """Serializer for order items"""
     
-    # Kitchen Station Info
-    kitchen_station_id = serializers.IntegerField(
-        source='product.kitchen_station.id',
-        read_only=True,
-        allow_null=True
-    )
-    kitchen_station_name = serializers.CharField(
-        source='product.kitchen_station.name',
-        read_only=True,
-        allow_null=True
-    )
-    kitchen_station_code = serializers.CharField(
-        source='product.kitchen_station.code',
-        read_only=True,
-        allow_null=True
-    )
+    # Kitchen Station Code (from category or product override)
+    kitchen_station_code = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source='product.category.name', read_only=True, allow_null=True)
     
     class Meta:
         model = OrderItem
@@ -35,9 +22,16 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'id', 'product', 'product_name', 'product_sku',
             'quantity', 'unit_price', 'modifiers', 'modifiers_price',
             'total_price', 'notes',
-            'kitchen_station_id', 'kitchen_station_name', 'kitchen_station_code'
+            'kitchen_station_code', 'category_name'
         ]
         read_only_fields = ['total_price']
+    
+    def get_kitchen_station_code(self, obj):
+        """Get kitchen station code from product (category or override)"""
+        try:
+            return obj.product.kitchen_station_code
+        except:
+            return 'MAIN'
 
 
 class OrderSerializer(serializers.ModelSerializer):

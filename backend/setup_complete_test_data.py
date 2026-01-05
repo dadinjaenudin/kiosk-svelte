@@ -26,13 +26,148 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from apps.tenants.models import Tenant, Outlet, KitchenStation
+from apps.tenants.models import Tenant, Outlet, KitchenStation, KitchenStationType
 from apps.products.models import Category, Product, ProductModifier
 from apps.customers.models import Customer
 from apps.orders.models import Order, OrderItem
 from apps.promotions.models import Promotion
 
 User = get_user_model()
+
+def create_kitchen_station_types():
+    """Create default kitchen station types"""
+    print("\n🏭 Creating Kitchen Station Types...")
+    
+    # Global types (available to all tenants)
+    global_types = [
+        {
+            'name': 'Main Kitchen',
+            'code': 'MAIN',
+            'description': 'Main kitchen for general food preparation',
+            'icon': '🍳',
+            'color': '#FF6B35',
+            'sort_order': 1,
+            'is_global': True
+        },
+        {
+            'name': 'Beverage Station',
+            'code': 'BEVERAGE',
+            'description': 'Drinks, coffee, and beverages',
+            'icon': '☕',
+            'color': '#4A90E2',
+            'sort_order': 2,
+            'is_global': True
+        },
+        {
+            'name': 'Dessert Station',
+            'code': 'DESSERT',
+            'description': 'Desserts and sweet items',
+            'icon': '🍰',
+            'color': '#FF69B4',
+            'sort_order': 3,
+            'is_global': True
+        },
+    ]
+    
+    # Tenant-specific types
+    tenant_types = {
+        'pizza-paradise': [
+            {
+                'name': 'Pizza Oven',
+                'code': 'PIZZA',
+                'description': 'Pizza oven and preparation',
+                'icon': '🍕',
+                'color': '#E74C3C',
+                'sort_order': 1
+            },
+            {
+                'name': 'Sides Station',
+                'code': 'SIDES',
+                'description': 'Appetizers and side dishes',
+                'icon': '🥖',
+                'color': '#F39C12',
+                'sort_order': 2
+            },
+        ],
+        'burger-station': [
+            {
+                'name': 'Grill Station',
+                'code': 'GRILL',
+                'description': 'Burgers and grilled items',
+                'icon': '🍔',
+                'color': '#E67E22',
+                'sort_order': 1
+            },
+            {
+                'name': 'Fry Station',
+                'code': 'FRY',
+                'description': 'Fries and fried items',
+                'icon': '🍟',
+                'color': '#F1C40F',
+                'sort_order': 2
+            },
+        ],
+        'noodle-house': [
+            {
+                'name': 'Noodle Kitchen',
+                'code': 'NOODLE',
+                'description': 'Noodle and soup preparation',
+                'icon': '🍜',
+                'color': '#E74C3C',
+                'sort_order': 1
+            },
+            {
+                'name': 'Wok Station',
+                'code': 'WOK',
+                'description': 'Stir-fry and wok dishes',
+                'icon': '🥘',
+                'color': '#D35400',
+                'sort_order': 2
+            },
+        ],
+    }
+    
+    created_global = 0
+    created_tenant = 0
+    
+    # Create global types
+    print("  📌 Creating global types...")
+    for type_data in global_types:
+        type_obj, created = KitchenStationType.objects.get_or_create(
+            code=type_data['code'],
+            is_global=True,
+            tenant=None,
+            defaults=type_data
+        )
+        if created:
+            created_global += 1
+            print(f"     ✅ Created: {type_obj.name} ({type_obj.code})")
+        else:
+            print(f"     ⏭️  Exists: {type_obj.name} ({type_obj.code})")
+    
+    # Create tenant-specific types
+    print("\n  📌 Creating tenant-specific types...")
+    for tenant_slug, types in tenant_types.items():
+        try:
+            tenant = Tenant.objects.get(slug=tenant_slug)
+            print(f"     🏢 {tenant.name}:")
+            
+            for type_data in types:
+                type_obj, created = KitchenStationType.objects.get_or_create(
+                    tenant=tenant,
+                    code=type_data['code'],
+                    defaults=type_data
+                )
+                if created:
+                    created_tenant += 1
+                    print(f"        ✅ Created: {type_obj.name} ({type_obj.code})")
+                else:
+                    print(f"        ⏭️  Exists: {type_obj.name} ({type_obj.code})")
+        except Tenant.DoesNotExist:
+            print(f"     ⚠️  Tenant '{tenant_slug}' not found, skipping")
+    
+    print(f"\n✅ Created {created_global} global types, {created_tenant} tenant types")
+    print(f"   Total: {KitchenStationType.objects.count()} station types")
 
 def create_kitchen_stations():
     """Create default kitchen stations for all outlets"""
@@ -637,6 +772,7 @@ def main():
         print(f"  - Categories: {Category.all_objects.count()}")
         print()
         
+        create_kitchen_station_types()
         create_kitchen_stations()
         create_toppings()
         create_additions()
@@ -650,6 +786,7 @@ def main():
         print("\n📊 Summary:")
         print(f"  - Tenants: {Tenant.objects.count()}")
         print(f"  - Outlets: {Outlet.objects.count()}")
+        print(f"  - Kitchen Station Types: {KitchenStationType.objects.count()}")
         print(f"  - Kitchen Stations: {KitchenStation.objects.count()}")
         print(f"  - Categories: {Category.all_objects.count()}")
         print(f"  - Products: {Product.all_objects.count()}")

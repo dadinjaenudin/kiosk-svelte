@@ -7,17 +7,17 @@ from .models import Category, Product, ProductModifier, OutletProduct
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'tenant', 'sort_order', 'is_active', 'created_at')
-    list_filter = ('tenant', 'is_active', 'created_at')
+    list_display = ('name', 'tenant', 'kitchen_station_code', 'sort_order', 'is_active', 'created_at')
+    list_filter = ('tenant', 'kitchen_station_code', 'is_active', 'created_at')
     search_fields = ('name', 'description')
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sku', 'category', 'outlet', 'price', 'is_available', 'created_at')
-    list_filter = ('category', 'outlet', 'is_available', 'created_at')
+    list_display = ('name', 'sku', 'category', 'price', 'is_available', 'created_at')
+    list_filter = ('category', 'is_available', 'created_at')
     search_fields = ('name', 'sku', 'description')
-    raw_id_fields = ('tenant', 'outlet', 'category')  # For better performance with ForeignKey
+    raw_id_fields = ('tenant', 'category')  # For better performance with ForeignKey
 
 
 @admin.register(ProductModifier)
