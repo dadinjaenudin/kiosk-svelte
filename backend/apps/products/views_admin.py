@@ -54,6 +54,7 @@ class ProductAdminSerializer(ProductSerializer):
         fields = [
             'id', 'tenant', 'sku', 'name', 'description', 'image', 
             'price', 'cost', 'category', 'category_name',
+            'kitchen_station_code', 'kitchen_station_code_override',  # Kitchen routing
             'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color',
             'track_stock', 'stock_quantity', 'low_stock_alert',
             'is_active', 'is_available', 'is_featured', 
@@ -61,7 +62,7 @@ class ProductAdminSerializer(ProductSerializer):
             'preparation_time', 'calories', 'tags',
             'modifiers', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color', 
+        read_only_fields = ['kitchen_station_code', 'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color', 
                            'category_name', 'modifiers', 'created_at', 'updated_at']
 
 
