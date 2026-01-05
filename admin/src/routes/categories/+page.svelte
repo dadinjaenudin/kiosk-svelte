@@ -4,15 +4,9 @@
 	import Swal from 'sweetalert2';
 	import { authFetch } from '$lib/api/auth';
 	import { getTenants } from '$lib/api/tenants';
-	import { user, selectedTenant } from '$lib/stores/auth';
-	import { get } from 'svelte/store';
-
-	// State
-	let categories = [];
+import { getKitchenStationTypes } from '$lib/api/kitchenStationTypes';
 	let tenants = [];
-	let stats = { total_categories: 0, active_categories: 0, inactive_categories: 0, categories_with_products: 0 };
-	let loading = false;
-	let showTenantField = false;
+let stationTypes = []; // Kitchen Station Types for routing
 	let currentUser = null;
 	let mounted = false;
 
@@ -34,11 +28,7 @@
 		name: '',
 		description: '',
 		tenant: '',
-		sort_order: 0,
-		is_active: true
-	};
-
-	let errors = {};
+	kitchen_station_code: 'MAIN',
 
 	// Load tenants list
 	async function loadTenants() {
@@ -56,6 +46,27 @@
 	function getTenantName(tenantId) {
 		const tenant = tenants.find(t => t.id === tenantId);
 		return tenant ? tenant.name : '-';
+	}
+
+	// Load kitchen station types
+	async function loadStationTypes() {
+		if (!browser) return;
+		
+		try {
+			const response = await getKitchenStationTypes($selectedTenant);
+			stationTypes = response.results || response || [];
+			// Filter only active types
+			stationTypes = stationTypes.filter(t => t.is_active);
+			// Sort by sort_order
+			stationTypes.sort((a, b) => a.sort_order - b.sort_order);
+		} catch (error) {
+			console.error('Failed to load station types:', error);
+		}
+	}
+
+	// Get station type by code
+	function getStationType(code) {
+		return stationTypes.find(t => t.code === code);
 	}
 
 	// Load categories
@@ -121,6 +132,7 @@
 			name: '',
 			description: '',
 			tenant: currentUser?.tenant_id || '',
+			kitchen_station_code: 'MAIN',
 			sort_order: 0,
 			is_active: true
 		};
@@ -135,6 +147,7 @@
 			name: category.name,
 			description: category.description || '',
 			tenant: category.tenant,
+			kitchen_station_code: category.kitchen_station_code || 'MAIN',
 			sort_order: category.sort_order,
 			is_active: category.is_active
 		};
@@ -277,6 +290,7 @@
 		showTenantField = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
 		
 		loadTenants();
+		loadStationTypes();
 		loadCategories();
 		loadStats();
 		mounted = true;
@@ -576,14 +590,24 @@
 							></textarea>
 						</div>
 
-						{#if showTenantField}
-						<div>
-							<label class="block text-sm font-medium text-gray-700 mb-1">
-								Tenant <span class="text-red-500">*</span>
-							</label>
-							<select
-								bind:value={categoryForm.tenant}
-								class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent {errors.tenant ? 'border-red-500' : 'border-gray-300'}"
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">
+							Kitchen Station <span class="text-red-500">*</span>
+						</label>
+						<select
+							bind:value={categoryForm.kitchen_station_code}
+							class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						>
+							{#each stationTypes as type}
+								<option value={type.code}>
+									{type.icon} {type.name} ({type.code})
+								</option>
+							{/each}
+						</select>
+						<p class="text-xs text-gray-500 mt-1">
+							Products in this category will route to this station type
+						</p>
+					</div>
 							>
 								<option value="">Select Tenant</option>
 								{#each tenants as tenant}
