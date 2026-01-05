@@ -240,8 +240,8 @@
 			// Add all form fields
 			Object.keys(formData).forEach(key => {
 				const value = formData[key];
-				// Include tenant even if empty string to get proper validation error from backend
-				if (key === 'tenant' || (key !== 'image' && value !== null && value !== undefined && value !== '')) {
+				// Include tenant and kitchen_station_code_override even if empty
+				if (key === 'tenant' || key === 'kitchen_station_code_override' || (key !== 'image' && value !== null && value !== undefined && value !== '')) {
 					console.log(`Adding field: ${key} = ${value} (${typeof value})`);
 					submitData.append(key, value);
 				}
@@ -264,7 +264,8 @@
 			
 			Object.keys(formData).forEach(key => {
 				const value = formData[key];
-				if (key !== 'image' && value !== null && value !== undefined && value !== '') {
+				// Include kitchen_station_code_override even if empty (to clear override)
+				if (key === 'kitchen_station_code_override' || (key !== 'image' && value !== null && value !== undefined && value !== '')) {
 					submitData[key] = value;
 				}
 			});
