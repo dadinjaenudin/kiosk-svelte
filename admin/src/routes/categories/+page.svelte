@@ -4,11 +4,23 @@
 	import Swal from 'sweetalert2';
 	import { authFetch } from '$lib/api/auth';
 	import { getTenants } from '$lib/api/tenants';
-import { getKitchenStationTypes } from '$lib/api/kitchenStationTypes';
+	import { getKitchenStationTypes } from '$lib/api/kitchenStationTypes';
+	import { user, selectedTenant } from '$lib/stores/auth';
+	
 	let tenants = [];
-let stationTypes = []; // Kitchen Station Types for routing
+	let stationTypes = []; // Kitchen Station Types for routing
 	let currentUser = null;
 	let mounted = false;
+	
+	let stats = {
+		total_categories: 0,
+		active_categories: 0,
+		inactive_categories: 0,
+		categories_with_products: 0
+	};
+	let loading = false;
+	let showTenantField = false;
+	let errors = {};
 
 	// Filters
 	let searchQuery = '';
@@ -28,7 +40,10 @@ let stationTypes = []; // Kitchen Station Types for routing
 		name: '',
 		description: '',
 		tenant: '',
-	kitchen_station_code: 'MAIN',
+		kitchen_station_code: 'MAIN',
+		sort_order: 0,
+		is_active: true
+	};
 
 	// Load tenants list
 	async function loadTenants() {
