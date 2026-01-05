@@ -82,6 +82,7 @@
 		// Populate form if editing
 		if (product) {
 			console.log('Populating form with product data:', product);
+			console.log('product.kitchen_station_code_override:', product.kitchen_station_code_override);
 			formData = {
 				name: product.name || '',
 				description: product.description || '',
@@ -105,6 +106,7 @@
 			};
 			
 			console.log('Form data after population:', formData);
+			console.log('formData.kitchen_station_code_override after populate:', formData.kitchen_station_code_override);
 			
 			if (product.image) {
 				existingImageUrl = product.image;
@@ -225,6 +227,7 @@
 		console.log('=== SUBMIT DEBUG ===');
 		console.log('showTenantField:', showTenantField);
 		console.log('formData.tenant:', formData.tenant);
+		console.log('formData.kitchen_station_code_override:', formData.kitchen_station_code_override);
 		
 		if (!validate()) {
 			console.log('Validation failed, errors:', errors);
