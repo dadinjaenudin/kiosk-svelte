@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
 	import Swal from 'sweetalert2';
 	import { authFetch } from '$lib/api/auth';
