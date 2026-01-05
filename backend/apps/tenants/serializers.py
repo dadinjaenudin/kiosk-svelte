@@ -118,20 +118,15 @@ class KitchenStationSerializer(serializers.ModelSerializer):
     Serializer for KitchenStation model
     """
     outlet_name = serializers.CharField(source='outlet.name', read_only=True)
-    product_count = serializers.SerializerMethodField()
     
     class Meta:
         model = KitchenStation
         fields = [
             'id', 'outlet', 'outlet_name', 'name', 'code', 
             'description', 'is_active', 'sort_order',
-            'product_count', 'created_at', 'updated_at'
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-    
-    def get_product_count(self, obj):
-        """Get number of products assigned to this station"""
-        return obj.products.filter(is_active=True).count()
     
     def validate(self, data):
         """Validate unique code per outlet"""

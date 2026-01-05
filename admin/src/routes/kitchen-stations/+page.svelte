@@ -1,6 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
 	import { user, currentOutlet, selectedTenant } from '$lib/stores/auth';
+
+	// SvelteKit page props
+	export let params = {};
 	import { 
 		getKitchenStations, 
 		createKitchenStation, 
