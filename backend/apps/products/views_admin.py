@@ -221,7 +221,7 @@ class ProductManagementViewSet(viewsets.ModelViewSet):
         else:
             queryset = Product.objects.none()
         
-        return queryset.select_related('tenant', 'category', 'outlet').prefetch_related('modifiers')
+        return queryset.select_related('tenant', 'category').prefetch_related('modifiers')
     
     def perform_create(self, serializer):
         """
