@@ -435,6 +435,9 @@ let stationTypes = []; // Kitchen Station Types for routing
 								Name
 							</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+								Kitchen Station
+							</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 								Tenant
 							</th>
 							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -461,8 +464,19 @@ let stationTypes = []; // Kitchen Station Types for routing
 										</div>
 									</div>
 								</td>
-								<td class="px-6 py-4">
-									<div class="text-sm text-gray-900">{category.tenant_name || '-'}</div>
+								<td class="px-6 py-4">								<div class="flex items-center gap-2">
+									{#if getStationType(category.kitchen_station_code)}
+										<span class="text-lg">{getStationType(category.kitchen_station_code).icon}</span>
+									{/if}
+									<span 
+										class="px-2 py-1 text-xs font-semibold rounded"
+										style="background-color: {getStationType(category.kitchen_station_code)?.color}20; color: {getStationType(category.kitchen_station_code)?.color || '#666'};"
+									>
+										{category.kitchen_station_code || 'MAIN'}
+									</span>
+								</div>
+							</td>
+							<td class="px-6 py-4">									<div class="text-sm text-gray-900">{category.tenant_name || '-'}</div>
 								</td>
 								<td class="px-6 py-4">
 									<div class="text-sm text-gray-900">{category.sort_order}</div>
