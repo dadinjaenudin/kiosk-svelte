@@ -79,6 +79,15 @@
 
 			const response = await getProducts(filterParams);
 			products = response.results || response;
+			
+			// DEBUG: Check image URLs
+			console.log('🖼️ Products loaded:', products.length);
+			products.forEach(p => {
+				if (p.image) {
+					console.log(`Product "${p.name}" image:`, p.image);
+				}
+			});
+			
 			totalProducts = response.count || products.length;
 			totalPages = response.next || response.previous ? Math.ceil(totalProducts / 10) : 1;
 		} catch (err) {

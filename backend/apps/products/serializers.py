@@ -25,10 +25,20 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def get_image(self, obj):
         """Return full URL for product image"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if obj.image:
             request = self.context.get('request')
+            logger.info(f"🖼️ Product {obj.name} - image field: {obj.image}")
+            logger.info(f"🖼️ Request context available: {request is not None}")
+            
             if request:
-                return request.build_absolute_uri(obj.image.url)
+                full_url = request.build_absolute_uri(obj.image.url)
+                logger.info(f"🖼️ Full URL: {full_url}")
+                return full_url
+            
+            logger.warning(f"⚠️ No request context, returning relative URL: {obj.image.url}")
             return obj.image.url
         return None
     
