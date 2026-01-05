@@ -2,7 +2,8 @@
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { getCategories } from '$lib/api/products';
 	import { getTenants } from '$lib/api/tenants';
-	import { user } from '$lib/stores/auth';
+	import { getKitchenStationTypes } from '$lib/api/kitchenStationTypes';
+	import { user, selectedTenant } from '$lib/stores/auth';
 	import { get } from 'svelte/store';
 
 	export let product = null; // If editing
@@ -17,6 +18,7 @@
 		sku: '',
 		category: '',
 		tenant: '',
+		kitchen_station_code_override: '',  // Optional override
 		price: '',
 		cost: '',
 		promo_price: '',
@@ -43,6 +45,10 @@
 	let tenants = [];
 	let loadingTenants = false;
 	let showTenantField = false;
+	
+	// Kitchen Station Types
+	let stationTypes = [];
+	let loadingStationTypes = false;
 
 	// Validation
 	let errors = {};
@@ -70,6 +76,9 @@
 		// Load tenants for dropdown
 		await loadTenants();
 		
+		// Load station types for routing
+		await loadStationTypes();
+		
 		// Populate form if editing
 		if (product) {
 			console.log('Populating form with product data:', product);
@@ -79,6 +88,7 @@
 				sku: product.sku || '',
 				category: product.category?.id || product.category || '',
 				tenant: product.tenant_id || product.tenant || '',
+				kitchen_station_code_override: product.kitchen_station_code_override || '',
 				price: product.price || '',
 				cost: product.cost || '',
 				promo_price: product.promo_price || '',
@@ -124,6 +134,37 @@
 			console.error('Error loading tenants:', error);
 			loadingTenants = false;
 		}
+	}
+
+	async function loadStationTypes() {
+		try {
+			loadingStationTypes = true;
+			const response = await getKitchenStationTypes(get(selectedTenant));
+			stationTypes = response.results || response || [];
+			stationTypes = stationTypes.filter(t => t.is_active);
+			stationTypes.sort((a, b) => a.sort_order - b.sort_order);
+			console.log('Loaded station types:', stationTypes.length);
+			loadingStationTypes = false;
+		} catch (error) {
+			console.error('Error loading station types:', error);
+			loadingStationTypes = false;
+		}
+	}
+
+	function getStationType(code) {
+		return stationTypes.find(t => t.code === code);
+	}
+
+	function getSelectedCategory() {
+		return categories.find(c => c.id == formData.category);
+	}
+
+	function getEffectiveStationCode() {
+		if (formData.kitchen_station_code_override) {
+			return formData.kitchen_station_code_override;
+		}
+		const category = getSelectedCategory();
+		return category?.kitchen_station_code || 'MAIN';
 	}
 
 	function handleImageChange(event) {
@@ -297,7 +338,51 @@
 					<p class="text-red-500 text-sm mt-1">{errors.category}</p>
 				{/if}
 			</div>
-
+		<!-- Kitchen Station Override -->
+		<div>
+			<label for="kitchen_station" class="block text-sm font-medium text-gray-700 mb-1">
+				Kitchen Station Override
+				<span class="text-gray-500 text-xs font-normal">(Optional)</span>
+			</label>
+			<select
+				id="kitchen_station"
+				bind:value={formData.kitchen_station_code_override}
+				class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+				disabled={submitting || loadingStationTypes}
+			>
+				<option value="">Use category default</option>
+				{#each stationTypes as type}
+					<option value={type.code}>
+						{type.icon} {type.name} ({type.code})
+					</option>
+				{/each}
+			</select>
+			<div class="mt-2 flex items-center gap-2 text-xs">
+				{#if getEffectiveStationCode()}
+					{@const effectiveCode = getEffectiveStationCode()}
+					{@const type = getStationType(effectiveCode)}
+					<span class="text-gray-600">Effective routing:</span>
+					{#if type}
+						<span class="text-lg">{type.icon}</span>
+						<span 
+							class="inline-flex items-center px-2 py-1 rounded-full font-medium"
+							style="background-color: {type.color}20; color: {type.color};"
+						>
+							{effectiveCode}
+						</span>
+					{:else}
+						<span class="inline-flex items-center px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-800">
+							{effectiveCode}
+						</span>
+					{/if}
+					{#if formData.kitchen_station_code_override}
+						<span class="text-gray-500">(Override)</span>
+					{:else}
+						<span class="text-gray-500">(From category)</span>
+					{/if}
+				{/if}
+			</div>
+		</div>
 			<!-- Tenant -->
 			{#if $user?.role === 'super_admin' || $user?.role === 'admin'}
 			<div>
