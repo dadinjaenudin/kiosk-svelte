@@ -9,6 +9,7 @@ from apps.tenants.views_admin import TenantManagementViewSet, TenantSettingsView
 # Public router for kiosk
 public_router = DefaultRouter()
 public_router.register(r'tenants', views.PublicTenantViewSet, basename='public-tenant')
+public_router.register(r'outlets', views.PublicOutletViewSet, basename='public-outlet')
 
 # Authenticated router
 router = DefaultRouter()

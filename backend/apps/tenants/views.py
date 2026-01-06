@@ -54,6 +54,35 @@ class PublicTenantViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
+class PublicOutletViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Public ViewSet for Outlets (Kiosk Mode)
+    
+    list: List all active outlets (optionally filter by tenant_id)
+    retrieve: Get outlet details
+    """
+    
+    queryset = Outlet.objects.filter(is_active=True).select_related('tenant')
+    serializer_class = OutletSerializer
+    permission_classes = [AllowAny]  # Public access for kiosk
+    
+    def get_queryset(self):
+        """
+        Optionally filter by tenant_id query parameter
+        
+        GET /api/public/outlets/
+        GET /api/public/outlets/?tenant_id=67
+        """
+        queryset = super().get_queryset()
+        
+        # Filter by tenant if provided
+        tenant_id = self.request.query_params.get('tenant_id', None)
+        if tenant_id:
+            queryset = queryset.filter(tenant_id=tenant_id)
+        
+        return queryset.order_by('tenant__name', 'name')
+
+
 class TenantViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Tenant
