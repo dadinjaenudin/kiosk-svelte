@@ -127,10 +127,11 @@ class OrderGroup(models.Model):
         self.save()
         
         # Update all orders in group
+        # FIXED: Keep status='pending' for kitchen display
         self.orders.update(
             payment_status='paid',
             paid_amount=models.F('total_amount'),
-            status='confirmed'
+            status='pending'  # Keep pending for kitchen processing
         )
     
     def get_outlet_breakdown(self):
