@@ -129,7 +129,7 @@ class NetworkService {
 			const controller = new AbortController();
 			const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
 
-			const response = await fetch(`${PUBLIC_API_URL}${this.HEALTH_ENDPOINT}`, {
+			const response = await fetch(`${PUBLIC_API_URL}/health/`, {
 				method: 'GET',
 				signal: controller.signal,
 				cache: 'no-cache'

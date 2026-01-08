@@ -24,6 +24,7 @@
 	let selectedTenantId = null;
 	let kitchenStations = [];
 	let selectedStationId = null;
+	let kitchenType = 'all'; // 'all', 'food', or 'drink'
 	
 	// Helper functions
 	function formatCurrency(amount) {

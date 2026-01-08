@@ -247,13 +247,13 @@
 				</div>
 
 				<!-- Errors -->
-				{#if $syncProgress.errors.length > 0}
+				{#if $syncProgress?.errors && $syncProgress.errors.length > 0}
 					<div class="error-list">
 						<p class="error-title">Sync Errors ({$syncProgress.errors.length}):</p>
 						{#each $syncProgress.errors.slice(0, 3) as error}
 							<div class="error-item">
-								<span class="error-order">{error.orderNumber}</span>
-								<span class="error-msg">{error.errorMessage}</span>
+								<span class="error-order">{error?.orderNumber || 'Unknown'}</span>
+								<span class="error-msg">{error?.errorMessage || 'Unknown error'}</span>
 							</div>
 						{/each}
 					</div>
