@@ -2082,7 +2082,574 @@ docker-compose exec backend python setup_complete_test_data.py
 
 ---
 
-### 🍳 Phase 3: Kitchen Display System (NEXT 🔜)
+### 🔄 Phase 3: Kitchen Display System - Technical Architecture
+
+#### HTTP Polling vs WebSocket: Comparison & Implementation
+
+**Current Implementation:** ✅ HTTP Polling (Production Ready)
+**Future Enhancement:** Socket.IO WebSocket (Optional)
+
+---
+
+### 📊 HTTP Polling Mode (CURRENT - IMPLEMENTED)
+
+#### How It Works:
+```
+┌─────────────┐         Every 10 seconds          ┌─────────────┐
+│   Kitchen   │  ─────────────────────────────>  │   Backend   │
+│   Display   │  GET /api/kitchen/orders/pending │   Django    │
+│  (Frontend) │  GET /api/kitchen/orders/preparing│             │
+│             │  GET /api/kitchen/orders/ready   │             │
+│             │  <─────────────────────────────  │             │
+│             │         JSON Response            │             │
+└─────────────┘                                  └─────────────┘
+       │                                                 ▲
+       │ Play sound if                                   │
+       │ new order detected                              │
+       └─────────────────────────────────────────────────┘
+```
+
+#### Mechanism:
+1. **Initialization:**
+   - Kitchen Display loads with outlet/store config
+   - Start polling interval (10 seconds)
+   - Initialize last order count tracker
+
+2. **Polling Cycle (Every 10 seconds):**
+   ```javascript
+   async function fetchAllOrders() {
+     // Fetch pending orders
+     const pending = await fetch(`/api/kitchen/orders/pending/?outlet=${outletId}`);
+     
+     // Detect new orders
+     if (pending.length > lastPendingCount) {
+       playNewOrderSound(); // 🔊 Beep!
+     }
+     lastPendingCount = pending.length;
+     
+     // Fetch preparing orders
+     const preparing = await fetch(`/api/kitchen/orders/preparing/?outlet=${outletId}`);
+     
+     // Fetch ready orders
+     const ready = await fetch(`/api/kitchen/orders/ready/?outlet=${outletId}`);
+     
+     // Fetch statistics
+     const stats = await fetch(`/api/kitchen/orders/stats/?outlet=${outletId}`);
+     
+     // Update UI
+     updateKitchenDisplay(pending, preparing, ready, stats);
+   }
+   ```
+
+3. **New Order Detection:**
+   - Compare current pending count with previous count
+   - If increased → New order arrived → Play sound
+   - Update UI with new order card
+
+4. **Status Changes:**
+   - User clicks "Start Preparing" → API call → Status changes to 'preparing'
+   - Next polling cycle (≤10s) → Order moves to Preparing column
+   - User clicks "Mark Ready" → API call → Status changes to 'ready'
+   - Next polling cycle (≤10s) → Order moves to Ready column
+
+#### Implementation Checklist:
+
+**Backend (Django):**
+- [x] Kitchen Order APIs with status filters
+- [x] Outlet/store filtering
+- [x] Wait time calculation (SerializerMethodField)
+- [x] Urgent detection (>15 min)
+- [x] Statistics endpoint
+- [x] CORS enabled for frontend
+- [x] Middleware exclusion for kitchen endpoints
+
+**Frontend (SvelteKit):**
+- [x] `setInterval()` for polling (10s)
+- [x] Fetch 3 columns + stats
+- [x] State management (Svelte stores)
+- [x] New order detection logic
+- [x] Sound notification (Web Audio API)
+- [x] Loading states
+- [x] Error handling
+- [x] Auto-reconnect on page load
+
+#### Advantages ✅:
+- ✅ **Simple Implementation** - Standard HTTP requests, no special server setup
+- ✅ **Reliable** - Works with any HTTP server, no WebSocket support needed
+- ✅ **Firewall Friendly** - Uses standard HTTP/HTTPS ports (80/443)
+- ✅ **Stateless** - No connection management, auto-recovers from failures
+- ✅ **Easy Debugging** - Can test with curl/Postman
+- ✅ **Production Ready** - Battle-tested, widely used pattern
+
+#### Disadvantages ⚠️:
+- ⚠️ **Latency** - Up to 10 seconds delay for new orders
+- ⚠️ **Server Load** - Repeated requests every 10s (bandwidth usage)
+- ⚠️ **Battery Impact** - Constant polling drains device battery
+- ⚠️ **Inefficient** - Requests even when no changes
+- ⚠️ **Scalability** - More kitchen displays = more polling requests
+
+#### Performance Metrics:
+```
+Polling Interval: 10 seconds
+Latency: 0-10 seconds (average 5s)
+Bandwidth per display: ~50 KB/minute (3 API calls × ~15 KB each)
+Bandwidth for 10 displays: ~500 KB/minute = 30 MB/hour
+Server requests per display: 18 requests/minute (3 endpoints × 6 times)
+Server requests for 10 displays: 180 requests/minute
+```
+
+---
+
+### ⚡ WebSocket Mode (FUTURE - PHASE 3.3)
+
+#### How It Works:
+```
+┌─────────────┐      1. WebSocket Connect        ┌──────────────┐
+│   Kitchen   │  ──────────────────────────────> │  Socket.IO   │
+│   Display   │  ws://localhost:3001             │    Server    │
+│  (Frontend) │                                   │  (Node.js)   │
+│             │  <────────────────────────────── │              │
+│             │  2. Join room: kitchen_outlet_519 │              │
+└─────────────┘                                   └──────────────┘
+       ▲                                                 ▲
+       │                                                 │
+       │ 3. Emit: 'new_order'                           │
+       │    {order: {...}}                              │
+       │ <──────────────────────────────────────────────┘
+       │                                                 ▲
+       │                                                 │
+       └─────────────────────────────────────────────────┘
+       4. Play sound & update UI instantly
+       
+       
+┌─────────────┐      Order Created               ┌──────────────┐
+│   Kiosk     │  ──────────────────────────────> │   Backend    │
+│  Checkout   │  POST /api/order-groups/         │   Django     │
+└─────────────┘  create-with-payment              └──────────────┘
+                                                         │
+                                                         │ 5. Emit to Socket.IO
+                                                         ▼
+                                                  ┌──────────────┐
+                                                  │  Socket.IO   │
+                                                  │    Server    │
+                                                  └──────────────┘
+                                                         │
+                                                         │ 6. Broadcast to room
+                                                         ▼
+                                                  ┌──────────────┐
+                                                  │   Kitchen    │
+                                                  │   Display    │
+                                                  └──────────────┘
+```
+
+#### Mechanism:
+1. **Connection Establishment:**
+   ```javascript
+   import io from 'socket.io-client';
+   
+   const socket = io('http://localhost:3001', {
+     reconnection: true,
+     reconnectionDelay: 1000,
+     reconnectionAttempts: Infinity
+   });
+   
+   // Join outlet-specific room
+   socket.emit('join_kitchen', {
+     outlet_id: 519,
+     store_id: 277
+   });
+   ```
+
+2. **Real-time Events:**
+   ```javascript
+   // Listen for new orders
+   socket.on('new_order', (order) => {
+     playNewOrderSound();
+     addOrderToPending(order);
+   });
+   
+   // Listen for status changes
+   socket.on('order_status_changed', (data) => {
+     updateOrderStatus(data.order_id, data.new_status);
+   });
+   
+   // Listen for order updates
+   socket.on('order_updated', (order) => {
+     updateOrderInDisplay(order);
+   });
+   ```
+
+3. **Backend Integration:**
+   ```python
+   # In views_kitchen.py or signals
+   from socketio_client import emit_to_room
+   
+   def create_order_with_payment(request):
+       # ... create order ...
+       
+       # Emit to Socket.IO
+       emit_to_room(f'kitchen_outlet_{order.outlet_id}', 'new_order', {
+           'order': KitchenOrderSerializer(order).data
+       })
+   ```
+
+4. **Fallback to HTTP Polling:**
+   ```javascript
+   socket.on('disconnect', () => {
+     console.warn('WebSocket disconnected, falling back to HTTP polling');
+     startHttpPolling();
+   });
+   
+   socket.on('connect', () => {
+     console.log('WebSocket connected');
+     stopHttpPolling();
+   });
+   ```
+
+#### Implementation Checklist:
+
+**Socket.IO Server (Node.js):**
+- [ ] Setup Socket.IO server on port 3001
+- [ ] Room management (kitchen_outlet_{id})
+- [ ] Event handlers (join_kitchen, leave_kitchen)
+- [ ] Broadcast events (new_order, order_status_changed)
+- [ ] Authentication/authorization
+- [ ] Connection state management
+- [ ] Redis adapter for multi-server setup
+
+**Backend (Django):**
+- [ ] Socket.IO client library integration
+- [ ] Emit events on order creation
+- [ ] Emit events on status changes
+- [ ] Error handling for Socket.IO failures
+- [ ] Fallback mechanism
+
+**Frontend (SvelteKit):**
+- [ ] Socket.IO client integration
+- [ ] Auto-reconnect logic
+- [ ] Event listeners setup
+- [ ] Fallback to HTTP polling on disconnect
+- [ ] Connection status indicator
+- [ ] Room join/leave logic
+
+#### Advantages ✅:
+- ✅ **Real-time** - Instant updates (< 100ms latency)
+- ✅ **Efficient** - Push-based, no unnecessary requests
+- ✅ **Low Latency** - Orders appear immediately
+- ✅ **Scalable** - One connection per display
+- ✅ **Battery Friendly** - No constant polling
+
+#### Disadvantages ⚠️:
+- ⚠️ **Complex Setup** - Requires Socket.IO server
+- ⚠️ **Firewall Issues** - WebSocket ports may be blocked
+- ⚠️ **Connection Management** - Handle disconnects, reconnects
+- ⚠️ **Debugging Harder** - Can't test with simple tools
+- ⚠️ **State Management** - Need to handle connection state
+
+#### Performance Metrics:
+```
+Connection: Persistent WebSocket
+Latency: < 100ms (real-time)
+Bandwidth per display: ~1-5 KB/event (only when changes occur)
+Bandwidth for 10 displays: Same (broadcast)
+Server connections: 1 per display (10 connections)
+Server requests: 0 (event-driven)
+```
+
+---
+
+### 🏗️ Current Application Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER DEVICES                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────┐        ┌─────────────┐       ┌─────────────┐  │
+│  │   Kiosk     │        │   Kitchen   │       │    Admin    │  │
+│  │  (iPad/PC)  │        │   Display   │       │   Panel     │  │
+│  │             │        │   (Tablet)  │       │   (PC)      │  │
+│  │  Port 5174  │        │  Port 5174  │       │ Port 5174   │  │
+│  └─────────────┘        └─────────────┘       └─────────────┘  │
+│         │                       │                      │         │
+│         │  HTTP Requests        │  HTTP Polling        │  HTTP   │
+│         │                       │  (Every 10s)         │         │
+└─────────┼───────────────────────┼──────────────────────┼─────────┘
+          │                       │                      │
+          ▼                       ▼                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      FRONTEND (SvelteKit)                        │
+│                    http://localhost:5174                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Routes:                                                          │
+│  • /kiosk/setup          - Kiosk configuration                   │
+│  • /kiosk                - Product browsing & cart               │
+│  • /kiosk/checkout       - Payment & order creation              │
+│  • /kiosk/success/[id]   - Receipt display                       │
+│                                                                   │
+│  • /kitchen/login        - Kitchen configuration                 │
+│  • /kitchen/display      - Kitchen Display (3-column Kanban)     │
+│                                                                   │
+│  • /admin/*              - Admin panel pages                     │
+│                                                                   │
+│  State Management:                                                │
+│  • kioskStore.ts         - Kiosk config & multi-cart            │
+│  • kitchenStore.ts       - Kitchen config & orders              │
+│                                                                   │
+└───────────────────────────┬───────────────────────────────────────┘
+                            │
+                            │ API Calls
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    BACKEND (Django REST)                         │
+│                   http://localhost:8001/api                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Public APIs (No Auth):                                          │
+│  • /api/public/stores/                                           │
+│  • /api/public/stores/{code}/outlets/                           │
+│  • /api/public/order-groups/                                     │
+│                                                                   │
+│  Kitchen APIs (No Tenant Header):                                │
+│  • /api/kitchen/orders/pending/?outlet={id}                     │
+│  • /api/kitchen/orders/preparing/?outlet={id}                   │
+│  • /api/kitchen/orders/ready/?outlet={id}                       │
+│  • /api/kitchen/orders/{id}/start/                              │
+│  • /api/kitchen/orders/{id}/complete/                           │
+│  • /api/kitchen/orders/{id}/serve/                              │
+│  • /api/kitchen/orders/stats/?outlet={id}                       │
+│                                                                   │
+│  Admin APIs (Auth Required):                                     │
+│  • /api/admin/stores/                                            │
+│  • /api/admin/outlets/                                           │
+│  • /api/admin/order-groups/                                      │
+│                                                                   │
+│  Middleware:                                                      │
+│  • TenantMiddleware (skip for kitchen & public)                 │
+│  • CORS (allow localhost:5174)                                   │
+│                                                                   │
+│  Serializers:                                                     │
+│  • KitchenOrderSerializer (wait_time, is_urgent)                │
+│  • OrderGroupSerializer (outlet_breakdown)                       │
+│                                                                   │
+└───────────────────────────┬───────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       DATABASE (PostgreSQL)                      │
+│                      Port 5432 (Internal)                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Tables:                                                          │
+│  • tenants          - YOGYA, BORMA, etc.                        │
+│  • stores           - Physical locations with operating hours    │
+│  • outlets          - Brands/restaurants (Chicken Sumo, etc.)   │
+│  • store_outlets    - M2M junction (which brands at which store)│
+│  • categories       - Menu categories per outlet                 │
+│  • products         - Menu items per outlet                      │
+│  • order_groups     - Multi-outlet payment groups               │
+│  • orders           - Individual outlet orders                   │
+│  • order_items      - Order line items                          │
+│  • kitchen_stations - Kitchen routing per outlet                │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🔄 Order Flow: Kiosk → Kitchen Display
+
+```
+STEP 1: Customer Orders at Kiosk
+┌─────────────┐
+│   Customer  │
+│   at Kiosk  │
+└──────┬──────┘
+       │
+       │ 1. Browse products
+       │ 2. Add to cart
+       │ 3. Checkout
+       │
+       ▼
+POST /api/public/order-groups/create-with-payment/
+{
+  "store_id": 277,
+  "customer_name": "Ameli",
+  "customer_phone": "1212",
+  "carts": [{
+    "outlet_id": 519,  // Chicken Sumo
+    "items": [{
+      "product_id": 714,
+      "quantity": 1
+    }]
+  }],
+  "payment_method": "cash"
+}
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   Backend Processing                │
+├─────────────────────────────────────┤
+│ 1. Create OrderGroup                │
+│ 2. Create Order (status='draft')   │
+│ 3. Create OrderItems                │
+│ 4. Calculate totals                 │
+│ 5. Create Payment                   │
+│ 6. mark_as_paid()                   │
+│    → status = 'pending' ✅          │
+│    → payment_status = 'paid'        │
+└──────────┬──────────────────────────┘
+           │
+           ▼
+     Order in Database
+     status: 'pending'
+     outlet: 519 (Chicken Sumo)
+     store: 277 (Yogya Kapatihan)
+           │
+           │
+           ▼
+───────────────────────────────────────────────────────────
+
+STEP 2: Kitchen Display Polling
+┌─────────────┐
+│   Kitchen   │
+│   Display   │
+│  (Chicken   │
+│   Sumo)     │
+└──────┬──────┘
+       │
+       │ Every 10 seconds
+       ▼
+GET /api/kitchen/orders/pending/?outlet=519
+       │
+       ▼
+┌────────────────────────────────────┐
+│  Backend Returns:                  │
+├────────────────────────────────────┤
+│  [{                                │
+│    "id": 602,                      │
+│    "order_number": "ORD-...",      │
+│    "status": "pending",            │
+│    "customer_name": "Ameli",       │
+│    "wait_time": 2,                 │
+│    "is_urgent": false,             │
+│    "source": "kiosk",              │
+│    "items": [{                     │
+│      "product_name": "Chicken...", │
+│      "quantity": 1                 │
+│    }]                              │
+│  }]                                │
+└────────────┬───────────────────────┘
+             │
+             ▼
+    Frontend Detects New Order
+    (pending.length > lastPendingCount)
+             │
+             ▼
+      🔊 Play Sound!
+             │
+             ▼
+   Display in Pending Column
+───────────────────────────────────────────────────────────
+
+STEP 3: Kitchen Staff Actions
+┌─────────────┐
+│   Kitchen   │
+│   Staff     │
+└──────┬──────┘
+       │
+       │ Clicks "Start Preparing"
+       ▼
+POST /api/kitchen/orders/602/start/
+       │
+       ▼
+Backend: status = 'preparing'
+       │
+       │ Next polling cycle (≤10s)
+       ▼
+GET /api/kitchen/orders/preparing/?outlet=519
+       │
+       ▼
+Order moves to Preparing Column
+       │
+       │ Kitchen prepares food...
+       │ Staff clicks "Mark Ready"
+       ▼
+POST /api/kitchen/orders/602/complete/
+       │
+       ▼
+Backend: status = 'ready'
+       │
+       │ Next polling cycle (≤10s)
+       ▼
+GET /api/kitchen/orders/ready/?outlet=519
+       │
+       ▼
+Order moves to Ready Column
+       │
+       │ Customer picks up
+       │ Staff clicks "Serve Order"
+       ▼
+POST /api/kitchen/orders/602/serve/
+       │
+       ▼
+Backend: status = 'served'
+       │
+       ▼
+Order removed from display
+```
+
+---
+
+### 📋 Production Deployment Checklist
+
+**HTTP Polling Mode (Current):**
+- [x] Backend APIs deployed and accessible
+- [x] Frontend deployed with correct API_BASE URL
+- [x] CORS configured for production domain
+- [x] Database migrations applied
+- [x] Sample data loaded (stores, outlets, products)
+- [x] Kitchen displays configured (store + outlet)
+- [x] Polling interval set (10s recommended)
+- [x] Sound notifications tested
+- [x] Error handling tested
+- [ ] Load testing (multiple kitchen displays)
+- [ ] Network failure recovery tested
+- [ ] Browser compatibility tested (Chrome, Safari, Firefox)
+
+**WebSocket Mode (Future):**
+- [ ] Socket.IO server deployed
+- [ ] WebSocket port opened in firewall (3001)
+- [ ] SSL/TLS for WSS (production)
+- [ ] Redis for multi-server Socket.IO
+- [ ] Connection pool limits configured
+- [ ] Reconnection strategy tested
+- [ ] Fallback to HTTP polling tested
+- [ ] Load balancing configured
+- [ ] Monitoring & alerting setup
+
+---
+
+### 🎯 Recommendation
+
+**For Current Implementation:**
+✅ **Use HTTP Polling Mode** - Already implemented, tested, production-ready
+
+**When to Consider WebSocket:**
+- Kitchen displays > 20 units (server load concern)
+- Order latency critical (< 1 second required)
+- Network bandwidth limited
+- Real-time collaboration features needed
+
+**Hybrid Approach (Best):**
+- Primary: WebSocket for instant updates
+- Fallback: HTTP Polling when WebSocket unavailable
+- Automatic switching based on connection status
+
+---
+
+###
 **Status:** 0% Complete
 **Duration:** Week 5-7
 **Priority:** HIGH
