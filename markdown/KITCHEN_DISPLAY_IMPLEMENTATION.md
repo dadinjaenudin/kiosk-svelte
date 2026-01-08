@@ -199,6 +199,18 @@ if (soundEnabled && pending.length > lastPendingCount) {
 }
 ```
 
+**Current Status:** ✅ **HTTP Polling ACTIVE**
+- Polling interval: 10 seconds
+- Fetches pending/preparing/ready orders separately
+- Optimistic UI updates on order actions
+- New order detection via count comparison
+- Sound notification triggered on new orders
+
+**Future Enhancement:** Socket.IO Real-time (Phase 3.3)
+- Will be added as primary method
+- HTTP polling will remain as fallback
+- Auto-switch between WebSocket and polling based on connection
+
 #### localStorage Persistence
 ```typescript
 // Auto-save config on changes
@@ -215,24 +227,39 @@ if (saved) {
 
 ### 🧪 Testing Checklist
 
+**Authentication & Setup:**
 - [x] Kitchen login loads stores correctly
 - [x] Outlet selection populates after store selection
 - [x] Config saved to localStorage
 - [x] Redirect to display after login
-- [x] Display shows 3 columns
-- [x] Stats update from API
+
+**Display & Layout:**
+- [x] Display shows 3 columns (Pending/Preparing/Ready)
+- [x] Stats update from API (pending/preparing/ready counts)
+- [x] Responsive design works on mobile/tablet/desktop
+
+**Order Flow:**
 - [x] Pending orders appear correctly
 - [x] "Start Preparing" moves order to Preparing column
 - [x] "Mark Ready" moves order to Ready column
 - [x] "Serve Order" removes order from display
+
+**Real-time Features:**
+- [x] HTTP Polling (10s interval) - ACTIVE ✅
 - [x] Wait time updates every minute
-- [x] Urgent indicator shows for >15min orders
-- [x] Sound plays for new orders
-- [x] Mute toggle works
+- [x] Urgent indicator shows for >15min orders (red border + pulse)
+- [x] Sound plays for new orders (Web Audio API beep)
+- [x] New order detection (compare pending count)
+
+**User Controls:**
+- [x] Mute toggle works (saves to localStorage)
 - [x] Logout clears config and redirects
-- [x] Responsive design works on mobile/tablet/desktop
-- [x] Polling continues in background
 - [x] Error handling for API failures
+
+**Integration Testing:**
+- [x] Order status flow: pending → preparing → ready → served
+- [x] Orders from kiosk checkout appear in Kitchen Display (after polling cycle)
+- [x] Backend fix applied: checkout creates 'pending' orders (not 'confirmed')
 
 ### 🚀 How to Use
 
