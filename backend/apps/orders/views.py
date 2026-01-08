@@ -149,7 +149,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                     
                     for order in orders:
                         order.payment_status = 'paid'
-                        order.status = 'confirmed'
+                        # Keep status as 'pending' for kitchen to process
+                        # order.status = 'confirmed'  # OLD: Changed to confirmed
+                        order.status = 'pending'  # NEW: Keep pending for kitchen display
                         order.save()
                 
                 # Serialize response
@@ -194,7 +196,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         
         orders = Order.objects.filter(
             tenant_id=tenant_id,
-            status__in=['confirmed', 'preparing', 'ready']
+            status__in=['pending', 'preparing', 'ready']  # Updated: changed from 'confirmed' to 'pending'
         ).select_related('tenant', 'outlet').prefetch_related('items').order_by('created_at')
         
         serializer = self.get_serializer(orders, many=True)
@@ -281,7 +283,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         total_orders = orders_queryset.count()
         
         pending_orders = orders_queryset.filter(
-            status__in=['pending', 'confirmed', 'preparing']
+            status__in=['pending', 'preparing']  # Updated: removed 'confirmed'
         ).count()
         
         completed_orders = orders_queryset.filter(
