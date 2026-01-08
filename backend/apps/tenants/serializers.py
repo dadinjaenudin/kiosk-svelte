@@ -2,7 +2,67 @@
 Serializers for Tenant API
 """
 from rest_framework import serializers
-from apps.tenants.models import Tenant, Outlet, KitchenStation, KitchenStationType
+from apps.tenants.models import Tenant, Outlet, KitchenStation, KitchenStationType, Store, StoreOutlet
+
+
+class StoreSerializer(serializers.ModelSerializer):
+    """Serializer for Store model - Physical retail store"""
+    outlets_count = serializers.SerializerMethodField()
+    active_outlets_count = serializers.SerializerMethodField()
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True)
+    
+    class Meta:
+        model = Store
+        fields = [
+            'id', 'tenant', 'tenant_name', 'code', 'name', 'address', 'city', 'province', 'postal_code',
+            'latitude', 'longitude', 'kiosk_qr_code', 'enable_multi_outlet_payment',
+            'payment_split_method', 'opening_time', 'closing_time', 'is_active', 
+            'outlets_count', 'active_outlets_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['kiosk_qr_code', 'tenant_name', 'created_at', 'updated_at']
+    
+    def get_outlets_count(self, obj):
+        # Query via StoreOutlet junction
+        return obj.store_outlets.count()
+    
+    def get_active_outlets_count(self, obj):
+        # Query via StoreOutlet junction where both store and outlet are active
+        return obj.store_outlets.filter(
+            is_active=True,
+            outlet__is_active=True
+        ).count()
+
+
+class StoreDetailSerializer(StoreSerializer):
+    """Detailed serializer with outlets list"""
+    outlets = serializers.SerializerMethodField()
+    
+    class Meta(StoreSerializer.Meta):
+        fields = StoreSerializer.Meta.fields + ['outlets']
+    
+    def get_outlets(self, obj):
+        # Query via StoreOutlet junction - active outlets at this store
+        store_outlets = obj.store_outlets.filter(
+            is_active=True,
+            outlet__is_active=True
+        ).select_related('outlet', 'outlet__tenant').order_by('display_order', 'outlet__brand_name')
+        
+        return [{
+            'id': so.outlet.id,
+            'brand_name': so.outlet.brand_name,
+            'name': so.outlet.name,
+            'slug': so.outlet.slug,
+            'tenant_id': so.outlet.tenant.id,
+            'tenant_name': so.outlet.tenant.name,
+            'tenant_logo': so.outlet.tenant.logo.url if so.outlet.tenant.logo else None,
+            'primary_color': so.outlet.tenant.primary_color,
+            'secondary_color': so.outlet.tenant.secondary_color,
+            # Use custom times from StoreOutlet if set, otherwise use Store's times
+            'opening_time': str(so.custom_opening_time) if so.custom_opening_time else str(obj.opening_time) if obj.opening_time else None,
+            'closing_time': str(so.custom_closing_time) if so.custom_closing_time else str(obj.closing_time) if obj.closing_time else None,
+            'is_active': so.is_active,
+            'display_order': so.display_order,
+        } for so in store_outlets]
 
 
 class TenantSerializer(serializers.ModelSerializer):
@@ -56,33 +116,35 @@ class TenantDetailSerializer(TenantSerializer):
 
 class OutletSerializer(serializers.ModelSerializer):
     """
-    Serializer for Outlet model
+    Serializer for Outlet model - Global Brand (Many-to-Many with Store)
     """
     
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
-    operating_hours = serializers.SerializerMethodField()
+    stores_count = serializers.SerializerMethodField()
+    active_stores_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Outlet
         fields = [
-            'id', 'tenant', 'tenant_name', 'slug', 'name',
-            'address', 'city', 'province', 'postal_code',
+            'id', 'tenant', 'tenant_name',
+            'brand_name', 'name', 'slug',
             'phone', 'email',
-            'latitude', 'longitude',
-            'opening_time', 'closing_time', 'operating_hours',
             'websocket_url',
+            'stores_count', 'active_stores_count',
             'is_active', 'created_at'
         ]
-        read_only_fields = ['id', 'tenant_name', 'created_at']
-        extra_kwargs = {
-            'postal_code': {'required': False, 'allow_blank': True}
-        }
+        read_only_fields = ['id', 'tenant_name', 'name', 'stores_count', 'active_stores_count', 'created_at']
     
-    def get_operating_hours(self, obj):
-        """Get formatted operating hours"""
-        if obj.opening_time and obj.closing_time:
-            return f"{obj.opening_time.strftime('%H:%M')} - {obj.closing_time.strftime('%H:%M')}"
-        return None
+    def get_stores_count(self, obj):
+        """Get number of stores where this outlet/brand is available"""
+        return obj.store_outlets.count()
+    
+    def get_active_stores_count(self, obj):
+        """Get number of active stores where this outlet/brand is available"""
+        return obj.store_outlets.filter(
+            is_active=True,
+            store__is_active=True
+        ).count()
     
     def validate(self, data):
         """
@@ -101,6 +163,45 @@ class OutletSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'Cannot create outlet for different tenant'
             )
+        
+        return data
+
+
+class StoreOutletSerializer(serializers.ModelSerializer):
+    """
+    Serializer for StoreOutlet junction model (Many-to-Many relationship)
+    """
+    store_name = serializers.CharField(source='store.name', read_only=True)
+    store_code = serializers.CharField(source='store.code', read_only=True)
+    outlet_name = serializers.CharField(source='outlet.name', read_only=True)
+    brand_name = serializers.CharField(source='outlet.brand_name', read_only=True)
+    tenant_name = serializers.CharField(source='outlet.tenant.name', read_only=True)
+    
+    class Meta:
+        model = StoreOutlet
+        fields = [
+            'id', 'store', 'store_name', 'store_code',
+            'outlet', 'outlet_name', 'brand_name', 'tenant_name',
+            'is_active', 'custom_opening_time', 'custom_closing_time',
+            'display_order', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'store_name', 'store_code', 'outlet_name', 'brand_name', 'tenant_name', 'created_at', 'updated_at']
+    
+    def validate(self, data):
+        """Ensure unique store-outlet combination"""
+        store = data.get('store')
+        outlet = data.get('outlet')
+        
+        if store and outlet:
+            # Check for existing assignment
+            qs = StoreOutlet.objects.filter(store=store, outlet=outlet)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'outlet': f'Outlet "{outlet.brand_name}" is already assigned to store "{store.name}"'
+                })
         
         return data
 

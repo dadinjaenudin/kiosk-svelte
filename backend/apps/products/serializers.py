@@ -17,7 +17,10 @@ class ProductSerializer(serializers.ModelSerializer):
     kitchen_station_code = serializers.ReadOnlyField()  # Property from model
     image = serializers.SerializerMethodField()  # Return full URL for image
     
-    # Food court: Add tenant info for filtering
+    # OPSI 2: Products belong to Outlet (Brand), which belongs to Tenant
+    outlet_id = serializers.IntegerField(source='outlet.id', read_only=True)
+    outlet_name = serializers.CharField(source='outlet.name', read_only=True)
+    brand_name = serializers.CharField(source='outlet.brand_name', read_only=True)
     tenant_id = serializers.IntegerField(source='tenant.id', read_only=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     tenant_slug = serializers.CharField(source='tenant.slug', read_only=True)
@@ -72,7 +75,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'sku', 'name', 'description', 'image', 
             'price', 'category', 'category_name',
             'kitchen_station_code', 'kitchen_station_code_override',  # Kitchen routing
-            'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color',  # Food court fields
+            'outlet_id', 'outlet_name', 'brand_name',  # OPSI 2: Outlet/Brand info
+            'tenant_id', 'tenant_name', 'tenant_slug', 'tenant_color',  # Tenant info (for branding)
             'is_available', 'is_featured', 
             'is_popular', 'has_promo', 'promo_price',  # Search filter fields
             'preparation_time', 'modifiers', 'tags'
@@ -83,7 +87,10 @@ class CategorySerializer(serializers.ModelSerializer):
     product_count = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()  # Return full URL for image
     
-    # Food court: Add tenant info
+    # OPSI 2: Categories belong to Outlet (Brand), which belongs to Tenant
+    outlet_id = serializers.IntegerField(source='outlet.id', read_only=True)
+    outlet_name = serializers.CharField(source='outlet.name', read_only=True)
+    brand_name = serializers.CharField(source='outlet.brand_name', read_only=True)
     tenant_id = serializers.IntegerField(source='tenant.id', read_only=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     
@@ -104,7 +111,8 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'image', 'sort_order', 'is_active', 
             'kitchen_station_code',  # Kitchen routing
-            'product_count', 'tenant_id', 'tenant_name'
+            'outlet_id', 'outlet_name', 'brand_name',  # OPSI 2: Outlet/Brand info
+            'product_count', 'tenant_id', 'tenant_name'  # Tenant info (for branding)
         ]
     
     def get_product_count(self, obj):

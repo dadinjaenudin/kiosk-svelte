@@ -1,13 +1,24 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { isAuthenticated } from '$lib/stores/auth';
 
+	let hasRedirected = false;
+
 	onMount(() => {
-		if ($isAuthenticated) {
-			goto('/dashboard');
-		} else {
-			goto('/login');
+		// Only redirect once when component mounts and only if on root path
+		console.log('Root +page.svelte mounted, pathname:', $page.url.pathname);
+		
+		if (!hasRedirected && $page.url.pathname === '/') {
+			hasRedirected = true;
+			console.log('Redirecting from root, authenticated:', $isAuthenticated);
+			
+			if ($isAuthenticated) {
+				goto('/dashboard');
+			} else {
+				goto('/login');
+			}
 		}
 	});
 </script>

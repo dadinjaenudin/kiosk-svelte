@@ -211,9 +211,9 @@ class OutletManagementViewSet(viewsets.ModelViewSet):
     serializer_class = OutletSerializer
     permission_classes = [IsAuthenticated, IsAdminOrTenantOwnerOrManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'city', 'province', 'tenant']
-    search_fields = ['name', 'address', 'city', 'phone', 'email']
-    ordering_fields = ['name', 'city', 'created_at']
+    filterset_fields = ['is_active', 'tenant']
+    search_fields = ['name', 'brand_name', 'phone', 'email']
+    ordering_fields = ['name', 'brand_name', 'created_at']
     ordering = ['name']
     
     def get_queryset(self):
@@ -280,8 +280,8 @@ class OutletManagementViewSet(viewsets.ModelViewSet):
         - total: Total outlet count
         - active: Active outlet count
         - inactive: Inactive outlet count
-        - by_city: Breakdown by city
-        - by_province: Breakdown by province
+        - by_tenant: Breakdown by tenant
+        - by_stores: Number of stores per outlet
         """
         queryset = self.get_queryset()
         
@@ -289,19 +289,19 @@ class OutletManagementViewSet(viewsets.ModelViewSet):
             'total': queryset.count(),
             'active': queryset.filter(is_active=True).count(),
             'inactive': queryset.filter(is_active=False).count(),
-            'by_city': {},
-            'by_province': {}
+            'by_tenant': {},
+            'by_stores': {}
         }
         
-        # Group by city
+        # Group by tenant
         for outlet in queryset:
-            city = outlet.city or 'Unknown'
-            stats['by_city'][city] = stats['by_city'].get(city, 0) + 1
+            tenant_name = outlet.tenant.name if outlet.tenant else 'Unknown'
+            stats['by_tenant'][tenant_name] = stats['by_tenant'].get(tenant_name, 0) + 1
         
-        # Group by province
+        # Count stores per outlet
         for outlet in queryset:
-            province = outlet.province or 'Unknown'
-            stats['by_province'][province] = stats['by_province'].get(province, 0) + 1
+            stores_count = outlet.store_outlets.filter(is_active=True).count()
+            stats['by_stores'][outlet.brand_name] = stores_count
         
         return Response(stats)
     

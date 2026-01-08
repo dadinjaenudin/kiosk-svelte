@@ -7,23 +7,22 @@
 		getOutletStats,
 		createOutlet,
 		updateOutlet,
-		deleteOutlet,
-		formatOperatingHours
+		deleteOutlet
 	} from '$lib/api/settings';
 	import { getTenants } from '$lib/api/tenants';
+	import { authFetch } from '$lib/api/auth';
 	import { selectedTenant } from '$lib/stores/auth';
 
 	// State
 	let outlets = [];
 	let tenants = [];
-	let stats = { total: 0, active: 0, inactive: 0, by_city: {}, by_province: {} };
+	let stats = { total: 0, active: 0, inactive: 0, by_tenant: {}, by_stores: {} };
 	let loading = false;
 	let mounted = false;
 
 	// Filters
 	let searchQuery = '';
 	let statusFilter = '';
-	let cityFilter = '';
 
 	// Pagination
 	let currentPage = 1;
@@ -37,24 +36,15 @@
 	// Form
 	let outletForm = {
 		name: '',
-		slug: '',
+		brand_name: '',
 		tenant: '',
-		address: '',
-		city: '',
-		province: '',
-		postal_code: '',
 		phone: '',
 		email: '',
-		opening_time: '09:00',
-		closing_time: '22:00',
-		websocket_url: 'ws://localhost:3001',
+		websocket_url: 'http://localhost:3001',
 		is_active: true
 	};
 
 	let errors = {};
-
-	// Get available cities from stats
-	$: availableCities = Object.keys(stats.by_city || {});
 
 	// Load tenants list
 	async function loadTenants() {
@@ -84,7 +74,6 @@
 				page: currentPage,
 				search: searchQuery || undefined,
 				is_active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
-				city: cityFilter && cityFilter !== 'all' ? cityFilter : undefined,
 				tenant: $selectedTenant || undefined
 			};
 			
@@ -116,17 +105,11 @@
 		editingOutlet = null;
 		outletForm = {
 			name: '',
-			slug: '',
+			brand_name: '',
 			tenant: '',
-			address: '',
-			city: '',
-			province: '',
-			postal_code: '',
 			phone: '',
 			email: '',
-			opening_time: '09:00',
-			closing_time: '22:00',
-			websocket_url: 'ws://localhost:3001',
+			websocket_url: 'http://localhost:3001',
 			is_active: true
 		};
 		errors = {};
@@ -138,17 +121,12 @@
 		editingOutlet = outlet;
 		outletForm = {
 			name: outlet.name || '',
-			slug: outlet.slug || '',
+			brand_name: outlet.brand_name || '',
 			tenant: outlet.tenant || '',
-			address: outlet.address || '',
-			city: outlet.city || '',
-			province: outlet.province || '',
-			postal_code: outlet.postal_code || '',
 			phone: outlet.phone || '',
 			email: outlet.email || '',
-			opening_time: outlet.opening_time || '09:00',
-			closing_time: outlet.closing_time || '22:00',
-			websocket_url: outlet.websocket_url || 'ws://localhost:3001',
+
+			websocket_url: outlet.websocket_url || 'http://localhost:3001',
 			is_active: outlet.is_active !== undefined ? outlet.is_active : true
 		};
 		errors = {};
@@ -163,11 +141,11 @@
 			if (!outletForm.name || outletForm.name.trim() === '') {
 				errors.name = 'Outlet name is required';
 			}
+			if (!outletForm.brand_name || outletForm.brand_name.trim() === '') {
+				errors.brand_name = 'Brand name is required';
+			}
 			if (!outletForm.tenant) {
 				errors.tenant = 'Tenant is required';
-			}
-			if (!outletForm.city || outletForm.city.trim() === '') {
-				errors.city = 'City is required';
 			}
 			if (!outletForm.phone || outletForm.phone.trim() === '') {
 				errors.phone = 'Phone is required';
@@ -176,9 +154,6 @@
 
 			const sanitizedData = {
 				...outletForm,
-				slug: outletForm.slug?.trim() || '',
-				address: outletForm.address?.trim() || '',
-				postal_code: outletForm.postal_code?.trim() || '',
 				phone: outletForm.phone?.trim() || '',
 				email: outletForm.email?.trim() || ''
 			};
@@ -318,11 +293,11 @@
 			<div class="card-body">
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm font-medium text-gray-600">Cities</p>
-						<p class="text-2xl font-bold text-purple-600 mt-1">{Object.keys(stats.by_city || {}).length}</p>
+						<p class="text-sm font-medium text-gray-600">Tenants</p>
+						<p class="text-2xl font-bold text-purple-600 mt-1">{Object.keys(stats.by_tenant || {}).length}</p>
 					</div>
 					<div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-						<span class="text-2xl">🏙️</span>
+						<span class="text-2xl">🏪</span>
 					</div>
 				</div>
 			</div>
@@ -352,16 +327,7 @@
 						<option value="active">Active</option>
 						<option value="inactive">Inactive</option>
 					</select>
-					<select
-						bind:value={cityFilter}
-						on:change={handleFilterChange}
-						class="form-select"
-					>
-						<option value="all">All Cities</option>
-						{#each availableCities as city}
-							<option value={city}>{city}</option>
-						{/each}
-					</select>
+
 					<button on:click={openCreateModal} class="btn btn-primary whitespace-nowrap">
 						<span class="mr-2">➕</span>
 						Add Outlet
@@ -399,13 +365,10 @@
 									Tenant
 								</th>
 								<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Location
-								</th>
-								<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Contact
-								</th>
-								<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Operating Hours
+								Stores Count
+							</th>
+							<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+								Contact
 								</th>
 								<th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
 									Status
@@ -431,11 +394,28 @@
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap">
 										<p class="text-sm text-gray-900">{getTenantName(outlet.tenant)}</p>
-									</td>
-									<td class="px-6 py-4">
-										<p class="text-sm text-gray-900 font-medium">{outlet.city}, {outlet.province}</p>
-										<p class="text-xs text-gray-500 mt-1 max-w-xs truncate">{outlet.address}</p>
-									</td>
+									{#if outlet.brand_name}
+										<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mt-1">
+											🏷️ {outlet.brand_name}
+										</span>
+									{/if}
+								</td>
+								<td class="px-6 py-4">
+									{#if outlet.stores_count !== undefined}
+										<p class="text-sm text-gray-900 font-medium">{outlet.stores_count} Store(s)</p>
+									{:else}
+										<p class="text-sm text-gray-400">-</p>
+									{/if}									<a 
+										href="/kitchen-stations?outlet={outlet.id}" 
+										class="text-xs text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1 mt-1"
+										title="Manage kitchen stations for this outlet"
+									>
+										<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+										</svg>
+										Kitchen Stations
+									</a>									</td>
 									<td class="px-6 py-4 whitespace-nowrap">
 										{#if outlet.phone}
 											<p class="text-sm text-gray-900">{outlet.phone}</p>
@@ -447,9 +427,7 @@
 											<p class="text-sm text-gray-400">-</p>
 										{/if}
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
-										<p class="text-sm text-gray-900">{formatOperatingHours(outlet.opening_time, outlet.closing_time)}</p>
-									</td>
+
 									<td class="px-6 py-4 whitespace-nowrap text-center">
 										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {outlet.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
 											{outlet.is_active ? 'Active' : 'Inactive'}
@@ -457,6 +435,16 @@
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap text-right">
 										<div class="flex items-center justify-end space-x-1">
+											<a
+												href="/kitchen-stations?outlet={outlet.id}"
+												class="p-2 text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
+												title="Manage Kitchen Stations"
+											>
+												<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+												</svg>
+											</a>
 											<button
 												on:click={() => openEditModal(outlet)}
 												class="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
@@ -582,135 +570,64 @@
 							{/if}
 						</div>
 
-						<div class="md:col-span-2">
-							<label for="outlet-name" class="form-label required">Outlet Name</label>
-							<input
-								id="outlet-name"
-								type="text"
-								bind:value={outletForm.name}
-								class="form-input {errors.name ? 'border-red-500' : ''}"
-								placeholder="Enter outlet name"
-							/>
-							{#if errors.name}
-								<p class="form-error">{errors.name}</p>
-							{/if}
-						</div>
-
-						<div class="md:col-span-2">
-							<label for="outlet-slug" class="form-label">Slug</label>
-							<input
-								id="outlet-slug"
-								type="text"
-								bind:value={outletForm.slug}
-								class="form-input"
-								placeholder="outlet-slug"
-							/>
-						</div>
+					<div>
+						<label for="outlet-name" class="form-label required">Outlet Name</label>
+						<input
+							id="outlet-name"
+							type="text"
+							bind:value={outletForm.name}
+							class="form-input {errors.name ? 'border-red-500' : ''}"
+							placeholder="Enter outlet name"
+						/>
+						{#if errors.name}
+							<p class="form-error">{errors.name}</p>
+						{/if}
 					</div>
 
-					<!-- Address -->
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div class="md:col-span-2">
-							<label for="outlet-address" class="form-label">Address</label>
-							<textarea
-								id="outlet-address"
-								bind:value={outletForm.address}
-								rows="2"
-								class="form-input"
-								placeholder="Street address"
-							></textarea>
-						</div>
+					<div>
+						<label for="outlet-brand-name" class="form-label required">Brand Name</label>
+						<input
+							id="outlet-brand-name"
+							type="text"
+							bind:value={outletForm.brand_name}
+							class="form-input {errors.brand_name ? 'border-red-500' : ''}"
+							placeholder="e.g., Chicken Sumo"
+						/>
+						{#if errors.brand_name}
+							<p class="form-error">{errors.brand_name}</p>
+						{/if}
+						<p class="text-sm text-gray-500 mt-1">Global brand name (Chicken Sumo, Magic Oven, etc.)</p>
+				</div>
+			</div>
 
-						<div>
-							<label for="outlet-city" class="form-label required">City</label>
-							<input
-								id="outlet-city"
-								type="text"
-								bind:value={outletForm.city}
-								class="form-input {errors.city ? 'border-red-500' : ''}"
-								placeholder="City"
-							/>
-							{#if errors.city}
-								<p class="form-error">{errors.city}</p>
-							{/if}
-						</div>
+			<!-- Contact -->
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div>
+					<label for="outlet-phone" class="form-label required">Phone</label>
+					<input
+						id="outlet-phone"
+						type="text"
+						bind:value={outletForm.phone}
+						class="form-input {errors.phone ? 'border-red-500' : ''}"
+						placeholder="+62812345678"
+						required
+					/>
+					{#if errors.phone}
+						<p class="form-error">{errors.phone}</p>
+					{/if}
+				</div>
 
-						<div>
-							<label for="outlet-province" class="form-label">Province</label>
-							<input
-								id="outlet-province"
-								type="text"
-								bind:value={outletForm.province}
-								class="form-input"
-								placeholder="Province"
-							/>
-						</div>
-
-						<div>
-							<label for="outlet-postal" class="form-label">Postal Code</label>
-							<input
-								id="outlet-postal"
-								type="text"
-								bind:value={outletForm.postal_code}
-								class="form-input"
-								placeholder="12345"
-							/>
-						</div>
-					</div>
-
-					<!-- Contact -->
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div>
-							<label for="outlet-phone" class="form-label required">Phone</label>
-							<input
-								id="outlet-phone"
-								type="text"
-								bind:value={outletForm.phone}
-								class="form-input {errors.phone ? 'border-red-500' : ''}"
-								placeholder="+62812345678"
-								required
-							/>
-							{#if errors.phone}
-								<p class="form-error">{errors.phone}</p>
-							{/if}
-						</div>
-
-						<div>
-							<label for="outlet-email" class="form-label">Email</label>
-							<input
-								id="outlet-email"
-								type="email"
-								bind:value={outletForm.email}
-								class="form-input"
-								placeholder="outlet@example.com"
-							/>
-						</div>
-					</div>
-
-					<!-- Operating Hours -->
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div>
-							<label for="outlet-opening" class="form-label">Opening Time</label>
-							<input
-								id="outlet-opening"
-								type="time"
-								bind:value={outletForm.opening_time}
-								class="form-input"
-							/>
-						</div>
-
-						<div>
-							<label for="outlet-closing" class="form-label">Closing Time</label>
-							<input
-								id="outlet-closing"
-								type="time"
-								bind:value={outletForm.closing_time}
-								class="form-input"
-							/>
-						</div>
-					</div>
-
-					<!-- WebSocket Configuration -->
+				<div>
+					<label for="outlet-email" class="form-label">Email</label>
+					<input
+						id="outlet-email"
+						type="email"
+						bind:value={outletForm.email}
+						class="form-input"
+						placeholder="outlet@example.com"
+					/>
+				</div>
+			</div>
 					<div>
 						<label for="outlet-websocket" class="form-label">
 							WebSocket URL
@@ -721,10 +638,10 @@
 							type="text"
 							bind:value={outletForm.websocket_url}
 							class="form-input"
-							placeholder="ws://192.168.1.10:3001"
-						/>
-						<p class="text-xs text-gray-500 mt-1">
-							Example: ws://192.168.1.10:3001 (use local network IP for multi-outlet)
+						placeholder="http://192.168.1.10:3001"
+					/>
+					<p class="text-xs text-gray-500 mt-1">
+						Example: http://192.168.1.10:3001 (Socket.IO server on port 3001, use local network IP for multi-outlet)
 						</p>
 					</div>
 

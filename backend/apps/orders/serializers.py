@@ -2,7 +2,7 @@
 Order serializers untuk API
 """
 from rest_framework import serializers
-from apps.orders.models import Order, OrderItem
+from apps.orders.models import Order, OrderItem, OrderGroup
 from apps.payments.models import Payment
 from apps.products.models import Product
 from apps.tenants.models import Tenant, Outlet
@@ -30,12 +30,13 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     tenant_color = serializers.CharField(source='tenant.primary_color', read_only=True)
+    outlet_name = serializers.CharField(source='outlet.name', read_only=True)
     
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'tenant', 'tenant_name', 'tenant_color',
-            'outlet', 'status', 'customer_name', 'customer_phone',
+            'outlet', 'outlet_name', 'order_group', 'status', 'customer_name', 'customer_phone',
             'table_number', 'notes', 'subtotal', 'tax_amount',
             'service_charge_amount', 'discount_amount', 'total_amount',
             'payment_status', 'paid_amount', 'source', 'device_id',
@@ -45,6 +46,63 @@ class OrderSerializer(serializers.ModelSerializer):
             'order_number', 'subtotal', 'tax_amount', 
             'service_charge_amount', 'total_amount', 'paid_amount'
         ]
+
+
+class OrderGroupSerializer(serializers.ModelSerializer):
+    """Serializer for OrderGroup"""
+    orders = OrderSerializer(many=True, read_only=True)
+    store_name = serializers.CharField(source='store.name', read_only=True)
+    tenant_name = serializers.CharField(source='store.tenant.name', read_only=True)
+    outlet_breakdown = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OrderGroup
+        fields = [
+            'id', 'group_number', 'store', 'store_name', 'tenant_name',
+            'customer_name', 'customer_phone', 'customer_email',
+            'payment_status', 'payment_method', 'total_amount', 'paid_amount',
+            'source', 'device_id', 'session_id',
+            'orders', 'outlet_breakdown',
+            'created_at', 'updated_at', 'paid_at'
+        ]
+        read_only_fields = ['group_number', 'total_amount', 'paid_amount', 'paid_at']
+    
+    def get_outlet_breakdown(self, obj):
+        return obj.get_outlet_breakdown()
+
+
+class OrderGroupCreateSerializer(serializers.Serializer):
+    """Serializer for creating an order group with multiple outlet orders"""
+    store_id = serializers.IntegerField(required=False, allow_null=True)
+    customer_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    customer_email = serializers.EmailField(required=False, allow_blank=True)
+    
+    source = serializers.ChoiceField(
+        choices=['kiosk', 'web'],
+        default='kiosk'
+    )
+    device_id = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    session_id = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    
+    # Cart data: grouped by outlet
+    carts = serializers.ListField(
+        child=serializers.DictField(),
+        help_text='List of outlet carts with items'
+    )
+    
+    def validate_carts(self, value):
+        """Validate carts structure"""
+        if not value:
+            raise serializers.ValidationError("At least one cart is required")
+        
+        for cart in value:
+            if 'outlet_id' not in cart:
+                raise serializers.ValidationError("Each cart must have outlet_id")
+            if 'items' not in cart or not cart['items']:
+                raise serializers.ValidationError("Each cart must have at least one item")
+        
+        return value
 
 
 class PaymentSerializer(serializers.ModelSerializer):

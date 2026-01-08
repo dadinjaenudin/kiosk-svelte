@@ -8,9 +8,24 @@ from apps.tenants.models import Tenant, Outlet
 
 class Category(TenantModel):
     """
-    Product category
+    Product category - Per Outlet/Brand
+    Each brand has its own menu structure and categories
     """
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='categories')
+    outlet = models.ForeignKey(
+        Outlet, 
+        on_delete=models.CASCADE, 
+        related_name='categories',
+        null=True,  # Temporarily nullable for migration
+        blank=True,
+        help_text='Brand that owns this category (e.g., Chicken Sumo, Magic Oven)'
+    )
+    # Keep tenant for backward compatibility and easier queries
+    tenant = models.ForeignKey(
+        Tenant, 
+        on_delete=models.CASCADE, 
+        related_name='categories',
+        help_text='Automatically set from outlet.tenant'
+    )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     image = models.ImageField(upload_to='categories/', null=True, blank=True)
@@ -29,20 +44,50 @@ class Category(TenantModel):
     
     class Meta:
         db_table = 'categories'
-        ordering = ['sort_order', 'name']
+        ordering = ['outlet', 'sort_order', 'name']
         verbose_name_plural = 'Categories'
+        indexes = [
+            models.Index(fields=['outlet', 'is_active']),
+            models.Index(fields=['tenant', 'is_active']),
+        ]
     
     def __str__(self):
-        return f"{self.tenant.name} - {self.name}"
+        return f"{self.outlet.brand_name} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-set tenant from outlet
+        if self.outlet and not self.tenant_id:
+            self.tenant = self.outlet.tenant
+        super().save(*args, **kwargs)
 
 
 class Product(TenantModel):
     """
-    Product/Menu item
+    Product/Menu item - Per Outlet/Brand
+    Each brand has its own menu and products
     Category-Based Routing: Products auto-route to kitchen stations based on category
     """
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='products')
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
+    outlet = models.ForeignKey(
+        Outlet, 
+        on_delete=models.CASCADE, 
+        related_name='products',
+        null=True,  # Temporarily nullable for migration
+        blank=True,
+        help_text='Brand that owns this product (e.g., Chicken Sumo, Magic Oven)'
+    )
+    # Keep tenant for backward compatibility and easier queries
+    tenant = models.ForeignKey(
+        Tenant, 
+        on_delete=models.CASCADE, 
+        related_name='products',
+        help_text='Automatically set from outlet.tenant'
+    )
+    category = models.ForeignKey(
+        Category, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        related_name='products'
+    )
     
     # Kitchen Station Override (optional)
     kitchen_station_code_override = models.CharField(
@@ -84,10 +129,21 @@ class Product(TenantModel):
     
     class Meta:
         db_table = 'products'
-        ordering = ['category', 'name']
+        ordering = ['outlet', 'category', 'name']
+        indexes = [
+            models.Index(fields=['outlet', 'is_active']),
+            models.Index(fields=['tenant', 'is_active']),
+            models.Index(fields=['category', 'is_active']),
+        ]
     
     def __str__(self):
-        return f"{self.name} - Rp {self.price:,.0f}"
+        return f"{self.outlet.brand_name} - {self.name} - Rp {self.price:,.0f}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-set tenant from outlet
+        if self.outlet and not self.tenant_id:
+            self.tenant = self.outlet.tenant
+        super().save(*args, **kwargs)
     
     @property
     def kitchen_station_code(self):
@@ -106,7 +162,7 @@ class Product(TenantModel):
 class ProductModifier(models.Model):
     """
     Product modifiers (size, toppings, level pedas, etc)
-    Can be attached to specific products or be global (product=null)
+    Can be attached to specific products or be global per outlet
     """
     MODIFIER_TYPES = (
         ('size', 'Size'),
@@ -116,7 +172,22 @@ class ProductModifier(models.Model):
         ('sauce', 'Sauce'),
     )
     
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='modifiers', null=True, blank=True)
+    product = models.ForeignKey(
+        Product, 
+        on_delete=models.CASCADE, 
+        related_name='modifiers', 
+        null=True, 
+        blank=True,
+        help_text='Specific product (leave empty for global outlet modifiers)'
+    )
+    outlet = models.ForeignKey(
+        Outlet,
+        on_delete=models.CASCADE,
+        related_name='modifiers',
+        null=True,
+        blank=True,
+        help_text='Outlet/Brand for global modifiers (e.g., all Chicken Sumo products can have "Extra Spicy")'
+    )
     name = models.CharField(max_length=200)
     type = models.CharField(max_length=20, choices=MODIFIER_TYPES, default='extra')
     price_adjustment = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -126,10 +197,16 @@ class ProductModifier(models.Model):
     class Meta:
         db_table = 'product_modifiers'
         ordering = ['sort_order', 'name']
+        indexes = [
+            models.Index(fields=['product', 'is_active']),
+            models.Index(fields=['outlet', 'is_active']),
+        ]
     
     def __str__(self):
         if self.product:
             return f"{self.product.name} - {self.name} (+Rp {self.price_adjustment:,.0f})"
+        elif self.outlet:
+            return f"{self.outlet.brand_name} - {self.name} (+Rp {self.price_adjustment:,.0f})"
         return f"{self.name} (+Rp {self.price_adjustment:,.0f})"
 
 

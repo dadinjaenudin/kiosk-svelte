@@ -1,5 +1,8 @@
 <script>
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
+	import Swal from 'sweetalert2';
 	import { user, currentOutlet, selectedTenant } from '$lib/stores/auth';
 
 	// SvelteKit page props
@@ -39,7 +42,17 @@
 			const response = await getOutlets();
 			outlets = response.results || response || [];
 			
-			// Set default outlet from currentOutlet store
+			// Get outlet ID from URL query params first
+			if (browser) {
+				const urlParams = new URLSearchParams(window.location.search);
+				const outletParam = urlParams.get('outlet');
+				if (outletParam) {
+					filterOutletId = parseInt(outletParam);
+					return;
+				}
+			}
+			
+			// Fallback: Set default outlet from currentOutlet store
 			if ($currentOutlet && outlets.find(o => o.id === $currentOutlet.id)) {
 				filterOutletId = $currentOutlet.id;
 			} else if (outlets.length > 0) {
@@ -72,10 +85,15 @@
 			const params = {};
 			if (filterOutletId) {
 				params.outlet = filterOutletId;
+				console.log('[Kitchen Stations] Loading stations for outlet:', filterOutletId);
+			} else {
+				console.log('[Kitchen Stations] Loading all stations (no filter)');
 			}
 			
 			const response = await getKitchenStations(params);
 			stations = response.results || response || [];
+			
+			console.log('[Kitchen Stations] Loaded', stations.length, 'stations:', stations.map(s => ({id: s.id, name: s.name, outlet: s.outlet})));
 			
 			// Sort by outlet and sort_order
 			stations.sort((a, b) => {
@@ -154,16 +172,65 @@
 
 	// Delete station (soft delete)
 	async function deleteStation(station) {
-		if (!confirm(`Are you sure you want to delete "${station.name}"?`)) {
+		// Show outlet name in confirmation
+		const outletName = getOutletName(station.outlet);
+		
+		const result = await Swal.fire({
+			title: 'Delete Kitchen Station?',
+			html: `
+				<div class="text-left">
+					<p class="text-gray-700 mb-2">Are you sure you want to delete this station?</p>
+					<div class="bg-gray-50 rounded-lg p-4 mb-3">
+						<p class="font-semibold text-gray-900">${station.name}</p>
+						<p class="text-sm text-gray-600">Code: ${station.code}</p>
+						<p class="text-sm text-gray-600">Outlet: ${outletName}</p>
+						<p class="text-xs text-gray-500 mt-1">ID: ${station.id}</p>
+					</div>
+					<p class="text-sm text-orange-600">⚠️ This station will be deactivated and no longer visible.</p>
+				</div>
+			`,
+			icon: 'warning',
+			showCancelButton: true,
+			confirmButtonColor: '#dc2626',
+			cancelButtonColor: '#6b7280',
+			confirmButtonText: '🗑️ Yes, Delete It',
+			cancelButtonText: 'Cancel',
+			reverseButtons: true,
+			focusCancel: true
+		});
+
+		if (!result.isConfirmed) {
 			return;
 		}
 
 		try {
 			await deleteKitchenStation(station.id);
+			
+			await Swal.fire({
+				title: 'Deleted!',
+				html: `
+					<p class="text-gray-700">Kitchen station has been successfully deactivated.</p>
+					<div class="bg-green-50 rounded-lg p-3 mt-3">
+						<p class="font-semibold text-green-900">${station.name}</p>
+						<p class="text-sm text-green-700">from ${outletName}</p>
+					</div>
+				`,
+				icon: 'success',
+				confirmButtonColor: '#10b981',
+				timer: 3000
+			});
+			
 			await loadStations();
 		} catch (err) {
 			console.error('Error deleting station:', err);
-			error = 'Failed to delete station';
+			error = `Failed to delete station: ${err.message || 'Unknown error'}`;
+			
+			await Swal.fire({
+				title: 'Error!',
+				text: error,
+				icon: 'error',
+				confirmButtonColor: '#dc2626'
+			});
 		}
 	}
 
@@ -209,8 +276,21 @@
 	<div class="mb-6">
 		<div class="flex justify-between items-center">
 			<div>
-				<h1 class="text-3xl font-bold text-gray-900">🍳 Kitchen Stations</h1>
-				<p class="text-gray-600 mt-1">Manage kitchen stations for each outlet</p>
+				<div class="flex items-center gap-3">
+					<a
+						href="/outlets"
+						class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+						title="Back to Outlets"
+					>
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+						</svg>
+					</a>
+					<div>
+						<h1 class="text-3xl font-bold text-gray-900">🍳 Kitchen Stations</h1>
+						<p class="text-gray-600 mt-1">Manage kitchen stations for each outlet</p>
+					</div>
+				</div>
 			</div>
 			<button
 				on:click={openCreateModal}
@@ -293,7 +373,10 @@
 									</span>
 								{/if}
 							</div>
-							<p class="text-sm text-gray-600 mt-2">{getOutletName(station.outlet)}</p>
+							<p class="text-sm text-gray-600 mt-2">
+								<span class="font-medium">{getOutletName(station.outlet)}</span>
+								<span class="text-xs text-gray-400 ml-2">ID: {station.id}</span>
+							</p>
 						</div>
 						<button
 							on:click={() => toggleActive(station)}

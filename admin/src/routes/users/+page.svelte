@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { isAuthenticated } from '$lib/stores/auth';
+	import Swal from 'sweetalert2';
 	import {
 		getUsers,
 		deleteUser,
@@ -294,8 +295,22 @@
 			
 			if (editingUser) {
 				await updateUser(editingUser.id, submitData);
+				Swal.fire({
+					title: 'Updated!',
+					html: `<p>User <strong>${submitData.username}</strong> has been updated successfully.</p>`,
+					icon: 'success',
+					timer: 3000,
+					showConfirmButton: false
+				});
 			} else {
 				await createUser(submitData);
+				Swal.fire({
+					title: 'Created!',
+					html: `<p>User <strong>${submitData.username}</strong> has been created successfully.</p>`,
+					icon: 'success',
+					timer: 3000,
+					showConfirmButton: false
+				});
 			}
 			
 			showCreateModal = false;
@@ -303,7 +318,7 @@
 			loadStats();
 		} catch (error) {
 			console.error('Error saving user:', error);
-			alert('Failed to save user: ' + (error.message || 'Unknown error'));
+			Swal.fire('Error', 'Failed to save user: ' + (error.message || 'Unknown error'), 'error');
 		}
 	}
 
@@ -315,15 +330,40 @@
 	async function handleDelete() {
 		if (!userToDelete) return;
 		
+		const result = await Swal.fire({
+			title: 'Delete User?',
+			html: `<p>Are you sure you want to delete user <strong>${userToDelete.username}</strong>?</p><p class="text-sm text-red-600 mt-2">This action cannot be undone.</p>`,
+			icon: 'warning',
+			showCancelButton: true,
+			confirmButtonColor: '#d33',
+			cancelButtonColor: '#3085d6',
+			confirmButtonText: 'Yes, delete it!',
+			cancelButtonText: 'Cancel'
+		});
+		
+		if (!result.isConfirmed) {
+			showDeleteModal = false;
+			userToDelete = null;
+			return;
+		}
+		
 		try {
 			await deleteUser(userToDelete.id);
 			showDeleteModal = false;
 			userToDelete = null;
 			loadUsers();
 			loadStats();
+			
+			Swal.fire({
+				title: 'Deleted!',
+				text: 'User has been deleted successfully.',
+				icon: 'success',
+				timer: 3000,
+				showConfirmButton: false
+			});
 		} catch (error) {
 			console.error('Error deleting user:', error);
-			alert('Failed to delete user');
+			Swal.fire('Error', 'Failed to delete user', 'error');
 		}
 	}
 
@@ -356,10 +396,17 @@
 		try {
 			await resetUserPassword(editingUser.id, newPassword);
 			showPasswordModal = false;
-			alert(`Password reset successfully for ${editingUser.username}`);
+			
+			Swal.fire({
+				title: 'Password Reset!',
+				html: `<p>Password has been reset successfully for <strong>${editingUser.username}</strong>.</p>`,
+				icon: 'success',
+				timer: 3000,
+				showConfirmButton: false
+			});
 		} catch (error) {
 			console.error('Error resetting password:', error);
-			alert('Failed to reset password');
+			Swal.fire('Error', 'Failed to reset password', 'error');
 		}
 	}
 
@@ -380,9 +427,17 @@
 			showRoleModal = false;
 			loadUsers();
 			loadStats();
+			
+			Swal.fire({
+				title: 'Role Changed!',
+				html: `<p>Role for <strong>${editingUser.username}</strong> has been changed to <strong>${formatRole(newRole)}</strong>.</p>`,
+				icon: 'success',
+				timer: 3000,
+				showConfirmButton: false
+			});
 		} catch (error) {
 			console.error('Error changing role:', error);
-			alert('Failed to change role');
+			Swal.fire('Error', 'Failed to change role', 'error');
 		}
 	}
 

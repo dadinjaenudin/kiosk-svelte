@@ -1,802 +1,875 @@
 """
-Complete Test Data Setup Script
-Creates comprehensive sample data for multi-outlet food court system:
-- Tenants (3)
-- Outlets (6)
-- Kitchen Stations (12)
-- Categories (12)
-- Products (30)
-- Toppings (20)
-- Additions (15)
-- Users (20)
-- Customers (30)
-- Orders (50)
+Complete Test Data Setup Script - OPSI 2 Many-to-Many Architecture
+Creates comprehensive sample data for multi-store multi-outlet system:
+- 4 Tenants: YOGYA, BORMA, MATAHARI, CARREFOUR (Retail Companies)
+- 12 Stores: 3 per tenant (Physical retail locations)
+- 3 Global Brands: Chicken Sumo, Magic Oven, Magic Pizza
+- StoreOutlet junction: Links brands to stores (M2M)
+- 9 Categories: 3 per brand
+- 27 Products: 9 per brand
+- Kitchen stations per brand
+
+⚠️  WARNING: This script will DELETE ALL existing data including:
+- Orders, OrderGroups, OrderItems
+- Customers
+- Products, Categories, ProductModifiers
+- Kitchen Stations
+- Stores, Outlets, StoreOutlets
+- Tenants
+
+Run with caution!
 """
 
 import os
 import sys
 import django
-from datetime import datetime, timedelta
+from datetime import time
 from decimal import Decimal
-import random
 
 # Setup Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from apps.tenants.models import Tenant, Outlet, KitchenStation, KitchenStationType
+from apps.tenants.models import Tenant, Store, Outlet, StoreOutlet, KitchenStation
 from apps.products.models import Category, Product, ProductModifier
 from apps.customers.models import Customer
-from apps.orders.models import Order, OrderItem
-from apps.promotions.models import Promotion
+from apps.orders.models import Order, OrderItem, OrderGroup
 
 User = get_user_model()
 
-def create_kitchen_station_types():
-    """Create default kitchen station types"""
-    print("\n🏭 Creating Kitchen Station Types...")
+
+def clear_all_data():
+    """Clear all existing data"""
+    print("\n🗑️  Clearing existing data...")
     
-    # Global types (available to all tenants)
-    global_types = [
+    # Clear orders first (has FK to products)
+    OrderItem.objects.all().delete()
+    Order.objects.all().delete()
+    OrderGroup.objects.all().delete()
+    print("  ✅ Cleared orders")
+    
+    # Clear customers
+    Customer.objects.all().delete()
+    print("  ✅ Cleared customers")
+    
+    # Clear products and categories
+    ProductModifier.objects.all().delete()
+    Product.all_objects.all().delete()
+    Category.all_objects.all().delete()
+    print("  ✅ Cleared products & categories")
+    
+    KitchenStation.objects.all().delete()
+    print("  ✅ Cleared kitchen stations")
+    
+    StoreOutlet.objects.all().delete()
+    Outlet.objects.all().delete()
+    Store.objects.all().delete()
+    print("  ✅ Cleared stores, outlets, and junctions")
+    
+    Tenant.objects.all().delete()
+    print("  ✅ Cleared tenants")
+    
+    print("✅ All data cleared!\n")
+
+
+def create_tenants():
+    """Create 4 retail company tenants"""
+    print("🏢 Creating Tenants (Retail Companies)...")
+    
+    tenants_data = [
         {
-            'name': 'Main Kitchen',
-            'code': 'MAIN',
-            'description': 'Main kitchen for general food preparation',
-            'icon': '🍳',
-            'color': '#FF6B35',
-            'sort_order': 1,
-            'is_global': True
+            'name': 'YOGYA',
+            'slug': 'yogya',
+            'description': 'Yogya Department Store - Retail chain with food court',
+            'primary_color': '#E74C3C',
+            'secondary_color': '#C0392B',
+            'tax_rate': Decimal('10.00'),
+            'service_charge_rate': Decimal('5.00'),
         },
         {
-            'name': 'Beverage Station',
-            'code': 'BEVERAGE',
-            'description': 'Drinks, coffee, and beverages',
-            'icon': '☕',
-            'color': '#4A90E2',
-            'sort_order': 2,
-            'is_global': True
+            'name': 'BORMA',
+            'slug': 'borma',
+            'description': 'Borma Toserba - Supermarket chain with food court',
+            'primary_color': '#3498DB',
+            'secondary_color': '#2980B9',
+            'tax_rate': Decimal('10.00'),
+            'service_charge_rate': Decimal('5.00'),
         },
         {
-            'name': 'Dessert Station',
-            'code': 'DESSERT',
-            'description': 'Desserts and sweet items',
-            'icon': '🍰',
-            'color': '#FF69B4',
-            'sort_order': 3,
-            'is_global': True
+            'name': 'MATAHARI',
+            'slug': 'matahari',
+            'description': 'Matahari Department Store - Retail chain',
+            'primary_color': '#F39C12',
+            'secondary_color': '#E67E22',
+            'tax_rate': Decimal('10.00'),
+            'service_charge_rate': Decimal('5.00'),
+        },
+        {
+            'name': 'CARREFOUR',
+            'slug': 'carrefour',
+            'description': 'Carrefour - Hypermarket chain',
+            'primary_color': '#27AE60',
+            'secondary_color': '#229954',
+            'tax_rate': Decimal('10.00'),
+            'service_charge_rate': Decimal('5.00'),
         },
     ]
     
-    # Tenant-specific types
-    tenant_types = {
-        'pizza-paradise': [
-            {
-                'name': 'Pizza Oven',
-                'code': 'PIZZA',
-                'description': 'Pizza oven and preparation',
-                'icon': '🍕',
-                'color': '#E74C3C',
-                'sort_order': 1
-            },
-            {
-                'name': 'Sides Station',
-                'code': 'SIDES',
-                'description': 'Appetizers and side dishes',
-                'icon': '🥖',
-                'color': '#F39C12',
-                'sort_order': 2
-            },
+    tenants = {}
+    for tenant_data in tenants_data:
+        tenant = Tenant.objects.create(**tenant_data)
+        tenants[tenant.slug] = tenant
+        print(f"  ✅ {tenant.name}")
+    
+    return tenants
+
+
+def create_stores(tenants):
+    """Create 3 stores per tenant (12 total)"""
+    print("\n📍 Creating Stores (Physical Locations)...")
+    
+    stores_data = [
+        # YOGYA Stores
+        {
+            'tenant': tenants['yogya'],
+            'code': 'YOGYA-KAPATIHAN',
+            'name': 'Yogya Kapatihan',
+            'address': 'Jl. Ahmad Yani No. 288, Kapatihan',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'postal_code': '40271',
+            'opening_time': time(8, 0),
+            'closing_time': time(21, 0),
+        },
+        {
+            'tenant': tenants['yogya'],
+            'code': 'YOGYA-RIAU',
+            'name': 'Yogya Riau',
+            'address': 'Jl. Riau No. 16',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(9, 0),
+            'closing_time': time(22, 0),
+        },
+        {
+            'tenant': tenants['yogya'],
+            'code': 'YOGYA-SUNDA',
+            'name': 'Yogya Sunda',
+            'address': 'Jl. Sunda No. 42',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(8, 30),
+            'closing_time': time(21, 30),
+        },
+        
+        # BORMA Stores
+        {
+            'tenant': tenants['borma'],
+            'code': 'BORMA-DAGO',
+            'name': 'Borma Dago',
+            'address': 'Jl. Ir. H. Juanda No. 135 (Dago)',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(8, 0),
+            'closing_time': time(22, 0),
+        },
+        {
+            'tenant': tenants['borma'],
+            'code': 'BORMA-CIBIRU',
+            'name': 'Borma Cibiru',
+            'address': 'Jl. Cibiru Hilir No. 1',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(7, 30),
+            'closing_time': time(21, 0),
+        },
+        {
+            'tenant': tenants['borma'],
+            'code': 'BORMA-KEBON-WARU',
+            'name': 'Borma Kebon Waru',
+            'address': 'Jl. Kebon Waru No. 8',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(8, 0),
+            'closing_time': time(21, 0),
+        },
+        
+        # MATAHARI Stores
+        {
+            'tenant': tenants['matahari'],
+            'code': 'MATAHARI-BIP',
+            'name': 'Matahari BIP',
+            'address': 'Bandung Indah Plaza, Jl. Merdeka No. 56',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(10, 0),
+            'closing_time': time(22, 0),
+        },
+        {
+            'tenant': tenants['matahari'],
+            'code': 'MATAHARI-TSM',
+            'name': 'Matahari Trans Studio Mall',
+            'address': 'Trans Studio Mall Bandung',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(10, 0),
+            'closing_time': time(22, 0),
+        },
+        {
+            'tenant': tenants['matahari'],
+            'code': 'MATAHARI-PVJ',
+            'name': 'Matahari Paris Van Java',
+            'address': 'Paris Van Java Mall',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(10, 0),
+            'closing_time': time(22, 0),
+        },
+        
+        # CARREFOUR Stores
+        {
+            'tenant': tenants['carrefour'],
+            'code': 'CARREFOUR-CIHAMPELAS',
+            'name': 'Carrefour Cihampelas',
+            'address': 'Cihampelas Walk, Jl. Cihampelas',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(8, 0),
+            'closing_time': time(22, 0),
+        },
+        {
+            'tenant': tenants['carrefour'],
+            'code': 'CARREFOUR-FESTIVAL',
+            'name': 'Carrefour Festival Citylink',
+            'address': 'Festival Citylink',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(9, 0),
+            'closing_time': time(22, 0),
+        },
+        {
+            'tenant': tenants['carrefour'],
+            'code': 'CARREFOUR-PASTEUR',
+            'name': 'Carrefour Pasteur',
+            'address': 'Jl. Dr. Djunjunan (Pasteur)',
+            'city': 'Bandung',
+            'province': 'Jawa Barat',
+            'opening_time': time(8, 0),
+            'closing_time': time(21, 0),
+        },
+    ]
+    
+    stores = []
+    for store_data in stores_data:
+        store = Store.objects.create(**store_data)
+        stores.append(store)
+        print(f"  ✅ {store.name} ({store.code})")
+    
+    return stores
+
+
+def create_global_brands(tenants):
+    """
+    Create outlets for each tenant - each tenant has 3 unique brands
+    """
+    print("\n🍗 Creating Outlets (3 per tenant)...")
+    
+    outlets_data = {
+        'yogya': [
+            ('Chicken Sumo', 'chicken-sumo', '021-1111111', 'cs@yogya.com', 'ws://localhost:8001/ws/kitchen/chicken-sumo/'),
+            ('Magic Oven', 'magic-oven', '021-2222222', 'mo@yogya.com', 'ws://localhost:8001/ws/kitchen/magic-oven/'),
+            ('Magic Pizza', 'magic-pizza', '021-3333333', 'mp@yogya.com', 'ws://localhost:8001/ws/kitchen/magic-pizza/'),
         ],
-        'burger-station': [
-            {
-                'name': 'Grill Station',
-                'code': 'GRILL',
-                'description': 'Burgers and grilled items',
-                'icon': '🍔',
-                'color': '#E67E22',
-                'sort_order': 1
-            },
-            {
-                'name': 'Fry Station',
-                'code': 'FRY',
-                'description': 'Fries and fried items',
-                'icon': '🍟',
-                'color': '#F1C40F',
-                'sort_order': 2
-            },
+        'borma': [
+            ('Borma Cafe', 'borma-cafe', '022-1111111', 'cafe@borma.com', 'ws://localhost:8001/ws/kitchen/borma-cafe/'),
+            ('Borma Bakery', 'borma-bakery', '022-2222222', 'bakery@borma.com', 'ws://localhost:8001/ws/kitchen/borma-bakery/'),
+            ('Borma Fresh', 'borma-fresh', '022-3333333', 'fresh@borma.com', 'ws://localhost:8001/ws/kitchen/borma-fresh/'),
         ],
-        'noodle-house': [
-            {
-                'name': 'Noodle Kitchen',
-                'code': 'NOODLE',
-                'description': 'Noodle and soup preparation',
-                'icon': '🍜',
-                'color': '#E74C3C',
-                'sort_order': 1
-            },
-            {
-                'name': 'Wok Station',
-                'code': 'WOK',
-                'description': 'Stir-fry and wok dishes',
-                'icon': '🥘',
-                'color': '#D35400',
-                'sort_order': 2
-            },
+        'matahari': [
+            ('Matahari Food Court', 'matahari-fc', '021-4444444', 'fc@matahari.com', 'ws://localhost:8001/ws/kitchen/matahari-fc/'),
+            ('Matahari Coffee', 'matahari-coffee', '021-5555555', 'coffee@matahari.com', 'ws://localhost:8001/ws/kitchen/matahari-coffee/'),
+            ('Matahari Snack Bar', 'matahari-snack', '021-6666666', 'snack@matahari.com', 'ws://localhost:8001/ws/kitchen/matahari-snack/'),
+        ],
+        'carrefour': [
+            ('Carrefour Bistro', 'carrefour-bistro', '021-7777777', 'bistro@carrefour.com', 'ws://localhost:8001/ws/kitchen/carrefour-bistro/'),
+            ('Carrefour Bakery', 'carrefour-bakery', '021-8888888', 'bakery@carrefour.com', 'ws://localhost:8001/ws/kitchen/carrefour-bakery/'),
+            ('Carrefour Express', 'carrefour-express', '021-9999999', 'express@carrefour.com', 'ws://localhost:8001/ws/kitchen/carrefour-express/'),
         ],
     }
     
-    created_global = 0
-    created_tenant = 0
-    
-    # Create global types
-    print("  📌 Creating global types...")
-    for type_data in global_types:
-        type_obj, created = KitchenStationType.objects.get_or_create(
-            code=type_data['code'],
-            is_global=True,
-            tenant=None,
-            defaults=type_data
-        )
-        if created:
-            created_global += 1
-            print(f"     ✅ Created: {type_obj.name} ({type_obj.code})")
-        else:
-            print(f"     ⏭️  Exists: {type_obj.name} ({type_obj.code})")
-    
-    # Create tenant-specific types
-    print("\n  📌 Creating tenant-specific types...")
-    for tenant_slug, types in tenant_types.items():
-        try:
-            tenant = Tenant.objects.get(slug=tenant_slug)
-            print(f"     🏢 {tenant.name}:")
-            
-            for type_data in types:
-                type_obj, created = KitchenStationType.objects.get_or_create(
-                    tenant=tenant,
-                    code=type_data['code'],
-                    defaults=type_data
-                )
-                if created:
-                    created_tenant += 1
-                    print(f"        ✅ Created: {type_obj.name} ({type_obj.code})")
-                else:
-                    print(f"        ⏭️  Exists: {type_obj.name} ({type_obj.code})")
-        except Tenant.DoesNotExist:
-            print(f"     ⚠️  Tenant '{tenant_slug}' not found, skipping")
-    
-    print(f"\n✅ Created {created_global} global types, {created_tenant} tenant types")
-    print(f"   Total: {KitchenStationType.objects.count()} station types")
-
-def create_kitchen_stations():
-    """Create default kitchen stations for all outlets"""
-    print("\n🍳 Creating Kitchen Stations...")
-    
-    stations_created = 0
-    
-    for outlet in Outlet.objects.all():
-        print(f"  📍 Processing: {outlet.name}")
-        
-        # Check if outlet already has stations
-        existing = KitchenStation.objects.filter(outlet=outlet).count()
-        if existing > 0:
-            print(f"     ⏭️  Skipped - already has {existing} stations")
-            continue
-        
-        # Create default stations
-        default_stations = [
-            {
-                'name': 'Main Kitchen',
-                'code': 'MAIN',
-                'description': 'Main kitchen for all items',
-                'sort_order': 1
-            },
-            {
-                'name': 'Beverage Station',
-                'code': 'BEVERAGE',
-                'description': 'Drinks and beverages',
-                'sort_order': 2
-            },
-        ]
-        
-        for station_data in default_stations:
-            station = KitchenStation.objects.create(
-                outlet=outlet,
-                **station_data
+    brands = {}
+    for tenant_key, outlet_list in outlets_data.items():
+        tenant = tenants[tenant_key]
+        print(f"\n  {tenant.name}:")
+        for name, slug, phone, email, ws_url in outlet_list:
+            outlet = Outlet.objects.create(
+                tenant=tenant,
+                name=name,
+                brand_name=name,
+                slug=slug,
+                phone=phone,
+                email=email,
+                websocket_url=ws_url,
+                is_active=True
             )
-            stations_created += 1
-            print(f"     ✅ Created: {station.name} ({station.code})")
+            brands[slug] = outlet
+            print(f"    ✅ {outlet.brand_name}")
     
-    print(f"✅ Created {stations_created} new stations, total: {KitchenStation.objects.count()}")
+    return brands
 
-def create_toppings():
-    """Create sample toppings for products"""
-    print("\n📝 Creating Toppings...")
-    
-    # Get tenants
-    pizza = Tenant.objects.get(slug='pizza-paradise')
-    burger = Tenant.objects.get(slug='burger-station')
-    noodle = Tenant.objects.get(slug='noodle-house')
-    
-    toppings_data = [
-        # Pizza toppings
-        {'name': 'Extra Cheese', 'tenant': pizza, 'price': 15000},
-        {'name': 'Pepperoni', 'tenant': pizza, 'price': 20000},
-        {'name': 'Mushrooms', 'tenant': pizza, 'price': 12000},
-        {'name': 'Black Olives', 'tenant': pizza, 'price': 10000},
-        {'name': 'Green Peppers', 'tenant': pizza, 'price': 8000},
-        {'name': 'Onions', 'tenant': pizza, 'price': 8000},
-        {'name': 'Italian Sausage', 'tenant': pizza, 'price': 18000},
-        
-        # Burger toppings
-        {'name': 'Bacon', 'tenant': burger, 'price': 15000},
-        {'name': 'Cheddar Cheese', 'tenant': burger, 'price': 10000},
-        {'name': 'Swiss Cheese', 'tenant': burger, 'price': 12000},
-        {'name': 'Fried Egg', 'tenant': burger, 'price': 8000},
-        {'name': 'Grilled Onions', 'tenant': burger, 'price': 5000},
-        {'name': 'Jalapeños', 'tenant': burger, 'price': 5000},
-        
-        # Noodle toppings
-        {'name': 'Extra Meat', 'tenant': noodle, 'price': 15000},
-        {'name': 'Extra Vegetables', 'tenant': noodle, 'price': 10000},
-        {'name': 'Boiled Egg', 'tenant': noodle, 'price': 8000},
-        {'name': 'Fried Wonton', 'tenant': noodle, 'price': 12000},
-        {'name': 'Extra Noodles', 'tenant': noodle, 'price': 10000},
-        {'name': 'Chili Oil', 'tenant': noodle, 'price': 5000},
-        {'name': 'Spring Onions', 'tenant': noodle, 'price': 3000},
-    ]
-    
-    created = 0
-    for data in toppings_data:
-        # Get random product from tenant for association
-        product = Product.all_objects.filter(tenant=data['tenant']).first()
-        
-        modifier, created_new = ProductModifier.objects.get_or_create(
-            name=data['name'],
-            product=product,
-            type='topping',
-            defaults={
-                'price_adjustment': Decimal(str(data['price'])),
-                'is_active': True
-            }
-        )
-        if created_new:
-            created += 1
-            print(f"  ✅ Created topping: {modifier.name} - Rp {modifier.price_adjustment:,.0f}")
-    
-    print(f"✅ Created {created} new toppings, total: {ProductModifier.objects.filter(type='topping').count()}")
 
-def create_additions():
-    """Create sample additions (sides/drinks)"""
-    print("\n🥤 Creating Additions...")
+def assign_brands_to_stores(stores, brands):
+    """
+    Create StoreOutlet entries to assign brands to stores (CROSS-TENANT)
+    This demonstrates OPSI 2 architecture where stores can have outlets from different tenants
+    """
+    print("\n🔗 Assigning Brands to Stores (Cross-Tenant Many-to-Many)...")
     
-    # Get tenants
-    pizza = Tenant.objects.get(slug='pizza-paradise')
-    burger = Tenant.objects.get(slug='burger-station')
-    noodle = Tenant.objects.get(slug='noodle-house')
+    # Get specific outlets from each tenant
+    chicken_sumo = brands['chicken-sumo']
+    magic_oven = brands['magic-oven']
+    magic_pizza = brands['magic-pizza']
     
-    additions_data = [
-        # Pizza additions
-        {'name': 'Garlic Bread', 'tenant': pizza, 'price': 25000},
-        {'name': 'Chicken Wings (6pcs)', 'tenant': pizza, 'price': 35000},
-        {'name': 'Caesar Salad', 'tenant': pizza, 'price': 30000},
-        {'name': 'Coca Cola', 'tenant': pizza, 'price': 10000},
-        {'name': 'Iced Tea', 'tenant': pizza, 'price': 8000},
-        
-        # Burger additions
-        {'name': 'French Fries', 'tenant': burger, 'price': 20000},
-        {'name': 'Onion Rings', 'tenant': burger, 'price': 22000},
-        {'name': 'Coleslaw', 'tenant': burger, 'price': 15000},
-        {'name': 'Milkshake', 'tenant': burger, 'price': 25000},
-        {'name': 'Soft Drink', 'tenant': burger, 'price': 10000},
-        
-        # Noodle additions
-        {'name': 'Spring Rolls (4pcs)', 'tenant': noodle, 'price': 20000},
-        {'name': 'Gyoza (6pcs)', 'tenant': noodle, 'price': 25000},
-        {'name': 'Fried Rice', 'tenant': noodle, 'price': 30000},
-        {'name': 'Green Tea', 'tenant': noodle, 'price': 8000},
-        {'name': 'Jasmine Tea', 'tenant': noodle, 'price': 8000},
-    ]
+    # YOGYA stores get their own brands (Chicken Sumo, Magic Oven, Magic Pizza)
+    yogya_stores = [s for s in stores if s.tenant.slug == 'yogya']
+    for store in yogya_stores:
+        StoreOutlet.objects.create(store=store, outlet=chicken_sumo, is_active=True, display_order=1)
+        StoreOutlet.objects.create(store=store, outlet=magic_oven, is_active=True, display_order=2)
+        StoreOutlet.objects.create(store=store, outlet=magic_pizza, is_active=True, display_order=3)
+        print(f"  ✅ {store.name}: Chicken Sumo, Magic Oven, Magic Pizza")
     
-    created = 0
-    for data in additions_data:
-        # Get random product from tenant for association
-        product = Product.all_objects.filter(tenant=data['tenant']).first()
-        
-        modifier, created_new = ProductModifier.objects.get_or_create(
-            name=data['name'],
-            product=product,
-            type='extra',
-            defaults={
-                'price_adjustment': Decimal(str(data['price'])),
-                'is_active': True
-            }
-        )
-        if created_new:
-            created += 1
-            print(f"  ✅ Created addition: {modifier.name} - Rp {modifier.price_adjustment:,.0f}")
+    # BORMA stores (cross-tenant) - can have YOGYA brands
+    borma_stores = [s for s in stores if s.tenant.slug == 'borma']
+    borma_cafe = brands['borma-cafe']
+    borma_bakery = brands['borma-bakery']
+    for store in borma_stores:
+        # Own brands
+        StoreOutlet.objects.create(store=store, outlet=borma_cafe, is_active=True, display_order=1)
+        StoreOutlet.objects.create(store=store, outlet=borma_bakery, is_active=True, display_order=2)
+        # Cross-tenant: YOGYA's Chicken Sumo
+        StoreOutlet.objects.create(store=store, outlet=chicken_sumo, is_active=True, display_order=3)
+        print(f"  ✅ {store.name}: Borma Cafe, Borma Bakery, Chicken Sumo (YOGYA)")
     
-    print(f"✅ Created {created} new additions, total: {ProductModifier.objects.filter(type='extra').count()}")
+    # MATAHARI stores (cross-tenant) - can have YOGYA brands
+    matahari_stores = [s for s in stores if s.tenant.slug == 'matahari']
+    matahari_fc = brands['matahari-fc']
+    matahari_coffee = brands['matahari-coffee']
+    for store in matahari_stores:
+        # Own brands
+        StoreOutlet.objects.create(store=store, outlet=matahari_fc, is_active=True, display_order=1)
+        StoreOutlet.objects.create(store=store, outlet=matahari_coffee, is_active=True, display_order=2)
+        # Cross-tenant: YOGYA's Magic Pizza
+        StoreOutlet.objects.create(store=store, outlet=magic_pizza, is_active=True, display_order=3)
+        print(f"  ✅ {store.name}: Matahari FC, Matahari Coffee, Magic Pizza (YOGYA)")
+    
+    # CARREFOUR stores (cross-tenant) - can have multiple brands from YOGYA
+    carrefour_stores = [s for s in stores if s.tenant.slug == 'carrefour']
+    carrefour_bistro = brands['carrefour-bistro']
+    for store in carrefour_stores:
+        # Own brand
+        StoreOutlet.objects.create(store=store, outlet=carrefour_bistro, is_active=True, display_order=1)
+        # Cross-tenant: All YOGYA brands
+        StoreOutlet.objects.create(store=store, outlet=chicken_sumo, is_active=True, display_order=2)
+        StoreOutlet.objects.create(store=store, outlet=magic_oven, is_active=True, display_order=3)
+        StoreOutlet.objects.create(store=store, outlet=magic_pizza, is_active=True, display_order=4)
+        print(f"  ✅ {store.name}: Carrefour Bistro, Chicken Sumo (YOGYA), Magic Oven (YOGYA), Magic Pizza (YOGYA)")
 
-def create_customers():
-    """Create sample customers"""
-    print("\n👥 Creating Customers...")
-    
-    # Get all tenants for random assignment
-    tenants = list(Tenant.objects.all())
-    
-    if not tenants:
-        print("❌ No tenants found. Cannot create customers.")
-        return
-    
-    customers_data = [
-        {'name': 'John Doe', 'phone': '081234567890', 'email': 'john@example.com'},
-        {'name': 'Jane Smith', 'phone': '081234567891', 'email': 'jane@example.com'},
-        {'name': 'Bob Johnson', 'phone': '081234567892', 'email': 'bob@example.com'},
-        {'name': 'Alice Williams', 'phone': '081234567893', 'email': 'alice@example.com'},
-        {'name': 'Charlie Brown', 'phone': '081234567894', 'email': 'charlie@example.com'},
-        {'name': 'David Lee', 'phone': '081234567895', 'email': 'david@example.com'},
-        {'name': 'Emma Davis', 'phone': '081234567896', 'email': 'emma@example.com'},
-        {'name': 'Frank Miller', 'phone': '081234567897', 'email': 'frank@example.com'},
-        {'name': 'Grace Wilson', 'phone': '081234567898', 'email': 'grace@example.com'},
-        {'name': 'Henry Moore', 'phone': '081234567899', 'email': 'henry@example.com'},
-        {'name': 'Ivy Taylor', 'phone': '081234567800', 'email': 'ivy@example.com'},
-        {'name': 'Jack Anderson', 'phone': '081234567801', 'email': 'jack@example.com'},
-        {'name': 'Kate Thomas', 'phone': '081234567802', 'email': 'kate@example.com'},
-        {'name': 'Leo Jackson', 'phone': '081234567803', 'email': 'leo@example.com'},
-        {'name': 'Mia White', 'phone': '081234567804', 'email': 'mia@example.com'},
-        {'name': 'Noah Harris', 'phone': '081234567805', 'email': 'noah@example.com'},
-        {'name': 'Olivia Martin', 'phone': '081234567806', 'email': 'olivia@example.com'},
-        {'name': 'Peter Garcia', 'phone': '081234567807', 'email': 'peter@example.com'},
-        {'name': 'Quinn Martinez', 'phone': '081234567808', 'email': 'quinn@example.com'},
-        {'name': 'Rachel Robinson', 'phone': '081234567809', 'email': 'rachel@example.com'},
-        {'name': 'Sam Clark', 'phone': '081234567810', 'email': 'sam@example.com'},
-        {'name': 'Tina Rodriguez', 'phone': '081234567811', 'email': 'tina@example.com'},
-        {'name': 'Uma Lewis', 'phone': '081234567812', 'email': 'uma@example.com'},
-        {'name': 'Victor Walker', 'phone': '081234567813', 'email': 'victor@example.com'},
-        {'name': 'Wendy Hall', 'phone': '081234567814', 'email': 'wendy@example.com'},
-        {'name': 'Xavier Allen', 'phone': '081234567815', 'email': 'xavier@example.com'},
-        {'name': 'Yara Young', 'phone': '081234567816', 'email': 'yara@example.com'},
-        {'name': 'Zack King', 'phone': '081234567817', 'email': 'zack@example.com'},
-        {'name': 'Amy Wright', 'phone': '081234567818', 'email': 'amy@example.com'},
-        {'name': 'Brian Scott', 'phone': '081234567819', 'email': 'brian@example.com'},
-    ]
-    
-    created = 0
-    for data in customers_data:
-        # Randomly assign a tenant to each customer
-        tenant = random.choice(tenants)
-        
-        customer, created_new = Customer.objects.get_or_create(
-            phone=data['phone'],
-            defaults={
-                'name': data['name'],
-                'email': data['email'],
-                'tenant': tenant
-            }
-        )
-        if created_new:
-            created += 1
-            print(f"  ✅ Created customer: {customer.name} ({customer.phone}) - {tenant.name}")
-    
-    print(f"✅ Created {created} new customers, total: {Customer.objects.count()}")
 
-def create_orders():
-    """Create sample orders"""
-    print("\n📦 Creating Orders...")
+def create_kitchen_stations(brands):
+    """Create kitchen stations per outlet"""
+    print("\n🍳 Creating Kitchen Stations (Per Outlet)...")
     
-    outlets = list(Outlet.objects.all())
-    customers = list(Customer.objects.all())
-    products = list(Product.all_objects.filter(is_active=True, is_available=True))
+    # YOGYA Outlets
+    chicken_sumo = brands['chicken-sumo']
+    KitchenStation.objects.create(outlet=chicken_sumo, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=chicken_sumo, name='Grill Station', code='GRILL', is_active=True, sort_order=2)
+    print(f"  ✅ Chicken Sumo: MAIN, GRILL")
     
-    if not customers:
-        print("❌ No customers found. Run create_customers() first.")
-        return
+    magic_oven = brands['magic-oven']
+    KitchenStation.objects.create(outlet=magic_oven, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=magic_oven, name='Oven Station', code='OVEN', is_active=True, sort_order=2)
+    print(f"  ✅ Magic Oven: MAIN, OVEN")
     
-    if not products:
-        print("❌ No products found. Cannot create orders.")
-        return
+    magic_pizza = brands['magic-pizza']
+    KitchenStation.objects.create(outlet=magic_pizza, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=magic_pizza, name='Pizza Oven', code='PIZZA', is_active=True, sort_order=2)
+    print(f"  ✅ Magic Pizza: MAIN, PIZZA")
     
-    statuses = ['pending', 'confirmed', 'preparing', 'ready', 'served', 'completed']
-    payment_statuses = ['paid', 'unpaid', 'pending']
-    payment_methods = ['cash', 'qris', 'debit_card', 'credit_card']
+    # BORMA Outlets
+    borma_cafe = brands['borma-cafe']
+    KitchenStation.objects.create(outlet=borma_cafe, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=borma_cafe, name='Beverage Station', code='BEVERAGE', is_active=True, sort_order=2)
+    print(f"  ✅ Borma Cafe: MAIN, BEVERAGE")
     
-    created = 0
+    borma_bakery = brands['borma-bakery']
+    KitchenStation.objects.create(outlet=borma_bakery, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=borma_bakery, name='Bakery Oven', code='BAKERY', is_active=True, sort_order=2)
+    print(f"  ✅ Borma Bakery: MAIN, BAKERY")
     
-    # Create orders for the last 7 days
-    for day in range(7):
-        date = datetime.now() - timedelta(days=day)
-        orders_per_day = random.randint(5, 10)
-        
-        for _ in range(orders_per_day):
-            outlet = random.choice(outlets)
-            customer = random.choice(customers)
-            
-            # Random time during the day
-            hour = random.randint(10, 21)
-            minute = random.randint(0, 59)
-            order_time = date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            
-            # Create order
-            order = Order.objects.create(
-                tenant=outlet.tenant,
-                outlet=outlet,
-                customer_name=customer.name,
-                customer_phone=customer.phone,
-                customer_email=customer.email,
-                order_number=f"ORD{order_time.strftime('%Y%m%d')}{random.randint(1000, 9999)}",
-                status=random.choice(statuses),
-                payment_status=random.choice(payment_statuses),
-                created_at=order_time,
-                updated_at=order_time
-            )
-            
-            # Add 1-4 items to order
-            num_items = random.randint(1, 4)
-            tenant_products = [p for p in products if p.tenant_id == outlet.tenant_id]
-            
-            if not tenant_products:
-                order.delete()
-                continue
-            
-            order_total = Decimal('0')
-            
-            for _ in range(num_items):
-                product = random.choice(tenant_products)
-                quantity = random.randint(1, 3)
-                
-                OrderItem.objects.create(
-                    order=order,
-                    product=product,
-                    product_name=product.name,
-                    product_sku=product.sku,
-                    quantity=quantity,
-                    unit_price=product.price,
-                    total_price=product.price * quantity
-                )
-                
-                order_total += product.price * quantity
-            
-            # Update order totals
-            order.subtotal = order_total
-            order.total_amount = order_total
-            order.save()
-            
-            created += 1
-            print(f"  ✅ Created order: {order.order_number} - {order.outlet.name} - Rp {order.total_amount:,.0f}")
+    borma_fresh = brands['borma-fresh']
+    KitchenStation.objects.create(outlet=borma_fresh, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    print(f"  ✅ Borma Fresh: MAIN")
     
-    print(f"✅ Created {created} new orders, total: {Order.objects.count()}")
+    # MATAHARI Outlets
+    matahari_fc = brands['matahari-fc']
+    KitchenStation.objects.create(outlet=matahari_fc, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=matahari_fc, name='Grill Station', code='GRILL', is_active=True, sort_order=2)
+    print(f"  ✅ Matahari Food Court: MAIN, GRILL")
+    
+    matahari_coffee = brands['matahari-coffee']
+    KitchenStation.objects.create(outlet=matahari_coffee, name='Main Bar', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=matahari_coffee, name='Espresso Bar', code='ESPRESSO', is_active=True, sort_order=2)
+    print(f"  ✅ Matahari Coffee: MAIN, ESPRESSO")
+    
+    matahari_snack = brands['matahari-snack']
+    KitchenStation.objects.create(outlet=matahari_snack, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    print(f"  ✅ Matahari Snack Bar: MAIN")
+    
+    # CARREFOUR Outlets
+    carrefour_bistro = brands['carrefour-bistro']
+    KitchenStation.objects.create(outlet=carrefour_bistro, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=carrefour_bistro, name='Grill Station', code='GRILL', is_active=True, sort_order=2)
+    print(f"  ✅ Carrefour Bistro: MAIN, GRILL")
+    
+    carrefour_bakery = brands['carrefour-bakery']
+    KitchenStation.objects.create(outlet=carrefour_bakery, name='Main Kitchen', code='MAIN', is_active=True, sort_order=1)
+    KitchenStation.objects.create(outlet=carrefour_bakery, name='Bakery Oven', code='BAKERY', is_active=True, sort_order=2)
+    print(f"  ✅ Carrefour Bakery: MAIN, BAKERY")
+    
+    carrefour_express = brands['carrefour-express']
+    KitchenStation.objects.create(outlet=carrefour_express, name='Main Counter', code='MAIN', is_active=True, sort_order=1)
+    print(f"  ✅ Carrefour Express: MAIN")
 
-def create_promotions():
-    """Create sample promotions with different types for each tenant"""
-    print("\n🎉 Creating Promotions...")
+
+def create_categories_and_products(brands, tenants):
+    """Create categories and products per outlet - only for YOGYA brands (sample)"""
+    print("\n📋 Creating Categories and Products (Sample: YOGYA Outlets)...")
     
-    # Get tenants
-    pizza = Tenant.objects.get(slug='pizza-paradise')
-    burger = Tenant.objects.get(slug='burger-station')
-    noodle = Tenant.objects.get(slug='noodle-house')
+    yogya = tenants['yogya']
     
-    now = timezone.now()
-    next_month = now + timedelta(days=30)
-    next_week = now + timedelta(days=7)
+    # CHICKEN SUMO Menu
+    chicken_sumo = brands['chicken-sumo']
+    print(f"\n  🍗 {chicken_sumo.brand_name}")
     
-    promotions_data = [
-        # Pizza Paradise promotions
-        {
-            'tenant': pizza,
-            'name': 'Weekend Special',
-            'description': '20% off on all pizzas during weekends',
-            'code': 'WEEKEND20',
-            'promo_type': 'percentage',
-            'discount_value': Decimal('20.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('50000'),
-        },
-        {
-            'tenant': pizza,
-            'name': 'Happy Hour Pizza',
-            'description': '15% off on all pizzas from 2-5 PM',
-            'code': 'HAPPYHOUR15',
-            'promo_type': 'percentage',
-            'discount_value': Decimal('15.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('50000'),
-        },
-        {
-            'tenant': pizza,
-            'name': 'Large Pizza Deal',
-            'description': 'Rp 25,000 off on large pizzas',
-            'code': 'LARGE25K',
-            'promo_type': 'fixed',
-            'discount_value': Decimal('25000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('80000'),
-        },
-        {
-            'tenant': pizza,
-            'name': 'Buy 2 Get 1 Free Pizza',
-            'description': 'Buy 2 pizzas get 1 free (cheapest free)',
-            'code': 'BUY2GET1PIZZA',
-            'promo_type': 'buy_x_get_y',
-            'discount_value': Decimal('0.00'),
-            'buy_quantity': 2,
-            'get_quantity': 1,
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-        },
-        {
-            'tenant': pizza,
-            'name': 'Family Bundle',
-            'description': '2 Large Pizzas + 2 Drinks for special price',
-            'code': 'FAMILY99K',
-            'promo_type': 'bundle',
-            'discount_value': Decimal('30000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-        },
-        
-        # Burger Station promotions
-        {
-            'tenant': burger,
-            'name': 'Combo Deal',
-            'description': 'Special combo discount',
-            'code': 'COMBO15K',
-            'promo_type': 'fixed',
-            'discount_value': Decimal('15000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('60000'),
-        },
-        {
-            'tenant': burger,
-            'name': 'Student Discount',
-            'description': '20% off for students with valid ID',
-            'code': 'STUDENT20',
-            'promo_type': 'percentage',
-            'discount_value': Decimal('20.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('30000'),
-        },
-        {
-            'tenant': burger,
-            'name': 'Mega Burger Discount',
-            'description': 'Rp 20,000 off on mega burgers',
-            'code': 'MEGA20K',
-            'promo_type': 'fixed',
-            'discount_value': Decimal('20000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('60000'),
-        },
-        {
-            'tenant': burger,
-            'name': 'Buy 3 Get 1 Free',
-            'description': 'Buy 3 burgers get 1 free',
-            'code': 'BURGERBUY3',
-            'promo_type': 'buy_x_get_y',
-            'discount_value': Decimal('0.00'),
-            'buy_quantity': 3,
-            'get_quantity': 1,
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-        },
-        {
-            'tenant': burger,
-            'name': 'Couple Bundle',
-            'description': '2 Burgers + 2 Fries + 2 Drinks',
-            'code': 'COUPLE79K',
-            'promo_type': 'bundle',
-            'discount_value': Decimal('25000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-        },
-        
-        # Noodle House promotions
-        {
-            'tenant': noodle,
-            'name': 'Lunch Special',
-            'description': 'Lunch hour special discount',
-            'code': 'LUNCH10K',
-            'promo_type': 'fixed',
-            'discount_value': Decimal('10000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('40000'),
-        },
-        {
-            'tenant': noodle,
-            'name': 'Lunch Promo',
-            'description': '25% off on all noodles 11 AM - 2 PM',
-            'code': 'LUNCH25',
-            'promo_type': 'percentage',
-            'discount_value': Decimal('25.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('40000'),
-        },
-        {
-            'tenant': noodle,
-            'name': 'Ramen Discount',
-            'description': 'Rp 15,000 off on all ramen bowls',
-            'code': 'RAMEN15K',
-            'promo_type': 'fixed',
-            'discount_value': Decimal('15000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-            'min_purchase_amount': Decimal('50000'),
-        },
-        {
-            'tenant': noodle,
-            'name': 'Buy 2 Ramen Get 1 Drink',
-            'description': 'Buy 2 ramen bowls get 1 free drink',
-            'code': 'RAMEN2DRINK',
-            'promo_type': 'buy_x_get_y',
-            'discount_value': Decimal('0.00'),
-            'buy_quantity': 2,
-            'get_quantity': 1,
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-        },
-        {
-            'tenant': noodle,
-            'name': 'Noodle Feast',
-            'description': '3 Noodles + 3 Drinks + Appetizer',
-            'code': 'FEAST120K',
-            'promo_type': 'bundle',
-            'discount_value': Decimal('35000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': True,
-        },
-        
-        # Add some expired/scheduled promotions for testing
-        {
-            'tenant': pizza,
-            'name': 'New Year Special (Expired)',
-            'description': 'New year promotion - already expired',
-            'code': 'NEWYEAR2025',
-            'promo_type': 'percentage',
-            'discount_value': Decimal('30.00'),
-            'start_date': now - timedelta(days=30),
-            'end_date': now - timedelta(days=1),
-            'is_active': False,
-        },
-        {
-            'tenant': burger,
-            'name': 'Coming Soon: Summer Sale',
-            'description': 'Starting next week!',
-            'code': 'SUMMER30',
-            'promo_type': 'percentage',
-            'discount_value': Decimal('30.00'),
-            'start_date': next_week,
-            'end_date': next_month,
-            'is_active': False,
-        },
-        {
-            'tenant': noodle,
-            'name': 'Paused: Holiday Special',
-            'description': 'Temporarily paused',
-            'code': 'HOLIDAY2026',
-            'promo_type': 'fixed',
-            'discount_value': Decimal('20000.00'),
-            'start_date': now,
-            'end_date': next_month,
-            'is_active': False,
-        },
-    ]
+    # Categories - use all_objects manager to bypass tenant filtering
+    cat_fried = Category.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        name='Fried Chicken',
+        kitchen_station_code='GRILL',
+        sort_order=1
+    )
+    cat_combo = Category.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        name='Combos',
+        kitchen_station_code='MAIN',
+        sort_order=2
+    )
+    cat_drink = Category.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        name='Drinks',
+        kitchen_station_code='MAIN',
+        sort_order=3
+    )
     
-    created = 0
-    skipped = 0
-    for promo_data in promotions_data:
-        try:
-            # Check if code already exists
-            if promo_data.get('code'):
-                existing = Promotion.objects.filter(code=promo_data['code']).first()
-                if existing:
-                    skipped += 1
-                    continue
-            
-            promo = Promotion.objects.create(**promo_data)
-            created += 1
-            status = "✅" if promo.is_active else "⏸️"
-            print(f"  {status} Created: {promo.name} ({promo.promo_type}) - {promo.tenant.name}")
-        except Exception as e:
-            print(f"  ❌ Error creating '{promo_data['name']}': {str(e)}")
+    # Products - Fried Chicken
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_fried,
+        sku='CS-FC-001',
+        name='Chicken Sumo Original',
+        description='Ayam goreng crispy original',
+        price=Decimal('25000'),
+        preparation_time=10,
+        is_popular=True
+    )
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_fried,
+        sku='CS-FC-002',
+        name='Chicken Sumo Spicy',
+        description='Ayam goreng pedas level 5',
+        price=Decimal('27000'),
+        preparation_time=10,
+        is_popular=True
+    )
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_fried,
+        sku='CS-FC-003',
+        name='Chicken Wings 5pcs',
+        description='Sayap ayam goreng crispy',
+        price=Decimal('20000'),
+        preparation_time=8
+    )
     
-    if skipped > 0:
-        print(f"  ⚠️  Skipped {skipped} existing promotions")
-    print(f"✅ Created {created} new promotions, total: {Promotion.objects.count()}")
+    # Products - Combos
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_combo,
+        sku='CS-CB-001',
+        name='Chicken Combo + Fries + Drink',
+        description='Paket ayam + kentang + minuman',
+        price=Decimal('35000'),
+        preparation_time=12,
+        is_featured=True
+    )
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_combo,
+        sku='CS-CB-002',
+        name='Family Meal 8pcs',
+        description='Paket keluarga 8 potong ayam',
+        price=Decimal('85000'),
+        preparation_time=15,
+        is_featured=True
+    )
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_combo,
+        sku='CS-CB-003',
+        name='Double Chicken Burger',
+        description='Burger ayam goreng double',
+        price=Decimal('32000'),
+        preparation_time=10
+    )
+    
+    # Products - Drinks
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_drink,
+        sku='CS-DR-001',
+        name='Iced Tea',
+        price=Decimal('5000'),
+        preparation_time=2
+    )
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_drink,
+        sku='CS-DR-002',
+        name='Orange Juice',
+        price=Decimal('8000'),
+        preparation_time=3
+    )
+    Product.all_objects.create(
+        outlet=chicken_sumo,
+        tenant=yogya,
+        category=cat_drink,
+        sku='CS-DR-003',
+        name='Mineral Water',
+        price=Decimal('3000'),
+        preparation_time=1
+    )
+    
+    print(f"    ✅ 3 categories, 9 products")
+    
+    # MAGIC OVEN Menu
+    magic_oven = brands['magic-oven']
+    print(f"\n  🍞 {magic_oven.brand_name}")
+    
+    # Categories
+    cat_bread = Category.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        name='Breads',
+        kitchen_station_code='OVEN',
+        sort_order=1
+    )
+    cat_pastry = Category.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        name='Pastries',
+        kitchen_station_code='OVEN',
+        sort_order=2
+    )
+    cat_cake = Category.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        name='Cakes',
+        kitchen_station_code='OVEN',
+        sort_order=3
+    )
+    
+    # Products - Breads
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_bread,
+        sku='MO-BR-001',
+        name='Croissant',
+        price=Decimal('15000'),
+        preparation_time=5,
+        is_popular=True
+    )
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_bread,
+        sku='MO-BR-002',
+        name='Baguette',
+        price=Decimal('18000'),
+        preparation_time=5
+    )
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_bread,
+        sku='MO-BR-003',
+        name='Sourdough Bread',
+        price=Decimal('25000'),
+        preparation_time=5
+    )
+    
+    # Products - Pastries
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_pastry,
+        sku='MO-PS-001',
+        name='Danish Pastry',
+        price=Decimal('12000'),
+        preparation_time=5
+    )
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_pastry,
+        sku='MO-PS-002',
+        name='Cheese Tart',
+        price=Decimal('14000'),
+        preparation_time=5,
+        is_popular=True
+    )
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_pastry,
+        sku='MO-PS-003',
+        name='Apple Turnover',
+        price=Decimal('13000'),
+        preparation_time=5
+    )
+    
+    # Products - Cakes
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_cake,
+        sku='MO-CK-001',
+        name='Chocolate Cake Slice',
+        price=Decimal('22000'),
+        preparation_time=3,
+        is_featured=True
+    )
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_cake,
+        sku='MO-CK-002',
+        name='Red Velvet Slice',
+        price=Decimal('24000'),
+        preparation_time=3,
+        is_featured=True
+    )
+    Product.all_objects.create(
+        outlet=magic_oven,
+        tenant=yogya,
+        category=cat_cake,
+        sku='MO-CK-003',
+        name='Tiramisu',
+        price=Decimal('28000'),
+        preparation_time=3
+    )
+    
+    print(f"    ✅ 3 categories, 9 products")
+    
+    # MAGIC PIZZA Menu
+    magic_pizza = brands['magic-pizza']
+    print(f"\n  🍕 {magic_pizza.brand_name}")
+    
+    # Categories
+    cat_pizza = Category.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        name='Pizza',
+        kitchen_station_code='PIZZA',
+        sort_order=1
+    )
+    cat_pasta = Category.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        name='Pasta',
+        kitchen_station_code='MAIN',
+        sort_order=2
+    )
+    cat_dessert = Category.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        name='Desserts',
+        kitchen_station_code='MAIN',
+        sort_order=3
+    )
+    
+    # Products - Pizza
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_pizza,
+        sku='MP-PZ-001',
+        name='Margherita Pizza',
+        price=Decimal('65000'),
+        preparation_time=15,
+        is_popular=True
+    )
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_pizza,
+        sku='MP-PZ-002',
+        name='Pepperoni Pizza',
+        price=Decimal('75000'),
+        preparation_time=15,
+        is_popular=True
+    )
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_pizza,
+        sku='MP-PZ-003',
+        name='Hawaiian Pizza',
+        price=Decimal('70000'),
+        preparation_time=15
+    )
+    
+    # Products - Pasta
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_pasta,
+        sku='MP-PA-001',
+        name='Spaghetti Carbonara',
+        price=Decimal('45000'),
+        preparation_time=12,
+        is_featured=True
+    )
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_pasta,
+        sku='MP-PA-002',
+        name='Penne Arrabiata',
+        price=Decimal('42000'),
+        preparation_time=12
+    )
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_pasta,
+        sku='MP-PA-003',
+        name='Fettuccine Alfredo',
+        price=Decimal('48000'),
+        preparation_time=12
+    )
+    
+    # Products - Desserts
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_dessert,
+        sku='MP-DS-001',
+        name='Gelato Vanilla',
+        price=Decimal('18000'),
+        preparation_time=3
+    )
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_dessert,
+        sku='MP-DS-002',
+        name='Gelato Chocolate',
+        price=Decimal('18000'),
+        preparation_time=3
+    )
+    Product.all_objects.create(
+        outlet=magic_pizza,
+        tenant=yogya,
+        category=cat_dessert,
+        sku='MP-DS-003',
+        name='Panna Cotta',
+        price=Decimal('22000'),
+        preparation_time=3
+    )
+    
+    print(f"    ✅ 3 categories, 9 products")
+
 
 def main():
-    print("=" * 70)
-    print("🚀 COMPLETE TEST DATA SETUP")
-    print("=" * 70)
+    """Main execution"""
+    print("\n" + "="*60)
+    print("🚀 OPSI 2 Many-to-Many Test Data Setup")
+    print("="*60)
     
     try:
-        # Check if tenants exist
-        if Tenant.objects.count() == 0:
-            print("\n❌ No tenants found. Please run the multi-outlet setup first!")
-            sys.exit(1)
+        # Clear existing data
+        clear_all_data()
         
-        # Warning about data that will be deleted
-        print("\n⚠️  WARNING: This script will DELETE existing:")
-        print("   - All orders")
-        print("   - All existing toppings/modifiers")
-        print("   - All existing promotions")
-        print("\n   Existing customers will be kept (or created if not exist)")
-        print("\n   New test data will be created:")
-        print("   - 20 Toppings")
-        print("   - 15 Additions")
-        print("   - 18 Promotions (all types: percentage, fixed, buy_x_get_y, bundle)")
-        print("   - 30 Customers (if not exist)")
-        print("   - 50+ Orders (last 7 days)")
+        # Create tenants
+        tenants = create_tenants()
         
-        response = input("\n❓ Continue? (yes/no): ").strip().lower()
+        # Create users (superadmin and tenant owners)
+        create_users(tenants)
         
-        if response not in ['yes', 'y']:
-            print("\n❌ Setup cancelled by user.")
-            sys.exit(0)
+        # Create stores
+        stores = create_stores(tenants)
         
-        print("\n🗑️  Clearing existing data...\n")
+        # Create global brands
+        brands = create_global_brands(tenants)
         
-        # Delete existing data (DO NOT delete customers to preserve products)
-        # DO NOT delete modifiers - it somehow cascades to products!
-        print("  - Deleting orders...")
-        Order.objects.all().delete()
-        print("  - Deleting promotions...")
-        Promotion.objects.all().delete()
-        print("  - Data cleared!\n")
+        # Assign brands to stores (M2M)
+        assign_brands_to_stores(stores, brands)
         
-        # Create all test data
-        print("Checking existing data before creation...")
-        print(f"  - Products: {Product.all_objects.count()}")
-        print(f"  - Categories: {Category.all_objects.count()}")
-        print()
+        # Create kitchen stations per brand
+        create_kitchen_stations(brands)
         
-        create_kitchen_station_types()
-        create_kitchen_stations()
-        create_toppings()
-        create_additions()
-        create_promotions()
-        create_customers()
-        create_orders()
+        # Create categories and products per brand
+        create_categories_and_products(brands, tenants)
         
-        print("\n" + "=" * 70)
-        print("✅ COMPLETE TEST DATA SETUP FINISHED!")
-        print("=" * 70)
-        print("\n📊 Summary:")
+        print("\n" + "="*60)
+        print("✅ Test data setup completed successfully!")
+        print("="*60)
+        print(f"\n📊 Summary:")
         print(f"  - Tenants: {Tenant.objects.count()}")
-        print(f"  - Outlets: {Outlet.objects.count()}")
-        print(f"  - Kitchen Station Types: {KitchenStationType.objects.count()}")
+        print(f"  - Users: {User.objects.count()}")
+        print(f"  - Stores: {Store.objects.count()}")
+        print(f"  - Global Brands (Outlets): {Outlet.objects.count()}")
+        print(f"  - Store-Brand Assignments: {StoreOutlet.objects.count()}")
         print(f"  - Kitchen Stations: {KitchenStation.objects.count()}")
         print(f"  - Categories: {Category.all_objects.count()}")
         print(f"  - Products: {Product.all_objects.count()}")
-        print(f"  - Toppings: {ProductModifier.objects.filter(type='topping').count()}")
-        print(f"  - Additions: {ProductModifier.objects.filter(type='extra').count()}")
-        print(f"  - Promotions: {Promotion.objects.count()} ({Promotion.objects.filter(is_active=True).count()} active)")
-        print(f"  - Users: {User.objects.count()}")
-        print(f"  - Customers: {Customer.objects.count()}")
-        print(f"  - Orders: {Order.objects.count()}")
-        print()
+        
+        print(f"\n👤 Test Users:")
+        print(f"  - Superadmin: superadmin / admin123")
+        print(f"  - Tenant Owners: yogya_owner, borma_owner, matahari_owner, carrefour_owner / owner123")
+        
+        print(f"\n🏪 Test Store Codes:")
+        for store in Store.objects.all()[:3]:
+            print(f"  - {store.code} ({store.name})")
+        
+        print(f"\n🍗 Test Brands:")
+        for outlet in Outlet.objects.all():
+            stores_count = outlet.stores.count()
+            print(f"  - {outlet.brand_name} (available at {stores_count} stores)")
         
     except Exception as e:
         print(f"\n❌ Error: {str(e)}")
@@ -804,5 +877,42 @@ def main():
         traceback.print_exc()
         sys.exit(1)
 
+
+def create_users(tenants):
+    """Create superadmin and test users"""
+    print("\n👤 Creating Users...")
+    
+    # Delete existing users
+    User.objects.all().delete()
+    print("  ✅ Cleared existing users")
+    
+    # Create superadmin
+    superadmin = User.objects.create_superuser(
+        username='superadmin',
+        email='superadmin@kiosk.local',
+        password='admin123',
+        first_name='Super',
+        last_name='Admin',
+        role='super_admin'
+    )
+    print(f"  ✅ Superadmin: superadmin / admin123")
+    
+    # Create tenant owners (one per tenant)
+    for slug, tenant in tenants.items():
+        owner = User.objects.create_user(
+            username=f'{slug}_owner',
+            email=f'owner@{slug}.local',
+            password='owner123',
+            first_name=tenant.name,
+            last_name='Owner',
+            role='tenant_owner',
+            tenant=tenant
+        )
+        print(f"  ✅ {tenant.name} Owner: {slug}_owner / owner123")
+    
+    print(f"\n  Total users created: {User.objects.count()}")
+
+
 if __name__ == '__main__':
     main()
+

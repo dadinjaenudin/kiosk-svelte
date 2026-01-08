@@ -6,14 +6,17 @@ from rest_framework.routers import DefaultRouter
 from apps.orders.views import OrderViewSet
 from apps.orders.views_admin import OrderManagementViewSet
 from apps.orders.views_reports import ReportsViewSet
+from apps.orders.views_order_group import PublicOrderGroupViewSet, OrderGroupAdminViewSet
 
 # Public/Kiosk router
 public_router = DefaultRouter()
 public_router.register(r'orders', OrderViewSet, basename='order')
+public_router.register(r'order-groups', PublicOrderGroupViewSet, basename='order-group')
 
 # Admin router
 admin_router = DefaultRouter()
 admin_router.register(r'admin/orders', OrderManagementViewSet, basename='admin-order')
+admin_router.register(r'admin/order-groups', OrderGroupAdminViewSet, basename='admin-order-group')
 admin_router.register(r'admin/reports', ReportsViewSet, basename='admin-report')
 
 urlpatterns = [

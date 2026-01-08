@@ -1,15 +1,20 @@
 @echo off
 REM ============================================================================
-REM Multi-Outlet Test Data Setup Script for Docker
+REM Complete Test Data Setup Script for Docker (OPSI 2 Many-to-Many)
 REM ============================================================================
-REM This script sets up complete test data for the food court system:
-REM - Phase 1-5: Basic multi-outlet setup (tenants, outlets, categories, products, users)
-REM - Complete data: Toppings, Additions, Customers, Orders
+REM This script sets up complete test data for the multi-store multi-outlet system:
+REM - 4 Tenants: YOGYA, BORMA, MATAHARI, CARREFOUR (Retail Companies)
+REM - 12 Stores: 3 per tenant (Physical retail locations)
+REM - 3 Global Brands: Chicken Sumo, Magic Oven, Magic Pizza
+REM - StoreOutlet junction: Links brands to stores (M2M)
+REM - 9 Categories: 3 per brand
+REM - 27 Products: 9 per brand
+REM - Kitchen stations per brand
 REM ============================================================================
 
 echo.
 echo ========================================================================
-echo MULTI-OUTLET TEST DATA SETUP (DOCKER)
+echo OPSI 2 MANY-TO-MANY TEST DATA SETUP (DOCKER)
 echo ========================================================================
 echo.
 
@@ -31,24 +36,12 @@ if errorlevel 1 (
     timeout /t 5 /nobreak >nul
 )
 
-echo [1/2] Setting up basic multi-outlet data (Phase 1-5)...
-echo.
-docker-compose exec backend python setup_multi_outlet_test_data.py
-if errorlevel 1 (
-    echo.
-    echo ❌ Failed to setup basic multi-outlet data!
-    pause
-    exit /b 1
-)
-
-echo.
-echo ========================================================================
-echo [2/2] Setting up complete test data (Toppings, Additions, Customers, Orders)...
+echo [1/1] Setting up complete test data (Many-to-Many Architecture)...
 echo.
 docker-compose exec backend python setup_complete_test_data.py
 if errorlevel 1 (
     echo.
-    echo ❌ Failed to setup complete test data!
+    echo ❌ Failed to setup test data!
     pause
     exit /b 1
 )
@@ -59,17 +52,16 @@ echo ✅ ALL TEST DATA SETUP COMPLETED!
 echo ========================================================================
 echo.
 echo You now have:
-echo   - 3 Tenants (Pizza Paradise, Burger Station, Noodle House)
-echo   - 6 Outlets (2 per tenant)
-echo   - 12 Categories
-echo   - 30 Products
-echo   - 20 Toppings
-echo   - 15 Additions
-echo   - 20 Users (with various roles)
-echo   - 30 Customers
-echo   - 50+ Orders (last 7 days)
+echo   - 4 Tenants (YOGYA, BORMA, MATAHARI, CARREFOUR)
+echo   - 12 Stores (3 per tenant with operating hours)
+echo   - 3 Global Brands (Chicken Sumo, Magic Oven, Magic Pizza)
+echo   - 30 Store-Brand Assignments (Many-to-Many)
+echo   - 6 Kitchen Stations (2 per brand)
+echo   - 9 Categories (3 per brand)
+echo   - 27 Products (9 per brand)
 echo.
-echo 🎉 Ready to test the system!
+echo 🎉 Ready to test the OPSI 2 Many-to-Many system!
+echo 🔗 Test Store Code: YOGYA-KAPATIHAN
 echo 🔗 Access admin panel at: http://localhost:5175/
 echo.
 pause

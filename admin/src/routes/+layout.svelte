@@ -56,6 +56,7 @@
 			items: [
 				{ name: 'Users', href: '/users', icon: '👤', feature: 'users' },
 				{ name: 'Tenants', href: '/tenants', icon: '🏢', feature: 'tenants' },
+				{ name: 'Stores', href: '/stores', icon: '🏪', feature: 'outlets' },
 				{ name: 'Outlets', href: '/outlets', icon: '📍', feature: 'outlets' },
 				{ name: 'Kitchen Stations', href: '/kitchen-stations', icon: '🍳', feature: 'outlets' },
 				{ name: 'Kitchen Station Types', href: '/kitchen-station-types', icon: '🏷️', feature: 'outlets' }
@@ -85,6 +86,7 @@
 	
 	// Reactive auth check - redirect to login if logged out
 	$: if (authCheckDone && !$isAuthenticated && $page.url.pathname !== '/login') {
+		console.log('Layout: redirecting to login from', $page.url.pathname);
 		goto('/login');
 	}
 
