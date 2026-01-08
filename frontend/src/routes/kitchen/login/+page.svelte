@@ -21,7 +21,8 @@
 		try {
 			const response = await fetch(`${API_BASE}/public/stores/`);
 			if (!response.ok) throw new Error('Failed to load stores');
-			stores = await response.json();
+			const data = await response.json();
+			stores = data.results || data; // Handle pagination or direct array
 		} catch (err) {
 			console.error('Failed to load stores:', err);
 			error = 'Failed to load stores. Please check your connection.';
