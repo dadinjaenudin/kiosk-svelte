@@ -5,12 +5,9 @@
 	import KioskSetup from '$lib/components/kiosk/KioskSetup.svelte';
 
 	let showSetup = false;
-	let showWelcome = false;
 
 	// Subscribe to kiosk configuration
 	$: isConfigured = $kioskConfig.isConfigured;
-	$: storeName = $kioskConfig.storeName;
-	$: tenantName = $kioskConfig.tenantName;
 
 	onMount(() => {
 		console.log('🏪 Multi-Outlet Kiosk mounted');
@@ -21,38 +18,16 @@
 		if (!isConfigured) {
 			showSetup = true;
 		} else {
-			showWelcome = true;
+			// Redirect to idle screen if already configured
+			goto('/kiosk/idle');
 		}
 	});
 
 	function handleConfigured(event: CustomEvent) {
 		console.log('✅ Kiosk configured:', event.detail);
 		showSetup = false;
-		showWelcome = true;
-	}
-
-	function startOrder() {
-		console.log('🚀 Starting order...');
-		console.log('Store Code:', $kioskConfig.storeCode);
-		console.log('Is Configured:', $kioskConfig.isConfigured);
-		
-		// Double check before navigating
-		if ($kioskConfig.isConfigured && $kioskConfig.storeCode) {
-			goto('/kiosk/products');
-		} else {
-			console.error('❌ Cannot start order: Not configured');
-			alert('Kiosk not properly configured. Please setup again.');
-			showSetup = true;
-			showWelcome = false;
-		}
-	}
-
-	function reconfigure() {
-		if (confirm('Reset kiosk configuration? This will clear all settings.')) {
-			kioskConfig.reset();
-			showSetup = true;
-			showWelcome = false;
-		}
+		// After configuration, go to idle screen
+		goto('/kiosk/idle');
 	}
 </script>
 
@@ -60,26 +35,8 @@
 	{#if showSetup}
 		<!-- STEP 1: Kiosk Setup -->
 		<KioskSetup on:configured={handleConfigured} />
-	{:else if showWelcome && isConfigured}
-		<!-- Welcome Screen - Kiosk Configured -->
-		<div class="welcome-screen">
-			<div class="welcome-content">
-				<h1 class="welcome-title">🏪 Welcome to</h1>
-				<h2 class="store-name">{tenantName} - {storeName}</h2>
-				<p class="welcome-subtitle">Multi-Outlet Kiosk System</p>
-				
-				<button on:click={startOrder} class="btn-start-order">
-					<span class="btn-icon">🛒</span>
-					<span class="btn-text">Tap to Start Order</span>
-				</button>
-				
-				<button on:click={reconfigure} class="btn-reconfigure-bottom">
-					⚙️ Reconfigure Kiosk
-				</button>
-			</div>
-		</div>
 	{:else}
-		<!-- Loading -->
+		<!-- Loading/Redirecting -->
 		<div class="flex items-center justify-center min-h-screen">
 			<div class="text-white text-xl">Loading...</div>
 		</div>
