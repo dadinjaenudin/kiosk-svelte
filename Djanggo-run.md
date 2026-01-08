@@ -15,30 +15,20 @@ docker-compose exec backend python manage.py seed_foodcourt
 docker-compose exec backend python manage.py seed_promotion
 docker-compose exec backend python manage.py seed_customer
 
-# Note: Admin user will be assigned to 'Warung Nasi Padang' tenant
-# To view products from other tenants, login with tenant-specific users:
-# - warung-nasi-padang / password123
-# - mie-ayam-bakso / password123
-# - ayam-geprek / password123
-# - soto-betawi / password123
-# - nasi-goreng / password123
-
+docker-compose logs frontend --tail=50
 docker-compose restart frontend
-
 docker-compose restart admin
 
-docker-compose exec backend python manage.py shell
->>> from apps.users.models import User
->>> admin = User.objects.filter(username='admin').first()
->>> if not admin:
-...     admin = User.objects.create_superuser(
-...         username='admin',
-...         password='admin123',
-...         email='admin@example.com',
-...         role='admin'
-...     )
->>> print(f"Admin exists: {admin.username}, Role: {admin.role}")
->>> exit()
+docker-compose down frontend; docker-compose up -d frontend
+docker-compose build frontend; docker-compose up -d frontend
+
+Untuk ke depannya, jika ada masalah dependency:
+docker-compose build frontend
+docker-compose up -d frontend
+
+Start-Sleep -Seconds 15; docker-compose logs frontend --tail=20
+Start-Sleep -Seconds 10; docker-compose logs frontend --tail=15 | Select-String "error|ready" | Select-Object -Last 5
+docker-compose logs frontend 2>&1 | Select-String "ready in|error" | Select-Object -Last 3
 
 URLs PENTING
 Kiosk: http://localhost:5174/kiosk

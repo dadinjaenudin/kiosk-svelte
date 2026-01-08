@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { kioskConfig } from '$lib/stores/kioskStore';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -20,14 +21,27 @@
 	
 	async function loadReceipt() {
 		try {
+			const tenantId = $kioskConfig.tenantId?.toString() || '';
+			console.log('🏪 Loading receipt with tenant ID:', tenantId);
+			console.log('📋 Kiosk config:', $kioskConfig);
+			
 			const response = await fetch(
-				`${API_BASE}/public/order-groups/${groupNumber}/receipt/`
+				`${API_BASE}/order-groups/${groupNumber}/receipt/`,
+				{
+					headers: {
+						'X-Tenant-ID': tenantId
+					}
+				}
 			);
 			
 			if (response.ok) {
 				orderGroup = await response.json();
-				console.log('📄 Receipt loaded:', orderGroup);
-			} else {
+				console.log('📄 Receipt loaded:', orderGroup);			console.log('📍 Location:', orderGroup.location);
+			console.log('👤 Customer:', orderGroup.customer);
+			console.log('💳 Payment:', orderGroup.payment);
+			console.log('📦 Orders:', orderGroup.orders);			} else {
+				const errorText = await response.text();
+				console.error('❌ Receipt error:', response.status, errorText);
 				error = 'Failed to load receipt';
 			}
 		} catch (err) {
@@ -106,29 +120,27 @@
 				<div class="receipt-header">
 					<h2>Order Receipt</h2>
 					<p class="group-number">{orderGroup.group_number}</p>
-					<p class="location-name">{orderGroup.location_name}</p>
-					<p class="date">{formatDate(orderGroup.created_at)}</p>
-				</div>
-				
-				<div class="receipt-customer">
-					<h3>Customer Information</h3>
-					<p><strong>Name:</strong> {orderGroup.customer_name}</p>
-					<p><strong>Phone:</strong> {orderGroup.customer_phone}</p>
-					{#if orderGroup.customer_email}
-						<p><strong>Email:</strong> {orderGroup.customer_email}</p>
-					{/if}
-				</div>
-				
-				<!-- Orders by Outlet -->
-				<div class="receipt-orders">
-					{#each orderGroup.orders as order}
-						<div class="order-section">
-							<div class="order-header">
+				<p class="location-name">{orderGroup.location?.name || 'N/A'}</p>
+				<p class="date">{formatDate(orderGroup.created_at)}</p>
+			</div>
+			
+			<div class="receipt-customer">
+				<h3>Customer Information</h3>
+				<p><strong>Name:</strong> {orderGroup.customer?.name || 'N/A'}</p>
+				<p><strong>Phone:</strong> {orderGroup.customer?.phone || 'N/A'}</p>
+				{#if orderGroup.customer?.email}
+					<p><strong>Email:</strong> {orderGroup.customer.email}</p>
+				{/if}
+			</div>			
+			<!-- Orders by Outlet -->
+			<div class="receipt-orders">
+				{#each orderGroup.orders as order}
+					<div class="order-section">							<div class="order-header">
 								<div>
-									<h3>{order.tenant_name}</h3>
-									<p class="outlet-name">{order.outlet_name}</p>
-									<p class="order-number">{order.order_number}</p>
-								</div>
+								<h3>{order.tenant || 'N/A'}</h3>
+								<p class="outlet-name">{order.outlet || 'N/A'}</p>
+								<p class="order-number">{order.order_number}</p>
+							</div>
 							</div>
 							
 							<div class="order-items">
@@ -137,7 +149,7 @@
 										<div class="item-info">
 											<span class="item-qty">{item.quantity}x</span>
 											<div>
-												<p class="item-name">{item.product_name}</p>
+												<p class="item-name">{item.name}</p>
 												{#if item.modifiers && item.modifiers.length > 0}
 													<div class="item-modifiers">
 														{#each item.modifiers as mod}
@@ -151,7 +163,7 @@
 											</div>
 										</div>
 										<span class="item-price">
-											{formatCurrency(item.price * item.quantity)}
+											{formatCurrency(item.total)}
 										</span>
 									</div>
 								{/each}
@@ -162,10 +174,10 @@
 									<span>Subtotal</span>
 									<span>{formatCurrency(order.subtotal)}</span>
 								</div>
-								{#if order.tax_amount > 0}
+								{#if order.tax > 0}
 									<div class="summary-row">
 										<span>Tax</span>
-										<span>{formatCurrency(order.tax_amount)}</span>
+										<span>{formatCurrency(order.tax)}</span>
 									</div>
 								{/if}
 								{#if order.service_charge > 0}
@@ -176,27 +188,26 @@
 								{/if}
 								<div class="summary-total">
 									<span>Total</span>
-									<span>{formatCurrency(order.total_amount)}</span>
+									<span>{formatCurrency(order.total)}</span>
 								</div>
 							</div>
 						</div>
 					{/each}
-				</div>
-				
+
 				<!-- Grand Total -->
 				<div class="grand-total">
-					<span>Grand Total</span>
-					<span>{formatCurrency(orderGroup.total_amount)}</span>
+					<p><strong>Grand Total:</strong> <span class="total-amount">{formatCurrency(orderGroup.payment?.total || 0)}</span></p>
 				</div>
-				
+
 				<!-- Payment Info -->
 				<div class="payment-info">
-					<p><strong>Payment Method:</strong> {orderGroup.payment_method?.toUpperCase()}</p>
-					<p><strong>Status:</strong> <span class="status-paid">PAID</span></p>
+					<p><strong>Payment Method:</strong> {orderGroup.payment?.method?.toUpperCase() || 'N/A'}</p>
+					<p><strong>Status:</strong> <span class="status-paid">{orderGroup.payment?.status?.toUpperCase() || 'PAID'}</span></p>
 				</div>
-			</div>
-			
-			<!-- Action Buttons -->
+			</div> <!-- End receipt-orders -->
+		</div> <!-- End receipt -->
+
+		<!-- Action Buttons -->
 			<div class="actions">
 				<button class="btn-secondary" on:click={printReceipt}>
 					🖨️ Print Receipt

@@ -9,21 +9,51 @@
 	let customerPhone = '';
 	let customerEmail = '';
 	let paymentMethod = 'cash';
+	let cashAmount = 0;
 	let loading = false;
 	let error = '';
 	
 	$: carts = Object.values($multiCart.carts);
 	$: totalAmount = $multiCart.totalAmount;
-	$: canCheckout = customerName.trim() && customerPhone.trim() && carts.length > 0;
+	$: changeAmount = cashAmount - totalAmount;
+	$: isCashPayment = paymentMethod === 'cash';
+	$: cashValid = !isCashPayment || (isCashPayment && cashAmount >= totalAmount);
+	$: canCheckout = customerName.trim().length > 0 && customerPhone.trim().length > 0 && carts.length > 0 && cashValid;
+	
+	// Debug
+	$: console.log('Checkout validation:', {
+		name: customerName,
+		phone: customerPhone,
+		carts: carts.length,
+		paymentMethod,
+		cashAmount,
+		totalAmount,
+		cashValid,
+		canCheckout,
+		tenantId: $kioskConfig.tenantId
+	});
 	
 	onMount(() => {
 		if (carts.length === 0) {
 			goto('/kiosk');
 		}
+		
+		// Check if tenantId is missing
+		if (!$kioskConfig.tenantId) {
+			console.warn('⚠️ Tenant ID is missing! Please reconfigure kiosk.');
+			error = 'Kiosk configuration incomplete. Please setup again.';
+		}
 	});
 	
 	async function handleCheckout() {
 		if (!canCheckout) return;
+		
+		// Validate tenantId exists
+		if (!$kioskConfig.tenantId) {
+			error = 'Kiosk not properly configured. Please go to setup and enter store code again.';
+			console.error('❌ Tenant ID missing in config:', $kioskConfig);
+			return;
+		}
 		
 		loading = true;
 		error = '';
@@ -38,20 +68,32 @@
 				customer_email: customerEmail || null
 			};
 			
-			console.log('🛒 Checkout data:', checkoutData);
+			console.log('🛒 Checkout data:', JSON.stringify(checkoutData, null, 2));
+			console.log('📍 Store ID:', checkoutData.store_id);
+			console.log('🛒 Carts:', checkoutData.carts.length);
+			
+			// Validate required fields
+			if (!checkoutData.store_id) {
+				throw new Error('Store ID is missing. Please reconfigure kiosk.');
+			}
+			if (!checkoutData.carts || checkoutData.carts.length === 0) {
+				throw new Error('Cart is empty');
+			}
 			
 			// Create order group
-			const response = await fetch(`${API_BASE}/public/order-groups/`, {
+			const response = await fetch(`${API_BASE}/order-groups/`, {
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json'
+					'Content-Type': 'application/json',
+					'X-Tenant-ID': $kioskConfig.tenantId?.toString() || ''
 				},
 				body: JSON.stringify(checkoutData)
 			});
 			
 			if (!response.ok) {
 				const errorData = await response.json();
-				throw new Error(errorData.message || 'Failed to create order');
+				console.error('❌ Backend error:', errorData);
+				throw new Error(errorData.message || errorData.detail || JSON.stringify(errorData));
 			}
 			
 			const orderGroup = await response.json();
@@ -59,11 +101,12 @@
 			
 			// Mark as paid
 			const paymentResponse = await fetch(
-				`${API_BASE}/public/order-groups/${orderGroup.group_number}/mark-paid/`,
+				`${API_BASE}/order-groups/${orderGroup.group_number}/mark-paid/`,
 				{
 					method: 'POST',
 					headers: {
-						'Content-Type': 'application/json'
+						'Content-Type': 'application/json',
+						'X-Tenant-ID': $kioskConfig.tenantId?.toString() || ''
 					},
 					body: JSON.stringify({ payment_method: paymentMethod })
 				}
@@ -104,6 +147,12 @@
 	
 	function backToCart() {
 		goto('/kiosk/cart');
+	}
+	
+	function forceSetup() {
+		// Clear configuration to trigger setup form
+		kioskConfig.reset();
+		goto('/kiosk');
 	}
 </script>
 
@@ -220,6 +269,77 @@
 					</div>
 				</label>
 			</div>
+			
+			<!-- Cash Amount Input (only show if cash selected) -->
+			{#if paymentMethod === 'cash'}
+				<div class="cash-payment-section">
+					<div class="form-group">
+						<label for="cashAmount">Cash Amount *</label>
+						<input
+							id="cashAmount"
+							type="number"
+							bind:value={cashAmount}
+							placeholder="Enter cash amount"
+							min={totalAmount}
+							step="1000"
+							disabled={loading}
+							class="cash-input"
+						/>
+					</div>
+					
+					<div class="total-display">
+						<div class="total-row">
+							<span>Total to Pay:</span>
+							<span class="total-amount">{formatCurrency(totalAmount)}</span>
+						</div>
+						{#if cashAmount > 0}
+							<div class="total-row">
+								<span>Cash Given:</span>
+								<span class="cash-given">{formatCurrency(cashAmount)}</span>
+							</div>
+							{#if changeAmount >= 0}
+								<div class="total-row change-row">
+									<span>Change:</span>
+									<span class="change-amount">{formatCurrency(changeAmount)}</span>
+								</div>
+							{:else}
+								<div class="total-row insufficient-row">
+									<span>Insufficient:</span>
+									<span class="insufficient-amount">{formatCurrency(Math.abs(changeAmount))}</span>
+								</div>
+							{/if}
+						{/if}
+					</div>
+					
+					<!-- Quick Amount Buttons -->
+					<div class="quick-amounts">
+						<button 
+							type="button"
+							class="btn-quick-amount" 
+							on:click={() => cashAmount = totalAmount}
+							disabled={loading}
+						>
+							Exact Amount
+						</button>
+						<button 
+							type="button"
+							class="btn-quick-amount" 
+							on:click={() => cashAmount = Math.ceil(totalAmount / 50000) * 50000}
+							disabled={loading}
+						>
+							{formatCurrency(Math.ceil(totalAmount / 50000) * 50000)}
+						</button>
+						<button 
+							type="button"
+							class="btn-quick-amount" 
+							on:click={() => cashAmount = Math.ceil(totalAmount / 100000) * 100000}
+							disabled={loading}
+						>
+							{formatCurrency(Math.ceil(totalAmount / 100000) * 100000)}
+						</button>
+					</div>
+				</div>
+			{/if}
 		</div>
 		
 		<!-- Order Summary -->
@@ -285,6 +405,11 @@
 		{#if error}
 			<div class="error-alert">
 				⚠️ {error}
+				{#if !$kioskConfig.tenantId}
+					<button class="btn-setup" on:click={forceSetup}>
+						Go to Setup
+					</button>
+				{/if}
 			</div>
 		{/if}
 		
@@ -450,6 +575,102 @@
 		font-size: 32px;
 	}
 	
+	/* Cash Payment Section */
+	.cash-payment-section {
+		margin-top: 24px;
+		padding-top: 24px;
+		border-top: 1px solid #e0e0e0;
+	}
+	
+	.cash-input {
+		font-size: 24px !important;
+		font-weight: 600;
+		text-align: right;
+		padding: 16px !important;
+	}
+	
+	.total-display {
+		background: #f8f9ff;
+		border: 2px solid #e0e7ff;
+		border-radius: 12px;
+		padding: 20px;
+		margin-top: 16px;
+	}
+	
+	.total-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 8px 0;
+		font-size: 16px;
+	}
+	
+	.total-amount {
+		font-size: 20px;
+		font-weight: 700;
+		color: #667eea;
+	}
+	
+	.cash-given {
+		font-size: 18px;
+		font-weight: 600;
+		color: #333;
+	}
+	
+	.change-row {
+		margin-top: 8px;
+		padding-top: 12px;
+		border-top: 2px solid #667eea;
+	}
+	
+	.change-amount {
+		font-size: 24px;
+		font-weight: 700;
+		color: #10b981;
+	}
+	
+	.insufficient-row {
+		margin-top: 8px;
+		padding-top: 12px;
+		border-top: 2px solid #ef4444;
+	}
+	
+	.insufficient-amount {
+		font-size: 20px;
+		font-weight: 700;
+		color: #ef4444;
+	}
+	
+	.quick-amounts {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 12px;
+		margin-top: 16px;
+	}
+	
+	.btn-quick-amount {
+		padding: 12px 16px;
+		background: white;
+		border: 2px solid #667eea;
+		color: #667eea;
+		border-radius: 8px;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	
+	.btn-quick-amount:hover:not(:disabled) {
+		background: #667eea;
+		color: white;
+		transform: translateY(-2px);
+	}
+	
+	.btn-quick-amount:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	
 	.order-summary {
 		display: flex;
 		flex-direction: column;
@@ -549,6 +770,26 @@
 		border-radius: 8px;
 		margin-bottom: 20px;
 		text-align: center;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		align-items: center;
+	}
+	
+	.btn-setup {
+		padding: 10px 20px;
+		background: #667eea;
+		color: white;
+		border: none;
+		border-radius: 8px;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	
+	.btn-setup:hover {
+		background: #5568d3;
 	}
 	
 	.btn-checkout {

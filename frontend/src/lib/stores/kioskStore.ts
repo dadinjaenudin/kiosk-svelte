@@ -9,6 +9,7 @@ export interface KioskConfig {
 	storeName: string | null;
 	storeId: number | null;
 	tenantName: string | null;
+	tenantId: number | null;
 	deviceId: string;
 	isConfigured: boolean;
 	enableMultiOutlet: boolean;
@@ -22,18 +23,25 @@ function createKioskConfig() {
 		storeName: null,
 		storeId: null,
 		tenantName: null,
+		tenantId: null,
 		deviceId: browser ? generateDeviceId() : 'KIOSK-TEMP',
 		isConfigured: false,
 		enableMultiOutlet: true
 	};
 
-	const initialConfig = stored ? { ...defaultConfig, ...JSON.parse(stored) } : defaultConfig;
+	// If stored config exists, use it directly (don't merge with defaults)
+	const initialConfig = stored ? JSON.parse(stored) : defaultConfig;
+	
+	// Ensure deviceId exists
+	if (!initialConfig.deviceId && browser) {
+		initialConfig.deviceId = generateDeviceId();
+	}
 
 	const { subscribe, set, update } = writable<KioskConfig>(initialConfig);
 
 	return {
 		subscribe,
-		setStore: (storeCode: string, storeName: string, storeId: number, tenantName: string, enableMultiOutlet: boolean = true) => {
+		setStore: (storeCode: string, storeName: string, storeId: number, tenantName: string, tenantId: number, enableMultiOutlet: boolean = true) => {
 			update(config => {
 				const newConfig = {
 					...config,
@@ -41,6 +49,7 @@ function createKioskConfig() {
 					storeName,
 					storeId,
 					tenantName,
+					tenantId,
 					enableMultiOutlet,
 					isConfigured: true
 				};

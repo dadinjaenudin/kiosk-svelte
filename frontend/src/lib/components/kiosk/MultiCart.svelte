@@ -32,7 +32,7 @@
 	}
 	
 	function backToOutlets() {
-		goto('/kiosk');
+		goto('/kiosk/products');
 	}
 	
 	function proceedToCheckout() {

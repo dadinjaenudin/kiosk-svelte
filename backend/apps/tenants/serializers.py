@@ -10,16 +10,17 @@ class StoreSerializer(serializers.ModelSerializer):
     outlets_count = serializers.SerializerMethodField()
     active_outlets_count = serializers.SerializerMethodField()
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
+    tenant_id = serializers.IntegerField(source='tenant.id', read_only=True)
     
     class Meta:
         model = Store
         fields = [
-            'id', 'tenant', 'tenant_name', 'code', 'name', 'address', 'city', 'province', 'postal_code',
+            'id', 'tenant', 'tenant_id', 'tenant_name', 'code', 'name', 'address', 'city', 'province', 'postal_code',
             'latitude', 'longitude', 'kiosk_qr_code', 'enable_multi_outlet_payment',
             'payment_split_method', 'opening_time', 'closing_time', 'is_active', 
             'outlets_count', 'active_outlets_count', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['kiosk_qr_code', 'tenant_name', 'created_at', 'updated_at']
+        read_only_fields = ['kiosk_qr_code', 'tenant_name', 'tenant_id', 'created_at', 'updated_at']
     
     def get_outlets_count(self, obj):
         # Query via StoreOutlet junction

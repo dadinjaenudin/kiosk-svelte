@@ -98,6 +98,7 @@ class PublicOrderGroupViewSet(viewsets.ModelViewSet):
             order = Order.objects.create(
                 tenant=outlet.tenant,
                 outlet=outlet,
+                store=order_group.store,  # Link to store for kitchen routing
                 order_group=order_group,
                 customer_name=data.get('customer_name', ''),
                 customer_phone=data.get('customer_phone', ''),
@@ -108,7 +109,13 @@ class PublicOrderGroupViewSet(viewsets.ModelViewSet):
             
             # Create Order Items
             for item_data in cart['items']:
-                product = get_object_or_404(Product, id=item_data['product_id'])
+                # Use all_objects to bypass tenant filtering for public API
+                product = get_object_or_404(
+                    Product.all_objects, 
+                    id=item_data['product_id'],
+                    outlet=outlet,  # Product belongs to outlet now
+                    is_active=True
+                )
                 
                 # Calculate modifiers price
                 modifiers = item_data.get('modifiers', [])
@@ -185,8 +192,8 @@ class PublicOrderGroupViewSet(viewsets.ModelViewSet):
         receipt_data = {
             'group_number': order_group.group_number,
             'location': {
-                'name': order_group.location.name if order_group.location else 'N/A',
-                'address': order_group.location.address if order_group.location else 'N/A',
+                'name': order_group.store.name if order_group.store else 'N/A',
+                'address': order_group.store.address if order_group.store else 'N/A',
             },
             'customer': {
                 'name': order_group.customer_name,
@@ -204,11 +211,11 @@ class PublicOrderGroupViewSet(viewsets.ModelViewSet):
         }
         
         # Add each order detail
-        for order in order_group.orders.all().select_related('tenant', 'outlet').prefetch_related('items'):
+        for order in order_group.orders.all().select_related('tenant', 'outlet').prefetch_related('items__product'):
             order_data = {
                 'order_number': order.order_number,
                 'tenant': order.tenant.name,
-                'outlet': order.outlet.name,
+                'outlet': order.outlet.brand_name,
                 'subtotal': float(order.subtotal),
                 'tax': float(order.tax_amount),
                 'service_charge': float(order.service_charge_amount),

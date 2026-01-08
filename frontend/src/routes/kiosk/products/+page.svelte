@@ -37,6 +37,7 @@
 	let showFilters = false;
 	let selectedCategory = '';
 	let categories: string[] = [];
+	let hasCheckedConfig = false;
 	
 	// Get store config
 	$: storeCode = $kioskConfig.storeCode;
@@ -46,7 +47,16 @@
 	);
 	
 	onMount(async () => {
+		// Only check once to prevent loop
+		if (hasCheckedConfig) return;
+		hasCheckedConfig = true;
+		
+		console.log('🛒 Products page mounted');
+		console.log('📍 Store Code:', storeCode);
+		console.log('✅ Is Configured:', isConfigured);
+		
 		if (!isConfigured || !storeCode) {
+			console.warn('⚠️ Not configured, redirecting to setup...');
 			goto('/kiosk');
 			return;
 		}
@@ -145,18 +155,18 @@
 			product.outlet_name,
 			product.tenant_name,
 			product.tenant_color,
+			0.11, // taxRate 11%
+			0.05, // serviceChargeRate 5%
 			{
-				id: `${product.id}-${Date.now()}`,
-				productId: product.id,
-				productName: product.name,
-				productSku: product.id.toString(),
+				id: product.id,
+				name: product.name,
+				sku: product.id.toString(),
 				price: product.price,
-				quantity: 1,
-				modifiers: [],
-				modifiersPrice: 0,
-				notes: '',
 				image: product.image
-			}
+			},
+			1, // quantity
+			[], // modifiers
+			'' // notes
 		);
 	}
 	
@@ -169,7 +179,7 @@
 	<title>Browse Products - {$kioskConfig.storeName || 'Kiosk'}</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50">
+<div class="products-page-wrapper">
 	<!-- Header -->
 	<header class="bg-white shadow-sm sticky top-0 z-10">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -376,6 +386,12 @@
 </div>
 
 <style>
+	.products-page-wrapper {
+		min-height: 100vh;
+		background-color: #f9fafb;
+		overflow-y: auto;
+	}
+
 	.line-clamp-2 {
 		display: -webkit-box;
 		-webkit-line-clamp: 2;

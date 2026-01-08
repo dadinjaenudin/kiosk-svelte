@@ -35,6 +35,7 @@ from apps.tenants.models import Tenant, Store, Outlet, StoreOutlet, KitchenStati
 from apps.products.models import Category, Product, ProductModifier
 from apps.customers.models import Customer
 from apps.orders.models import Order, OrderItem, OrderGroup
+from apps.core.context import set_current_tenant
 
 User = get_user_model()
 
@@ -448,18 +449,27 @@ def create_categories_and_products(brands, tenants):
     
     yogya = tenants['yogya']
     
-    # CHICKEN SUMO Menu
-    chicken_sumo = brands['chicken-sumo']
-    print(f"\n  🍗 {chicken_sumo.brand_name}")
+    # Set current tenant for YOGYA products
+    set_current_tenant(yogya)
     
-    # Categories - use all_objects manager to bypass tenant filtering
-    cat_fried = Category.all_objects.create(
-        outlet=chicken_sumo,
-        tenant=yogya,
-        name='Fried Chicken',
-        kitchen_station_code='GRILL',
-        sort_order=1
-    )
+    try:
+        # CHICKEN SUMO Menu
+        chicken_sumo = brands['chicken-sumo']
+        print(f"\n  🍗 {chicken_sumo.brand_name}")
+        
+        # Categories - use all_objects manager to bypass tenant filtering
+        cat_fried = Category.all_objects.create(
+            outlet=chicken_sumo,
+            tenant=yogya,
+            name='Fried Chicken',
+            kitchen_station_code='GRILL',
+            sort_order=1
+        )
+        print(f"    ✅ Created category: {cat_fried.name}")
+    except Exception as e:
+        print(f"    ❌ ERROR creating category: {e}")
+        import traceback
+        traceback.print_exc()
     cat_combo = Category.all_objects.create(
         outlet=chicken_sumo,
         tenant=yogya,

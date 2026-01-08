@@ -5,7 +5,12 @@
 /* Kiosk Mode Specific Styles */
 @layer base {
 	html, body {
-		@apply h-full overflow-hidden;
+		@apply h-full;
+	}
+	
+	/* Allow scrolling on main content */
+	body {
+		@apply overflow-y-auto;
 	}
 	
 	/* Touch-friendly scrollbars */

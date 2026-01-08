@@ -35,6 +35,7 @@
 						data.store.name,
 						data.store.id,
 						data.store.tenant_name,
+						data.store.tenant_id,
 						data.store.enable_multi_outlet_payment
 					);
 					
