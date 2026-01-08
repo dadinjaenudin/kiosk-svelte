@@ -1,9 +1,18 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';;
+	import { onMount, onDestroy } from 'svelte';
 	import { io } from 'socket.io-client';
 	import { page } from '$app/stores';
+	import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
+	import { networkService, networkStatus } from '$lib/services/networkService';
+	import { socketService, socketStatus } from '$lib/services/socketService';
+	import { syncService } from '$lib/services/syncService';
+	import { kitchenSocketManager } from '$lib/stores/kitchenStore';
 	
 	const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8001/api';
+	
+	// Offline-first mode
+	let offlineMode = false;
+	let useWebSocket = false; // Enable WebSocket mode (toggle)
 	
 	let socket = null;
 	let orders = [];
@@ -374,12 +383,50 @@
 			selectedStationId = savedStation ? (savedStation === 'all' ? 'all' : parseInt(savedStation)) : 'all';
 		}
 		
-		// Connect to Kitchen Sync Server
+		// 🆕 Initialize Offline-First Services
+		console.log('🚀 Initializing Offline-First Kitchen Display...');
+		
+		// Start background sync service (auto-sync when online)
+		syncService.startAutoSync();
+		console.log('✅ Sync service started');
+		
+		// Initialize Socket.IO connections (Local + optionally Central)
+		if (useWebSocket && selectedOutletId) {
+			const config = {
+				isConfigured: true,
+				tenantId: selectedTenantId !== 'all' ? selectedTenantId : null,
+				tenantName: '',
+				storeId: null,
+				storeName: '',
+				outletId: selectedOutletId,
+				outletName: outlets.find(o => o.id === selectedOutletId)?.name || '',
+				deviceId: 'kitchen-display-1',
+				soundEnabled: true,
+				useWebSocket: true,
+				useLocalSocket: true
+			};
+			
+			kitchenSocketManager.init(config);
+			console.log('✅ Socket manager initialized');
+		}
+		
+		// Monitor network status
+		networkStatus.subscribe(status => {
+			offlineMode = !status.isOnline;
+			console.log('📡 Network status:', status.mode, '| Offline:', offlineMode);
+		});
+		
+		// Connect to Kitchen Sync Server (legacy HTTP polling)
 		connectToKitchenSync();
 	});
 	
 	onDestroy(() => {
 		disconnectFromKitchenSync();
+		
+		// Cleanup services
+		syncService.stopAutoSync();
+		kitchenSocketManager.disconnect();
+		console.log('🛑 Kitchen Display services stopped');
 	});
 </script>
 
@@ -457,8 +504,23 @@
 					● Disconnected
 				</span>
 			{/if}
+			
+			<!-- 🆕 WebSocket Toggle -->
+			<label class="inline-flex items-center gap-2 cursor-pointer">
+				<input 
+					type="checkbox" 
+					bind:checked={useWebSocket}
+					class="form-checkbox h-4 w-4 text-blue-600"
+				/>
+				<span class="text-sm font-medium text-gray-700">
+					WebSocket Mode {useWebSocket ? '✅' : ''}
+				</span>
+			</label>
 		</div>
 	</div>
+	
+	<!-- 🆕 Connection Status Widget (top-right corner) -->
+	<ConnectionStatus position="top-right" compact={false} />
 
 	{#if !connected}
 		<div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
