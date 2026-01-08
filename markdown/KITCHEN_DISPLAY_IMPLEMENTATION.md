@@ -251,14 +251,14 @@ if (saved) {
    ```
 
 3. **Access Kitchen Display:**
-   - Open browser: `http://localhost:5173/kitchen/login`
+   - Open browser: `http://localhost:5174/kitchen/login`
    - Select store (e.g., "YOGYA Kapatihan")
    - Select outlet (e.g., "Chicken Sumo")
    - Click "Start Kitchen Display"
    - Display will auto-refresh every 10 seconds
 
 4. **Create Test Order (via Kiosk):**
-   - Open: `http://localhost:5173/kiosk`
+   - Open: `http://localhost:5174/kiosk`
    - Select products and checkout
    - Order will appear in Kitchen Display Pending column
 
