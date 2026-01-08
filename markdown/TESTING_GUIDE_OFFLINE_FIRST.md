@@ -91,17 +91,15 @@ curl http://localhost:3001/outlets
 
 ### 2.1 Open Kitchen Display
 
-1. Open browser: http://localhost:5174/kitchen
+1. Open browser: http://localhost:5174/kitchen/display
 2. Open DevTools (F12) → Console tab
 3. Look for initialization logs:
 
 ```
-🚀 Initializing Offline-First Kitchen Display...
+🍳 Kitchen Display initialized...
+📡 Network status: Online
 ✅ Sync service started
-🟢 Browser: Network online
 🟢 Central Server: Online (123ms)
-✅ Socket manager initialized
-✅ Kitchen Socket Manager initialized
 ```
 
 ### 2.2 Test Network Status Component
@@ -231,28 +229,18 @@ docker exec -it postgres psql -U kioskadmin -d kioskdb -c "SELECT order_number, 
 
 ### 4.1 Test HTTP Polling (Default)
 
-1. Open Kitchen Display: http://localhost:5174/kitchen
-2. WebSocket Mode toggle: **UNCHECKED**
-3. Create order from Kiosk (online mode)
+1. Open Kitchen Display: http://localhost:5174/kitchen/display
+2. Create order from Kiosk (online mode)
 
 **Expected Behavior:**
 - Console log (every 10 seconds): `📡 Fetching orders...`
 - Order appears within 0-10 seconds
 - No Socket.IO logs
 
-### 4.2 Test Socket.IO Mode (Real-time)
+### 4.2 Test Real-Time Updates
 
-1. Kitchen Display: **CHECK** "WebSocket Mode" toggle
-2. Wait 2-3 seconds for socket connection
-3. Console should show:
-```
-🔄 Connecting to Local Socket.IO: http://localhost:3001
-✅ Local Socket: Connected [socket-id]
-📍 Subscribing to outlet: [outlet-id]
-🏷️ Identifying as: kitchen
-```
-
-4. Create order from Kiosk
+1. Kitchen Display should show ConnectionStatus widget in top-right
+2. Create order from Kiosk
 
 **Expected Behavior:**
 - Console log (immediate): `📦 Socket: New order received ORD-...`

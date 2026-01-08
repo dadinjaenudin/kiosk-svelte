@@ -3,8 +3,13 @@
 	import { goto } from '$app/navigation';
 	import { kitchenConfig, kitchenOrders, kitchenStats, isKitchenConfigured } from '$lib/stores/kitchenStore';
 	import KitchenOrderCard from '$lib/components/kitchen/KitchenOrderCard.svelte';
+	import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
+	import { networkService, networkStatus } from '$lib/services/networkService';
 	
 	const API_BASE = 'http://localhost:8001/api';
+	
+	// Offline mode detection
+	let offlineMode = false;
 	
 	let polling: any = null;
 	let soundEnabled = false;
@@ -25,6 +30,12 @@
 			store: $kitchenConfig.storeName,
 			outlet: $kitchenConfig.outletName,
 			deviceId: $kitchenConfig.deviceId
+		});
+		
+		// Subscribe to network status
+		networkStatus.subscribe(status => {
+			offlineMode = !status.isOnline;
+			console.log('📡 Network status:', status.isOnline ? 'Online' : 'Offline');
 		});
 		
 		// Initialize audio context (will be activated on first user interaction)
@@ -186,6 +197,9 @@
 </script>
 
 <div class="kitchen-display">
+	<!-- Connection Status Widget -->
+	<ConnectionStatus position="top-right" compact={false} />
+	
 	<!-- Header -->
 	<header class="kitchen-header">
 		<div class="header-left">

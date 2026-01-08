@@ -14,6 +14,32 @@ Sistem kiosk multi-store untuk retail chain dengan multiple brands:
 
 ---
 
+## 🔄 Recent Updates (January 9, 2026)
+
+### ✅ Phase 3.3: Kitchen Display Unification - COMPLETE
+**Status:** Merged kitchen display endpoints into single `/kitchen/display` with offline support
+
+**Changes:**
+- **Removed:** `/kitchen/` endpoint (complex multi-tenant version)
+- **Enhanced:** `/kitchen/display/` with ConnectionStatus widget and network detection
+- **Single Endpoint:** All kitchen displays now use http://localhost:5174/kitchen/display
+- **Features Added:**
+  - Real-time network status monitoring (Online/Offline badge)
+  - ConnectionStatus widget in top-right corner
+  - Latency tracking to backend server
+  - Automatic health checks every 30 seconds
+  - Graceful offline degradation
+  - HTTP Polling fallback (10s interval)
+
+**Login Flow:**
+1. Navigate to `/kitchen/login` (first time or after logout)
+2. Select Store → Select Outlet
+3. Configuration saved to localStorage
+4. Auto-redirect to `/kitchen/display`
+5. Display loads with outlet-specific orders
+
+---
+
 ## 🔄 Recent Updates (January 8, 2026)
 
 ### ✅ Phase 3.1: Kitchen Backend APIs - COMPLETE
