@@ -27,7 +27,7 @@
   "dependencies": {
     "daisyui": "^4.4.24",
     "date-fns": "^3.0.6",
-    "dexie": "^3.2.4",
+    "dexie": "^3.2.7",
     "idb": "^8.0.0",
     "lucide-svelte": "^0.562.0",
     "qrcode": "^1.5.3",
