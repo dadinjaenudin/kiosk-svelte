@@ -25,6 +25,8 @@ export interface KitchenOrder {
 	total_amount: string;
 	wait_time: number;
 	is_urgent: boolean;
+	source: string; // 'kiosk' | 'web'
+	device_id: string;
 	created_at: string;
 	updated_at: string;
 }

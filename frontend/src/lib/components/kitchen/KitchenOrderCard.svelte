@@ -76,15 +76,13 @@
 	
 	<!-- Order Type Badge -->
 	<div class="order-meta">
-		<span class="order-type {order.order_type}">
-			{#if order.order_type === 'dinein'}
-				🍽️ Dine In
-			{:else if order.order_type === 'takeaway'}
-				📦 Takeaway
-			{:else if order.order_type === 'delivery'}
-				🚚 Delivery
+		<span class="order-type {order.source || 'kiosk'}">
+			{#if order.source === 'web'}
+				🌐 Online Order
+			{:else if order.source === 'kiosk'}
+				🖥️ Kiosk
 			{:else}
-				{order.order_type}
+				{order.source || 'Kiosk'}
 			{/if}
 		</span>
 		<span class="order-created">
@@ -291,19 +289,14 @@
 		font-weight: 600;
 	}
 	
-	.order-type.dinein {
+	.order-type.kiosk {
 		background: #dbeafe;
 		color: #1e40af;
 	}
 	
-	.order-type.takeaway {
+	.order-type.web {
 		background: #fef3c7;
 		color: #92400e;
-	}
-	
-	.order-type.delivery {
-		background: #fce7f3;
-		color: #831843;
 	}
 	
 	.order-created {
