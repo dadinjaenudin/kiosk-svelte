@@ -13,6 +13,7 @@
  */
 
 import Dexie, { type Table } from 'dexie';
+import { browser } from '$app/environment';
 
 export interface OfflineOrder {
 	id?: number; // Auto-increment local ID
@@ -76,22 +77,25 @@ class OfflineDatabase extends Dexie {
 	constructor() {
 		super('KioskOfflineDB');
 
-		// Define schema version 1
-		this.version(1).stores({
-			orders: '++id, order_number, outlet_id, tenant_id, store_id, created_at, synced',
-			syncQueue: '++id, type, priority, order_number, timestamp, retries'
-		});
+		// Only initialize in browser
+		if (browser) {
+			// Define schema version 1
+			this.version(1).stores({
+				orders: '++id, order_number, outlet_id, tenant_id, store_id, created_at, synced',
+				syncQueue: '++id, type, priority, order_number, timestamp, retries'
+			});
+		}
 	}
 }
 
-// Singleton database instance
-const db = new OfflineDatabase();
+// Singleton database instance (only created in browser)
+const db = browser ? new OfflineDatabase() : null;
 
 /**
  * Offline Order Service Class
  */
 class OfflineOrderService {
-	private db: OfflineDatabase;
+	private db: OfflineDatabase | null;
 
 	constructor() {
 		this.db = db;
@@ -101,6 +105,11 @@ class OfflineOrderService {
 	 * Save order to IndexedDB (offline mode)
 	 */
 	async saveOrder(order: Omit<OfflineOrder, 'id' | 'synced' | 'sync_attempts'>): Promise<number> {
+		if (!this.db) {
+			console.warn('💾 IndexedDB not available (SSR mode)');
+			return -1;
+		}
+
 		try {
 			const offlineOrder: OfflineOrder = {
 				...order,
@@ -134,6 +143,8 @@ class OfflineOrderService {
 	 * Get all offline orders (not synced)
 	 */
 	async getOfflineOrders(): Promise<OfflineOrder[]> {
+		if (!this.db) return [];
+
 		try {
 			const orders = await this.db.orders
 				.where('synced')
@@ -151,6 +162,8 @@ class OfflineOrderService {
 	 * Get order by order number
 	 */
 	async getOrderByNumber(orderNumber: string): Promise<OfflineOrder | undefined> {
+		if (!this.db) return undefined;
+
 		try {
 			return await this.db.orders
 				.where('order_number')
@@ -166,6 +179,8 @@ class OfflineOrderService {
 	 * Mark order as synced
 	 */
 	async markOrderSynced(orderNumber: string): Promise<void> {
+		if (!this.db) return;
+
 		try {
 			await this.db.orders
 				.where('order_number')
@@ -185,6 +200,8 @@ class OfflineOrderService {
 	 * Update sync attempt count
 	 */
 	async incrementSyncAttempt(orderNumber: string, errorMessage?: string): Promise<void> {
+		if (!this.db) return;
+
 		try {
 			const order = await this.getOrderByNumber(orderNumber);
 			if (!order) return;
@@ -208,6 +225,8 @@ class OfflineOrderService {
 	 * Add item to sync queue
 	 */
 	async addToSyncQueue(item: Omit<SyncQueueItem, 'id'>): Promise<number> {
+		if (!this.db) return -1;
+
 		try {
 			const id = await this.db.syncQueue.add(item as SyncQueueItem);
 			console.log('📥 Added to sync queue:', item.type, item.order_number);
@@ -222,6 +241,8 @@ class OfflineOrderService {
 	 * Get pending sync queue items (FIFO order, by priority)
 	 */
 	async getSyncQueue(): Promise<SyncQueueItem[]> {
+		if (!this.db) return [];
+
 		try {
 			const items = await this.db.syncQueue
 				.orderBy('timestamp')
@@ -242,6 +263,8 @@ class OfflineOrderService {
 	 * Remove item from sync queue (after successful sync)
 	 */
 	async removeSyncQueueItem(id: number): Promise<void> {
+		if (!this.db) return;
+
 		try {
 			await this.db.syncQueue.delete(id);
 			console.log('✅ Removed from sync queue, ID:', id);
@@ -254,6 +277,8 @@ class OfflineOrderService {
 	 * Update sync queue item retry count
 	 */
 	async incrementSyncQueueRetry(id: number, errorMessage: string): Promise<void> {
+		if (!this.db) return;
+
 		try {
 			const item = await this.db.syncQueue.get(id);
 			if (!item) return;
@@ -323,6 +348,8 @@ class OfflineOrderService {
 	 * Clear all synced orders (cleanup old data)
 	 */
 	async clearSyncedOrders(olderThanDays = 7): Promise<number> {
+		if (!this.db) return 0;
+
 		try {
 			const cutoffDate = new Date();
 			cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
@@ -345,6 +372,8 @@ class OfflineOrderService {
 	 * Clear entire database (for testing)
 	 */
 	async clearAll(): Promise<void> {
+		if (!this.db) return;
+
 		try {
 			await this.db.orders.clear();
 			await this.db.syncQueue.clear();
@@ -357,7 +386,7 @@ class OfflineOrderService {
 	/**
 	 * Get database instance (for advanced queries)
 	 */
-	getDatabase(): OfflineDatabase {
+	getDatabase(): OfflineDatabase | null {
 		return this.db;
 	}
 }

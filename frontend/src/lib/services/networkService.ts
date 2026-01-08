@@ -14,6 +14,7 @@
 
 import { writable, derived, type Writable } from 'svelte/store';
 import { PUBLIC_API_URL } from '$env/static/public';
+import { browser } from '$app/environment';
 
 export type ConnectionMode = 'online' | 'offline' | 'checking' | 'error';
 
@@ -36,14 +37,16 @@ class NetworkService {
 	constructor() {
 		this.status = writable<NetworkStatus>({
 			mode: 'checking',
-			isOnline: navigator.onLine,
+			isOnline: browser ? navigator.onLine : false,
 			lastCheckTime: null,
 			lastOnlineTime: null,
 			errorCount: 0,
 			latency: null
 		});
 
-		this.init();
+		if (browser) {
+			this.init();
+		}
 	}
 
 	private init() {

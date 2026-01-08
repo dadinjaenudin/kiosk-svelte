@@ -14,6 +14,7 @@
 
 import { writable, derived, type Writable } from 'svelte/store';
 import { PUBLIC_API_URL } from '$env/static/public';
+import { browser } from '$app/environment';
 import { offlineOrderService, type SyncQueueItem } from './offlineOrderService';
 import { networkStatus } from './networkService';
 
@@ -54,8 +55,10 @@ class SyncService {
 			errors: []
 		});
 
-		// Listen to network status changes
-		this.setupNetworkListener();
+		// Listen to network status changes (only in browser)
+		if (browser) {
+			this.setupNetworkListener();
+		}
 	}
 
 	/**
@@ -75,6 +78,8 @@ class SyncService {
 	 * Start auto-sync interval
 	 */
 	startAutoSync() {
+		if (!browser) return;
+
 		if (this.syncInterval) {
 			console.warn('⚠️ Auto-sync already running');
 			return;

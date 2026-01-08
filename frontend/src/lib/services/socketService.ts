@@ -16,6 +16,7 @@
 import { writable, type Writable } from 'svelte/store';
 import { io, type Socket } from 'socket.io-client';
 import { PUBLIC_API_URL } from '$env/static/public';
+import { browser } from '$app/environment';
 import type { KitchenOrder } from '$lib/stores/kitchenStore';
 
 export type SocketMode = 'central' | 'local' | 'dual' | 'none';
@@ -84,6 +85,11 @@ class SocketService {
 	 * Connect to Central Server Socket.IO
 	 */
 	connectCentral(): void {
+		if (!browser) {
+			console.warn('🔴 Cannot connect to Central Socket: Not in browser context');
+			return;
+		}
+
 		if (this.centralSocket?.connected) {
 			console.log('🟢 Central Socket: Already connected');
 			return;
@@ -106,6 +112,11 @@ class SocketService {
 	 * Connect to Local Sync Server Socket.IO
 	 */
 	connectLocal(): void {
+		if (!browser) {
+			console.warn('🔴 Cannot connect to Local Socket: Not in browser context');
+			return;
+		}
+
 		if (this.localSocket?.connected) {
 			console.log('🟢 Local Socket: Already connected');
 			return;
