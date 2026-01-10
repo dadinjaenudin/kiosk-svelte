@@ -30,9 +30,11 @@ export interface NetworkStatus {
 class NetworkService {
 	private status: Writable<NetworkStatus>;
 	private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
-	private readonly HEALTH_CHECK_TIMEOUT = 2000; // 2 seconds
+	private readonly HEALTH_CHECK_TIMEOUT = 5000; // 5 seconds
 	private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 	private readonly HEALTH_ENDPOINT = '/health/'; // PUBLIC_API_URL already includes /api
+	private failedChecks = 0; // Track consecutive failures
+	private readonly MAX_FAILED_CHECKS = 2; // Require 2 failures before marking offline
 
 	constructor() {
 		this.status = writable<NetworkStatus>({
@@ -63,23 +65,31 @@ class NetworkService {
 	private setupEventListeners() {
 		// Browser online/offline events
 		window.addEventListener('online', () => {
-			console.log('🟢 Browser: Network online');
+			console.log('🟢 Browser: Network online event');
+			// Verify with actual health check instead of trusting browser
 			this.performHealthCheck();
 		});
 
 		window.addEventListener('offline', () => {
-			console.log('🔴 Browser: Network offline');
-			this.updateStatus({
-				mode: 'offline',
-				isOnline: false,
-				lastCheckTime: new Date()
-			});
+			console.log('🔴 Browser: Network offline event (verifying with health check...)');
+			// Don't immediately mark as offline, verify with health check first
+			// Browser navigator.onLine is unreliable on Windows
+			this.performHealthCheck();
 		});
 
 		// Page visibility change (check when tab becomes visible)
+		// Debounce to avoid triggering on DevTools open/close
+		let visibilityTimeout: ReturnType<typeof setTimeout> | null = null;
 		document.addEventListener('visibilitychange', () => {
 			if (!document.hidden) {
-				this.performHealthCheck();
+				// Clear existing timeout
+				if (visibilityTimeout) {
+					clearTimeout(visibilityTimeout);
+				}
+				// Wait 500ms before checking (avoid false positives from DevTools)
+				visibilityTimeout = setTimeout(() => {
+					this.performHealthCheck();
+				}, 500);
 			}
 		});
 	}
@@ -109,39 +119,55 @@ class NetworkService {
 	 * Tests if backend is reachable with timeout
 	 */
 	async performHealthCheck(): Promise<boolean> {
-		// First check browser's navigator.onLine
-		if (!navigator.onLine) {
-			this.updateStatus({
-				mode: 'offline',
-				isOnline: false,
-				lastCheckTime: new Date()
-			});
-			return false;
-		}
-
-		// Update to checking state
-		this.updateStatus({
-			mode: 'checking'
+		console.log('🔍 Starting health check...', {
+			endpoint: `${PUBLIC_API_URL}${this.HEALTH_ENDPOINT}`
 		});
+
+		// Don't update to 'checking' state to avoid UI flicker
+		// Just perform the check and update based on result
 
 		const startTime = Date.now();
 
 		try {
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
+			// Use longer timeout if DevTools is open (detected via window.outerWidth/innerWidth difference)
+			const isDevToolsOpen = window.outerWidth - window.innerWidth > 200;
+			const timeout = isDevToolsOpen ? 15000 : this.HEALTH_CHECK_TIMEOUT;
+			
+			if (isDevToolsOpen) {
+				console.log('🔧 DevTools detected, using extended timeout:', timeout + 'ms');
+			}
+			
+			console.log('📡 Fetching health endpoint with timeout:', timeout + 'ms');
+			
+			const timeoutId = setTimeout(() => {
+				console.log('⏱️ Health check timeout reached');
+				controller.abort();
+			}, timeout);
 
 			const response = await fetch(`${PUBLIC_API_URL}${this.HEALTH_ENDPOINT}`, {
 				method: 'GET',
 				signal: controller.signal,
-				cache: 'no-cache'
+				cache: 'no-cache',
+				credentials: 'include',
+				mode: 'cors'
 			});
 
 			clearTimeout(timeoutId);
 
 			const latency = Date.now() - startTime;
+			
+			console.log('✅ Health check response:', {
+				status: response.status,
+				ok: response.ok,
+				latency: latency + 'ms'
+			});
 
 			if (response.ok) {
 				console.log(`🟢 Central Server: Online (${latency}ms)`);
+				
+				// Reset failed checks counter on success
+				this.failedChecks = 0;
 				
 				this.updateStatus({
 					mode: 'online',
@@ -159,19 +185,33 @@ class NetworkService {
 
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-			// Only log actual network errors, not abort errors from timeout
-			if (errorMessage !== 'The user aborted a request.' && errorMessage !== 'signal is aborted without reason') {
-				console.warn(`🔴 Central Server: Unreachable (${errorMessage})`);
-			}
+			
+			// Increment failed checks
+			this.failedChecks++;
+			
+			// Only mark as offline after MAX_FAILED_CHECKS consecutive failures
+			if (this.failedChecks >= this.MAX_FAILED_CHECKS) {
+				// Only log actual network errors, not abort errors from timeout
+				if (errorMessage !== 'The user aborted a request.' && errorMessage !== 'signal is aborted without reason') {
+					console.warn(`🔴 Central Server: Unreachable after ${this.failedChecks} attempts (${errorMessage})`);
+				}
 
-			this.status.update(current => ({
-				...current,
-				mode: 'offline',
-				isOnline: false,
-				lastCheckTime: new Date(),
-				errorCount: current.errorCount + 1,
-				latency: null
-			}));
+				this.status.update(current => ({
+					...current,
+					mode: 'offline',
+					isOnline: false,
+					lastCheckTime: new Date(),
+					errorCount: current.errorCount + 1,
+					latency: null
+				}));
+			} else {
+				// Still trying, keep current status
+				console.log(`⚠️ Health check failed (${this.failedChecks}/${this.MAX_FAILED_CHECKS}), retrying...`);
+				this.status.update(current => ({
+					...current,
+					lastCheckTime: new Date()
+				}));
+			}
 
 			return false;
 		}

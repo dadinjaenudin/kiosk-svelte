@@ -23,6 +23,7 @@
 	// Props
 	export let position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' = 'top-right';
 	export let compact = false;
+	export let inline = false; // New: for inline rendering (not fixed position)
 
 	// State
 	let isExpanded = false;
@@ -154,6 +155,11 @@
 	}
 
 	function getPositionClass(pos: string): string {
+		if (inline) {
+			// Inline mode: no fixed positioning
+			return '';
+		}
+		// Fixed positioning modes
 		const baseClasses = 'fixed z-50';
 		switch (pos) {
 			case 'top-left':
@@ -183,10 +189,11 @@
 			<span class="toggle-arrow">{isExpanded ? '▼' : '▶'}</span>
 		</button>
 
-		{#if !compact && isExpanded}
-			<!-- Details -->
-			<div class="status-details">
-				<!-- Connection Info -->
+	{#if isExpanded}
+		<!-- Details (compact or full) -->
+		<div class="status-details" class:compact-details={compact}>
+			{#if !compact}
+				<!-- Full details -->
 				<div class="detail-row">
 					<span class="label">Network:</span>
 					<span class="value">{isOnline ? 'Online' : 'Offline'}</span>
@@ -208,22 +215,24 @@
 					<span class="label">Last Check:</span>
 					<span class="value text-xs">{formatTimestamp(lastCheckTime)}</span>
 				</div>
+			{/if}
 
-				<!-- Offline Stats -->
-				{#if stats.pendingOrders > 0}
-					<div class="detail-row highlight">
-						<span class="label">Pending Orders:</span>
-						<span class="value font-bold">{stats.pendingOrders}</span>
-					</div>
-				{/if}
+			<!-- Offline Stats (shown in both compact and full) -->
+			{#if stats.pendingOrders > 0}
+				<div class="detail-row highlight">
+					<span class="label">Pending:</span>
+					<span class="value font-bold">{stats.pendingOrders}</span>
+				</div>
+			{/if}
 
-				{#if stats.syncQueueSize > 0}
-					<div class="detail-row highlight">
-						<span class="label">Sync Queue:</span>
-						<span class="value font-bold">{stats.syncQueueSize} items</span>
-					</div>
-				{/if}
-
+			{#if stats.syncQueueSize > 0}
+				<div class="detail-row highlight">
+					<span class="label">Queue:</span>
+					<span class="value font-bold">{stats.syncQueueSize}</span>
+			</div>
+		{/if}
+		
+		{#if !compact}
 				<!-- Sync Progress -->
 				{#if isSyncing}
 					<div class="sync-progress">
@@ -311,8 +320,9 @@
 						{/each}
 					</div>
 				{/if}
-			</div>
 		{/if}
+		</div>
+	{/if}
 	</div>
 </div>
 
@@ -409,6 +419,11 @@
 		flex-direction: column;
 		gap: 8px;
 		font-size: 13px;
+	}
+	
+	.status-details.compact-details {
+		font-size: 11px;
+		gap: 4px;
 	}
 
 	.detail-row {

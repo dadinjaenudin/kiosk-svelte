@@ -13,6 +13,12 @@
 	// Offline mode detection
 	let offlineMode = false;
 	
+	// Network status tracking (for polling logic)
+	let networkOnline = false;
+	let networkMode: string = 'checking';
+	let networkLatency: number | null = null;
+	let socketMode: string = 'disconnected';
+	
 	// Offline orders storage (from Local Sync Server)
 	let offlineOrders: any[] = [];
 	
@@ -28,27 +34,12 @@
 	let socketConnected = false;
 	$: socketConnected = $socketStatus.localConnected;
 	
-	// Manual network status tracking (workaround for broken reactive binding)
-	let networkOnline = true;
-	let networkMode = 'checking';
-	let networkLatency: number | null = null;
-	let socketMode = 'none';
-	
-	// Status badge expand/collapse
-	let statusExpanded = false;
-	function toggleStatus() {
-		statusExpanded = !statusExpanded;
-	}
-	
 	// Polling function to force update from stores (ultimate workaround)
 	function updateNetworkStatus() {
 		const netStatus = get(networkStatus);
 		const sockStatus = get(socketStatus);
 		
 		networkOnline = netStatus.isOnline;
-		networkMode = netStatus.mode;
-		networkLatency = netStatus.latency;
-		socketMode = sockStatus.mode;
 	}
 	
 	// Subscribe manually to network status
@@ -443,36 +434,12 @@ function playNewOrderSound() {
 				<span class="stat-label">Avg Time</span>
 				<span class="stat-value">{$kitchenStats.avg_prep_time || 0} min</span>
 			</div>
-		</div>
-		
-		<div class="header-actions">
-			<!-- Inline Connection Status (Collapsible) -->
-			<div class="inline-connection-status">
-				<button 
-					class="status-badge clickable" 
-					class:online={networkOnline} 
-					class:offline={!networkOnline}
-					class:expanded={statusExpanded}
-					on:click={toggleStatus}
-					title="Click to {statusExpanded ? 'hide' : 'show'} details"
-				>
-					<span class="status-dot"></span>
-					<div class="status-info">
-						<span class="status-label">{networkOnline ? 'Online' : 'Offline'}</span>
-						{#if statusExpanded}
-							<div class="status-details-inline">
-								<span class="detail-item">Socket: {socketMode}</span>
-								{#if networkLatency}
-									<span class="detail-item">{networkLatency}ms</span>
-								{/if}
-							</div>
-						{/if}
-					</div>
-					<span class="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
-				</button>
-			</div>
-			
-			<button 
+	</div>
+	
+	<div class="header-actions">
+		<!-- Connection status badge (compact, inline, expandable) -->
+		<ConnectionStatus compact={true} inline={true} />
+		<button 
 				class="btn-icon {soundEnabled ? 'active' : ''}"
 				on:click={toggleSound}
 				title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
@@ -735,103 +702,6 @@ function playNewOrderSound() {
 		display: flex;
 		gap: 0.75rem;
 		align-items: center;
-	}
-	
-	/* Inline Connection Status */
-	.inline-connection-status {
-		margin-right: 0.5rem;
-	}
-	
-	.status-badge {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		border-radius: 8px;
-		background: #f3f4f6;
-		transition: all 0.3s ease;
-		border: 1px solid transparent;
-	}
-	
-	.status-badge.clickable {
-		cursor: pointer;
-		border: none;
-	}
-	
-	.status-badge.clickable:hover {
-		transform: scale(1.02);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-	}
-	
-	.status-badge.expanded {
-		padding: 0.5rem 1rem;
-	}
-	
-	.status-badge.online {
-		background: #d1fae5;
-		border: 1px solid #10b981;
-	}
-	
-	.status-badge.offline {
-		background: #fee2e2;
-		border: 1px solid #ef4444;
-	}
-	
-	.status-dot {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-	
-	.status-badge.online .status-dot {
-		background: #10b981;
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
-		animation: pulse 2s ease-in-out infinite;
-	}
-	
-	.status-badge.offline .status-dot {
-		background: #ef4444;
-		box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3);
-	}
-	
-	.status-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-		min-width: 0;
-	}
-	
-	.status-label {
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: #1f2937;
-		white-space: nowrap;
-	}
-	
-	.status-details-inline {
-		display: flex;
-		gap: 0.5rem;
-		font-size: 0.75rem;
-		color: #6b7280;
-		margin-top: 0.25rem;
-		animation: slideDown 0.2s ease-out;
-	}
-	
-	.detail-item {
-		white-space: nowrap;
-	}
-	
-	.toggle-icon {
-		font-size: 0.625rem;
-		color: #6b7280;
-		margin-left: 0.25rem;
-		transition: transform 0.2s ease;
-	}
-	
-	@keyframes pulse {
-		0%, 100% { opacity: 1; transform: scale(1); }
-		50% { opacity: 0.6; transform: scale(0.95); }
 	}
 	
 	.btn-icon {
