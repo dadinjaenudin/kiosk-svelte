@@ -17,7 +17,15 @@ export interface KioskConfig {
 
 function createKioskConfig() {
 	// Load from localStorage (only in browser)
-	const stored = browser ? localStorage.getItem('kiosk_config') : null;
+	let stored: string | null = null;
+	if (browser && typeof window !== 'undefined' && window.localStorage) {
+		try {
+			stored = localStorage.getItem('kiosk_config');
+		} catch (e) {
+			console.warn('Failed to load kiosk config from localStorage:', e);
+		}
+	}
+	
 	const defaultConfig: KioskConfig = {
 		storeCode: null,
 		storeName: null,
@@ -334,14 +342,21 @@ export const selectedOutlet = writable<SelectedOutlet>({
 // ===== HELPER FUNCTIONS =====
 
 function generateDeviceId(): string {
-	if (!browser) return 'KIOSK-TEMP';
+	if (!browser || typeof window === 'undefined' || !window.localStorage) {
+		return 'KIOSK-TEMP';
+	}
 	
-	const stored = localStorage.getItem('kiosk_device_id');
-	if (stored) return stored;
+	try {
+		const stored = localStorage.getItem('kiosk_device_id');
+		if (stored) return stored;
 
-	const newId = `KIOSK-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-	localStorage.setItem('kiosk_device_id', newId);
-	return newId;
+		const newId = `KIOSK-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+		localStorage.setItem('kiosk_device_id', newId);
+		return newId;
+	} catch (e) {
+		console.warn('Failed to access localStorage for device ID:', e);
+		return 'KIOSK-TEMP';
+	}
 }
 
 function generateSessionId(): string {

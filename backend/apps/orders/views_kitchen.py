@@ -54,8 +54,8 @@ class KitchenOrderViewSet(viewsets.ReadOnlyModelViewSet):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        # Filter by today only (default)
-        today_only = self.request.query_params.get('today_only', 'true')
+        # Filter by today only (disabled by default for development)
+        today_only = self.request.query_params.get('today_only', 'false')
         if today_only.lower() == 'true':
             today = timezone.now().date()
             queryset = queryset.filter(created_at__date=today)

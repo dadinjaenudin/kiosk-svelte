@@ -25,7 +25,12 @@
 	export let compact = false;
 
 	// State
+	let isExpanded = false;
 	let pendingCount = 0;
+	
+	function toggleExpanded() {
+		isExpanded = !isExpanded;
+	}
 	let stats = {
 		totalOrders: 0,
 		syncedOrders: 0,
@@ -70,16 +75,25 @@
 	}
 
 	function getBadgeColor(netMode: ConnectionMode, sockMode: SocketMode): string {
-		if (netMode === 'online' && (sockMode === 'dual' || sockMode === 'central')) {
-			return 'green'; // Fully online
-		} else if (netMode === 'online' && sockMode === 'local') {
-			return 'yellow'; // Online but only local socket
-		} else if (netMode === 'offline' && sockMode === 'local') {
-			return 'yellow'; // Offline but LAN works
-		} else if (sockMode === 'none') {
-			return 'red'; // No connection at all
+		// Priority: Network status first, then socket
+		if (netMode === 'online') {
+			if (sockMode === 'dual' || sockMode === 'central') {
+				return 'green'; // Fully online with socket
+			} else if (sockMode === 'local') {
+				return 'yellow'; // Online but only local socket
+			} else {
+				return 'green'; // Online without socket (HTTP Polling works)
+			}
+		} else if (netMode === 'offline') {
+			if (sockMode === 'local') {
+				return 'yellow'; // Offline but LAN works
+			} else {
+				return 'red'; // No connection at all
+			}
+		} else if (netMode === 'checking') {
+			return 'yellow'; // Checking status
 		} else {
-			return 'yellow'; // Other states
+			return 'red'; // Error state
 		}
 	}
 
@@ -157,15 +171,19 @@
 </script>
 
 <div class={`connection-status ${getPositionClass(position)} ${compact ? 'compact' : ''}`}>
-	<div class="status-card">
-		<!-- Header with badge -->
-		<div class="status-header">
-			<span class="badge badge-{badgeColor}">
-				{badgeIcon} {statusText}
+	<div class="status-card" class:expanded={isExpanded}>
+		<!-- Header with badge (Clickable) -->
+		<button class="status-header" on:click={toggleExpanded} title="{statusText} - Click to {isExpanded ? 'hide' : 'show'} details">
+			<span class="badge badge-{badgeColor} icon-only">
+				{badgeIcon}
+				{#if isExpanded}
+					<span class="status-text">{statusText}</span>
+				{/if}
 			</span>
-		</div>
+			<span class="toggle-arrow">{isExpanded ? '▼' : '▶'}</span>
+		</button>
 
-		{#if !compact}
+		{#if !compact && isExpanded}
 			<!-- Details -->
 			<div class="status-details">
 				<!-- Connection Info -->
@@ -212,7 +230,10 @@
 						<div class="progress-bar">
 							<div class="progress-fill" style="width: {syncPercent}%"></div>
 						</div>
-						<span class="progress-text">Syncing... {syncPercent}%</span>
+						<span class="progress-text">
+							Syncing... {syncPercent}% 
+							({$syncProgress.processedItems}/{$syncProgress.totalItems})
+						</span>
 					</div>
 				{/if}
 
@@ -236,12 +257,44 @@
 						</button>
 					{/if}
 
+					{#if stats.pendingOrders > 0 && stats.syncQueueSize === 0}
+						<button
+							class="btn-rebuild"
+							on:click={async () => {
+								console.log('🔧 Manual rebuild triggered');
+								const rebuilt = await offlineOrderService.rebuildSyncQueue();
+								if (rebuilt > 0) {
+									await syncService.manualSync();
+								}
+								await loadStats();
+							}}
+						>
+							🔧 Rebuild Queue ({stats.pendingOrders})
+						</button>
+					{/if}
+
 					{#if stats.syncQueueSize > 0 && !isSyncing}
 						<button
 							class="btn-sync"
 							on:click={handleManualSync}
 						>
 							📤 Sync Now
+						</button>
+					{/if}
+					
+					<!-- Force Sync: Rebuild + Sync -->
+					{#if stats.pendingOrders > 0}
+						<button
+							class="btn-force-sync"
+							on:click={async () => {
+								console.log('⚡ Force sync triggered (rebuild + sync)');
+								await offlineOrderService.rebuildSyncQueue();
+								await syncService.manualSync();
+								await loadStats();
+							}}
+							disabled={isSyncing}
+						>
+							⚡ Force Sync
 						</button>
 					{/if}
 				</div>
@@ -279,10 +332,40 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 		padding: 16px;
 		border: 2px solid #e5e7eb;
+		transition: all 0.3s ease;
+	}
+	
+	.status-card.expanded {
+		padding-bottom: 16px;
 	}
 
 	.status-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 0;
+		padding: 0;
+		background: none;
+		border: none;
+		cursor: pointer;
+		width: 100%;
+		text-align: left;
+		transition: all 0.2s ease;
+	}
+	
+	.status-header:hover {
+		transform: scale(1.02);
+	}
+	
+	.status-card.expanded .status-header {
 		margin-bottom: 12px;
+	}
+	
+	.toggle-arrow {
+		font-size: 10px;
+		color: #6b7280;
+		transition: transform 0.2s ease;
 	}
 
 	.badge {
@@ -293,6 +376,17 @@
 		font-size: 14px;
 		font-weight: 600;
 		gap: 6px;
+	}
+	
+	.badge.icon-only {
+		padding: 8px;
+		border-radius: 50%;
+		font-size: 16px;
+	}
+	
+	.status-text {
+		margin-left: 4px;
+		font-size: 14px;
 	}
 
 	.badge-green {
@@ -376,7 +470,9 @@
 	}
 
 	.btn-retry,
-	.btn-sync {
+	.btn-sync,
+	.btn-rebuild,
+	.btn-force-sync {
 		flex: 1;
 		padding: 8px 12px;
 		border: none;
@@ -408,6 +504,29 @@
 
 	.btn-sync:hover {
 		background: #059669;
+	}
+	
+	.btn-rebuild {
+		background: #f59e0b;
+		color: white;
+	}
+	
+	.btn-rebuild:hover {
+		background: #d97706;
+	}
+	
+	.btn-force-sync {
+		background: #8b5cf6;
+		color: white;
+	}
+	
+	.btn-force-sync:hover:not(:disabled) {
+		background: #7c3aed;
+	}
+	
+	.btn-force-sync:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.error-list {

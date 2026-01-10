@@ -32,7 +32,7 @@ class NetworkService {
 	private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 	private readonly HEALTH_CHECK_TIMEOUT = 2000; // 2 seconds
 	private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
-	private readonly HEALTH_ENDPOINT = '/api/health/';
+	private readonly HEALTH_ENDPOINT = '/health/'; // PUBLIC_API_URL already includes /api
 
 	constructor() {
 		this.status = writable<NetworkStatus>({
@@ -97,10 +97,11 @@ class NetworkService {
 	}
 
 	private updateStatus(partial: Partial<NetworkStatus>) {
-		this.status.update(current => ({
-			...current,
-			...partial
-		}));
+		this.status.update(current => {
+			const newStatus = { ...current, ...partial };
+			console.log('📡 NetworkService status updated:', { mode: newStatus.mode, isOnline: newStatus.isOnline });
+			return newStatus;
+		});
 	}
 
 	/**
@@ -129,7 +130,7 @@ class NetworkService {
 			const controller = new AbortController();
 			const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
 
-			const response = await fetch(`${PUBLIC_API_URL}/health/`, {
+			const response = await fetch(`${PUBLIC_API_URL}${this.HEALTH_ENDPOINT}`, {
 				method: 'GET',
 				signal: controller.signal,
 				cache: 'no-cache'
@@ -158,7 +159,10 @@ class NetworkService {
 
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-			console.warn(`🔴 Central Server: Unreachable (${errorMessage})`);
+			// Only log actual network errors, not abort errors from timeout
+			if (errorMessage !== 'The user aborted a request.' && errorMessage !== 'signal is aborted without reason') {
+				console.warn(`🔴 Central Server: Unreachable (${errorMessage})`);
+			}
 
 			this.status.update(current => ({
 				...current,
@@ -240,4 +244,9 @@ export async function checkOnline(forceCheck = false): Promise<boolean> {
 // Helper function to retry connection
 export async function retryConnection(): Promise<boolean> {
 	return await networkService.retry();
+}
+
+// Helper function to manually check health
+export async function checkHealth(): Promise<boolean> {
+	return await networkService.performHealthCheck();
 }

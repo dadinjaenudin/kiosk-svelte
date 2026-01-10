@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 	import { multiCart, kioskConfig } from '$lib/stores/kioskStore';
+	import * as kioskStore from '$lib/stores/kioskStore';
+	import { offlineOrderService } from '$lib/services/offlineOrderService';
+	import { syncService, syncProgress } from '$lib/services/syncService';
+	import { networkStatus } from '$lib/services/networkService';
+	import { socketService } from '$lib/services/socketService';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -12,6 +18,8 @@
 	let cashAmount = 0;
 	let loading = false;
 	let error = '';
+	let showOfflineSuccess = false;
+	let offlineOrderData: any = null;
 	
 	$: carts = Object.values($multiCart.carts);
 	$: totalAmount = $multiCart.totalAmount;
@@ -43,10 +51,20 @@
 			console.warn('⚠️ Tenant ID is missing! Please reconfigure kiosk.');
 			error = 'Kiosk configuration incomplete. Please setup again.';
 		}
+		
+		// Start auto-sync service
+		syncService.startAutoSync();
+		console.log('🔄 Sync service started');
 	});
 	
 	async function handleCheckout() {
-		if (!canCheckout) return;
+		console.log('🎯 handleCheckout called');
+		console.log('✅ canCheckout:', canCheckout);
+		
+		if (!canCheckout) {
+			console.warn('⚠️ Checkout blocked - canCheckout is false');
+			return;
+		}
 		
 		// Validate tenantId exists
 		if (!$kioskConfig.tenantId) {
@@ -80,7 +98,79 @@
 				throw new Error('Cart is empty');
 			}
 			
-			// Create order group
+			// Check network status
+			let isOnline = $networkStatus.isOnline;
+			console.log(`📡 Network status: ${isOnline ? 'Online' : 'Offline'}`);
+			
+			if (!isOnline) {
+				// OFFLINE MODE: Save to IndexedDB
+				console.log('📴 Offline mode: Saving order to local storage...');
+				
+				try {
+					// Save the complete checkout data as one offline order
+					const offlineOrder = {
+						order_number: `OFFLINE-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+						checkout_data: checkoutData, // Save complete checkout data for sync
+						store_id: checkoutData.store_id,
+						customer_name: checkoutData.customer_name,
+						customer_phone: checkoutData.customer_phone || '',
+						customer_email: checkoutData.customer_email || null,
+						payment_method: paymentMethod,
+						total_amount: totalAmount,
+						tenant_id: $kioskConfig.tenantId,
+						status: 'pending',
+						created_at: new Date().toISOString(),
+						synced: false,
+						sync_attempts: 0
+					};
+					
+					console.log('💾 Saving offline order:', offlineOrder.order_number);
+					await offlineOrderService.saveOrder(offlineOrder);
+					console.log(`✅ Offline order saved: ${offlineOrder.order_number}`);
+
+					// Broadcast to Local Sync Server for kitchen display
+					try {
+						socketService.emitToLocal('order:created:offline', {
+							order_number: offlineOrder.order_number,
+							store_id: offlineOrder.store_id,
+							customer_name: offlineOrder.customer_name,
+							total_amount: offlineOrder.total_amount,
+							payment_method: offlineOrder.payment_method,
+							created_at: offlineOrder.created_at,
+							status: 'pending'
+						});
+						console.log('📡 Broadcasted offline order to Local Sync Server');
+					} catch (socketError) {
+						console.warn('⚠️ Failed to broadcast to Local Sync Server:', socketError);
+					}
+
+					// Clear all carts after successful offline order
+					multiCart.clearAll();
+					console.log('🗑️ Carts cleared after offline order');
+
+					// Show inline success message instead of navigation
+					offlineOrderData = {
+						orderNumber: offlineOrder.order_number,
+						payment: paymentMethod,
+						total: totalAmount,
+						cashGiven: cashAmount,
+						change: changeAmount,
+						customerName: customerName,
+						customerPhone: customerPhone
+					};
+					showOfflineSuccess = true;
+					
+					console.log('✅ Showing inline success message');
+					return;
+				} catch (offlineError) {
+					console.error('❌ Offline order error:', offlineError);
+					console.error('❌ Error stack:', offlineError.stack);
+					error = `Failed to save offline order: ${offlineError.message}`;
+					return;
+				}
+			}
+			
+			// ONLINE MODE: Send to backend
 			const response = await fetch(`${API_BASE}/order-groups/`, {
 				method: 'POST',
 				headers: {
@@ -126,8 +216,9 @@
 			goto(`/kiosk/success/${orderGroup.group_number}`);
 			
 		} catch (err) {
+			console.error('❌ Checkout error:', err);
+			console.error('❌ Error stack:', err.stack);
 			error = err.message || 'Failed to process order';
-			console.error('Checkout error:', err);
 		} finally {
 			loading = false;
 		}
@@ -156,7 +247,116 @@
 	}
 </script>
 
+{#if browser}
 <div class="checkout-page">
+	{#if showOfflineSuccess && offlineOrderData}
+		<!-- Offline Success Message -->
+		<div class="min-h-screen bg-gradient-to-br from-amber-500 via-orange-500 to-yellow-500 flex items-center justify-center p-4">
+			<div class="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full text-center border-4 border-amber-400">
+				<!-- Offline Icon (DIFFERENT from online) -->
+				<div class="mb-6">
+					<div class="w-32 h-32 mx-auto bg-gradient-to-br from-amber-100 to-orange-200 rounded-full flex items-center justify-center animate-pulse">
+						<svg class="w-20 h-20 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<!-- Save/Download icon instead of checkmark -->
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+						</svg>
+					</div>
+				</div>
+				
+				<!-- WARNING BADGE -->
+				<div class="mb-4 inline-block px-6 py-3 bg-amber-100 border-2 border-amber-400 rounded-full">
+					<p class="text-xl font-bold text-amber-800">📴 OFFLINE MODE</p>
+				</div>
+				
+				<h1 class="text-4xl font-bold text-amber-700 mb-2">Order Saved Locally! 💾</h1>
+				<p class="text-lg text-orange-600 font-semibold mb-6">⏳ Will sync to kitchen when internet returns</p>
+				
+				<!-- Order Number with Offline Prefix -->
+				<div class="bg-amber-50 border-4 border-amber-300 rounded-xl p-4 mb-6">
+					<p class="text-sm text-amber-600 font-bold mb-1">📋 LOCAL ORDER NUMBER</p>
+					<p class="text-3xl font-bold text-amber-700 font-mono tracking-wider">{offlineOrderData.orderNumber}</p>
+					<p class="text-xs text-amber-600 mt-2">🔄 Not synced yet</p>
+				</div>
+				
+				<!-- Customer Info -->
+				<div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-6 text-left">
+					<h3 class="font-bold text-blue-800 text-lg mb-3">Customer</h3>
+					<div class="space-y-2">
+						<div class="flex justify-between">
+							<span class="text-gray-600">Name:</span>
+							<span class="font-semibold text-gray-800">{offlineOrderData.customerName}</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-gray-600">Phone:</span>
+							<span class="font-semibold text-gray-800">{offlineOrderData.customerPhone}</span>
+						</div>
+					</div>
+				</div>
+				
+				<!-- Payment Details -->
+				<div class="bg-amber-50 border-2 border-amber-300 rounded-xl p-6 mb-6">
+					<h3 class="font-bold text-amber-800 text-lg mb-4">💳 Payment Details</h3>
+					<div class="space-y-3 text-left">
+						<div class="flex justify-between items-center py-3 bg-amber-100 rounded-lg px-4">
+							<span class="text-amber-700 font-semibold text-lg">Total:</span>
+							<span class="font-bold text-amber-700 text-2xl">{formatCurrency(offlineOrderData.total)}</span>
+						</div>
+						{#if offlineOrderData.payment === 'cash' && offlineOrderData.cashGiven > 0}
+							<div class="flex justify-between items-center py-2">
+								<span class="text-gray-600">Cash Given:</span>
+								<span class="font-semibold text-gray-800 text-lg">{formatCurrency(offlineOrderData.cashGiven)}</span>
+							</div>
+							<div class="flex justify-between items-center py-3 bg-orange-100 rounded-lg px-4">
+								<span class="text-orange-700 font-semibold text-lg">Change:</span>
+								<span class="font-bold text-orange-700 text-2xl">{formatCurrency(offlineOrderData.change)}</span>
+							</div>
+						{/if}
+					</div>
+				</div>
+				
+				<!-- Info -->
+				<div class="bg-orange-50 border-2 border-orange-400 rounded-xl p-6 mb-6 text-left">
+					<div class="flex items-center mb-3">
+						<span class="text-2xl mr-2">⚠️</span>
+						<h3 class="font-bold text-orange-800 text-lg">IMPORTANT: This order is NOT synced yet!</h3>
+					</div>
+					<ul class="space-y-3 text-gray-700">
+						<li class="flex items-start">
+							<span class="text-orange-600 mr-2 text-lg flex-shrink-0">💾</span>
+							<span><strong>Order saved to this device only</strong> (not in kitchen yet)</span>
+						</li>
+						<li class="flex items-start">
+							<span class="text-orange-600 mr-2 text-lg flex-shrink-0">🔄</span>
+							<span><strong>Will auto-sync to kitchen</strong> when internet connection returns</span>
+						</li>
+						<li class="flex items-start">
+							<span class="text-orange-600 mr-2 text-lg flex-shrink-0">🔔</span>
+							<span><strong>You'll get notification</strong> when order successfully sent to kitchen</span>
+						</li>
+						<li class="flex items-start">
+							<span class="text-orange-600 mr-2 text-lg flex-shrink-0">⏳</span>
+							<span><strong>Kitchen will start preparing</strong> only after sync completes</span>
+						</li>
+					</ul>
+				</div>
+				
+				<!-- Action Button -->
+				<button
+					on:click={() => goto('/kiosk/products')}
+					class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-5 px-8 rounded-xl text-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+				>
+					🏠 Back to Menu
+				</button>
+				
+				<!-- Bottom Warning -->
+				<div class="mt-6 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+					<p class="text-sm text-yellow-800 font-semibold">
+						⚡ Please keep internet connection stable for automatic sync!
+					</p>
+				</div>
+			</div>
+		</div>
+	{:else}
 	<div class="checkout-container">
 		<!-- Header -->
 		<div class="checkout-header">
@@ -427,6 +627,7 @@
 			{/if}
 		</button>
 	</div>
+	{/if}
 </div>
 
 <style>
@@ -833,3 +1034,8 @@
 		to { transform: rotate(360deg); }
 	}
 </style>
+{:else}
+<div class="checkout-page" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+	<div class="spinner-small"></div>
+</div>
+{/if}

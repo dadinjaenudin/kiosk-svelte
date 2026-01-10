@@ -367,6 +367,9 @@ def create_toppings(tenants):
         {'name': 'Olives', 'sort': 3, 'price': 3000},
         {'name': 'Onions', 'sort': 4, 'price': 2000},
         {'name': 'Tomatoes', 'sort': 5, 'price': 2000},
+        {'name': 'Peppers', 'sort': 6, 'price': 2000},
+        {'name': 'Bacon', 'sort': 7, 'price': 8000},
+        {'name': 'Sausage', 'sort': 8, 'price': 7000},
     ]
     
     # Create global toppings
@@ -382,6 +385,37 @@ def create_toppings(tenants):
         print(f"  ✓ Global: {topping['name']} (+Rp {topping['price']:,})")
     
     print(f"  📊 Total toppings created: {len(toppings)} (global for all products)")
+
+
+@transaction.atomic
+def create_additions(tenants):
+    """Create addition modifiers (sides, extras, upgrades)"""
+    print("\n➕ Creating additions...")
+    
+    additions = [
+        {'name': 'Extra Sauce', 'sort': 1, 'price': 3000},
+        {'name': 'Garlic Bread', 'sort': 2, 'price': 15000},
+        {'name': 'Coleslaw', 'sort': 3, 'price': 10000},
+        {'name': 'Pickles', 'sort': 4, 'price': 2000},
+        {'name': 'Upgrade to Large', 'sort': 5, 'price': 10000},
+        {'name': 'Add Egg', 'sort': 6, 'price': 5000},
+        {'name': 'Add Avocado', 'sort': 7, 'price': 12000},
+        {'name': 'Extra Meat', 'sort': 8, 'price': 15000},
+    ]
+    
+    # Create global additions
+    for addition in additions:
+        ProductModifier.objects.create(
+            name=addition['name'],
+            type='addition',
+            price_adjustment=Decimal(str(addition['price'])),
+            product=None,  # Global = available for all products
+            is_active=True,
+            sort_order=addition['sort']
+        )
+        print(f"  ✓ Global: {addition['name']} (+Rp {addition['price']:,})")
+    
+    print(f"  📊 Total additions created: {len(additions)} (global for all products)")
 
 
 @transaction.atomic
@@ -457,6 +491,7 @@ def print_summary():
     print(f"  • Products: {Product.all_objects.count()} (4 per tenant)")
     print(f"  • Categories: {Category.all_objects.count()}")
     print(f"  • Toppings: {ProductModifier.objects.filter(type='topping').count()}")
+    print(f"  • Additions: {ProductModifier.objects.filter(type='addition').count()}")
     print(f"  • Spicy Levels: {ProductModifier.objects.filter(type='spicy').count()}")
     print(f"  • Promotions: {Promotion.objects.count()}")
     
@@ -507,6 +542,7 @@ def main():
         categories = create_categories(tenants)
         create_products(tenants, categories, outlets)
         create_toppings(tenants)
+        create_additions(tenants)
         create_spicy_levels(tenants)
         create_promotions(tenants)
         print_summary()

@@ -824,6 +824,81 @@ def create_categories_and_products(brands, tenants):
     print(f"    ✅ 3 categories, 9 products")
 
 
+def create_spicy_levels(tenants):
+    """Create spicy level modifiers (globally available for all products)"""
+    print("\n🌶️ Creating Spicy Levels...")
+    spicy_levels = [
+        {'name': 'Level 1 (Mild)', 'sort': 1},
+        {'name': 'Level 2 (Medium)', 'sort': 2},
+        {'name': 'Level 3 (Hot)', 'sort': 3},
+        {'name': 'Level 4 (Extra Hot)', 'sort': 4},
+        {'name': 'Level 5 (Insane)', 'sort': 5},
+    ]
+    
+    for level in spicy_levels:
+        ProductModifier.objects.create(
+            name=level['name'],
+            type='spicy',
+            price_adjustment=Decimal('0'),  # No additional cost for spice level
+            product=None,  # Global (available for all products)
+            is_active=True,
+            sort_order=level['sort']
+        )
+    print(f"  ✅ Created {len(spicy_levels)} spicy levels (global)")
+
+
+def create_toppings(tenants):
+    """Create topping modifiers (globally available for all products)"""
+    print("\n🧀 Creating Toppings...")
+    toppings = [
+        {'name': 'Extra Cheese', 'sort': 1, 'price': 5000},
+        {'name': 'Mushrooms', 'sort': 2, 'price': 3000},
+        {'name': 'Olives', 'sort': 3, 'price': 3000},
+        {'name': 'Onions', 'sort': 4, 'price': 2000},
+        {'name': 'Tomatoes', 'sort': 5, 'price': 2000},
+        {'name': 'Peppers', 'sort': 6, 'price': 2000},
+        {'name': 'Bacon', 'sort': 7, 'price': 8000},
+        {'name': 'Sausage', 'sort': 8, 'price': 7000},
+    ]
+    
+    for topping in toppings:
+        ProductModifier.objects.create(
+            name=topping['name'],
+            type='topping',
+            price_adjustment=Decimal(str(topping['price'])),
+            product=None,  # Global
+            is_active=True,
+            sort_order=topping['sort']
+        )
+    print(f"  ✅ Created {len(toppings)} toppings (global)")
+
+
+def create_additions(tenants):
+    """Create addition modifiers (sides, extras, upgrades)"""
+    print("\n🍟 Creating Additions...")
+    additions = [
+        {'name': 'Extra Sauce', 'sort': 1, 'price': 3000},
+        {'name': 'Garlic Bread', 'sort': 2, 'price': 15000},
+        {'name': 'Coleslaw', 'sort': 3, 'price': 10000},
+        {'name': 'Pickles', 'sort': 4, 'price': 2000},
+        {'name': 'Upgrade to Large', 'sort': 5, 'price': 10000},
+        {'name': 'Add Egg', 'sort': 6, 'price': 5000},
+        {'name': 'Add Avocado', 'sort': 7, 'price': 12000},
+        {'name': 'Extra Meat', 'sort': 8, 'price': 15000},
+    ]
+    
+    for addition in additions:
+        ProductModifier.objects.create(
+            name=addition['name'],
+            type='extra',  # Changed from 'addition' to match frontend
+            price_adjustment=Decimal(str(addition['price'])),
+            product=None,  # Global
+            is_active=True,
+            sort_order=addition['sort']
+        )
+    print(f"  ✅ Created {len(additions)} additions (global)")
+
+
 def main():
     """Main execution"""
     print("\n" + "="*60)
@@ -855,6 +930,11 @@ def main():
         # Create categories and products per brand
         create_categories_and_products(brands, tenants)
         
+        # Create modifiers (global)
+        create_spicy_levels(tenants)
+        create_toppings(tenants)
+        create_additions(tenants)
+        
         print("\n" + "="*60)
         print("✅ Test data setup completed successfully!")
         print("="*60)
@@ -867,6 +947,9 @@ def main():
         print(f"  - Kitchen Stations: {KitchenStation.objects.count()}")
         print(f"  - Categories: {Category.all_objects.count()}")
         print(f"  - Products: {Product.all_objects.count()}")
+        print(f"  • Spicy Levels: {ProductModifier.objects.filter(type='spicy').count()}")
+        print(f"  • Toppings: {ProductModifier.objects.filter(type='topping').count()}")
+        print(f"  • Additions: {ProductModifier.objects.filter(type='extra').count()}")
         
         print(f"\n👤 Test Users:")
         print(f"  - Superadmin: superadmin / admin123")

@@ -67,8 +67,7 @@ class SyncService {
 	private setupNetworkListener() {
 		networkStatus.subscribe(status => {
 			if (status.isOnline && !this.isSyncing) {
-				// Network restored, trigger sync
-				console.log('🟢 Network online, checking for pending orders...');
+				// Network restored, trigger sync (silent check)
 				this.triggerSync();
 			}
 		});
@@ -77,7 +76,7 @@ class SyncService {
 	/**
 	 * Start auto-sync interval
 	 */
-	startAutoSync() {
+	async startAutoSync() {
 		if (!browser) return;
 
 		if (this.syncInterval) {
@@ -86,6 +85,13 @@ class SyncService {
 		}
 
 		console.log('🔄 Starting auto-sync service (every 30s)');
+
+		// Check and rebuild sync queue if needed
+		const stats = await offlineOrderService.getStats();
+		if (stats.pendingOrders > 0 && stats.syncQueueSize === 0) {
+			console.log('⚠️ Found unsynced orders but sync queue is empty, rebuilding...');
+			await offlineOrderService.rebuildSyncQueue();
+		}
 
 		// Initial sync
 		this.triggerSync();
@@ -120,18 +126,18 @@ class SyncService {
 		// Check network status
 		const currentNetworkStatus = await this.getNetworkStatus();
 		if (!currentNetworkStatus?.isOnline) {
-			console.log('🔴 Network offline, skipping sync');
+			// Network offline, skip sync (silent)
 			return;
 		}
 
 		// Get sync queue
 		const queue = await offlineOrderService.getSyncQueue();
 		if (queue.length === 0) {
-			console.log('✅ No pending orders to sync');
+			// No pending orders
 			return;
 		}
 
-		console.log(`📤 Starting sync: ${queue.length} items in queue`);
+		// console.log(`📤 Starting sync: ${queue.length} items in queue`);
 
 		// Start sync process
 		await this.syncPendingOrders();
@@ -142,9 +148,11 @@ class SyncService {
 	 */
 	private async getNetworkStatus(): Promise<any> {
 		return new Promise(resolve => {
-			networkStatus.subscribe(status => {
+			let unsubscribeFn: (() => void) | undefined;
+			unsubscribeFn = networkStatus.subscribe(status => {
 				resolve(status);
-			})();
+				if (unsubscribeFn) unsubscribeFn();
+			});
 		});
 	}
 
@@ -173,6 +181,13 @@ class SyncService {
 			if (queue.length === 0) {
 				console.log('✅ No items in sync queue');
 				this.isSyncing = false;
+				
+				// Reset progress to idle state
+				this.progress.update(p => ({
+					...p,
+					isRunning: false
+				}));
+				
 				return;
 			}
 
@@ -298,38 +313,97 @@ class SyncService {
 	 */
 	private async syncOrderCreate(item: SyncQueueItem): Promise<boolean> {
 		try {
-			const orderData = item.data;
+			// Get order data from queue item or fetch from IndexedDB
+			let orderData = item.data;
+			
+			if (!orderData) {
+				console.log('📦 No data in queue item, fetching from IndexedDB...');
+				const order = await offlineOrderService.getOrderByNumber(item.order_number);
+				
+				if (!order) {
+					console.error('❌ Order not found in IndexedDB:', item.order_number);
+					// Remove invalid queue item
+					await offlineOrderService.removeSyncQueueItem(item.id!);
+					return false;
+				}
+				
+				orderData = order;
+			}
 
-			// POST to order group API
-			const response = await fetch(`${PUBLIC_API_URL}/orders/groups/`, {
+			console.log('📦 Raw offline order data:', orderData ? JSON.stringify(orderData, null, 2) : 'null');
+
+			// Validate checkout_data
+			if (!orderData.checkout_data) {
+				console.error('❌ Invalid order: missing checkout_data', item.order_number);
+				// Mark as failed and remove from queue
+				await offlineOrderService.incrementSyncAttempt(
+					item.order_number,
+					'Invalid order format: missing checkout_data'
+				);
+				await offlineOrderService.removeSyncQueueItem(item.id!);
+				return false;
+			}
+
+			// Use the complete checkout_data
+			let checkoutData = orderData.checkout_data;
+			
+			// Ensure carts array exists and has proper structure
+			if (!checkoutData.carts || !Array.isArray(checkoutData.carts)) {
+				throw new Error('Invalid checkout data: carts array missing or invalid');
+			}
+			
+			// Validate each cart has items
+			for (const cart of checkoutData.carts) {
+				if (!cart.items || !Array.isArray(cart.items)) {
+					throw new Error(`Invalid cart: items array missing for outlet ${cart.outlet_id}`);
+				}
+			}
+
+			console.log('📋 Syncing with payload:', JSON.stringify(checkoutData, null, 2));
+
+			// POST to order group API with the same format as online checkout
+			const response = await fetch(`${PUBLIC_API_URL}/order-groups/`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					'X-Tenant-ID': String(orderData.tenant_id)
 				},
-				body: JSON.stringify({
-					location: orderData.store_id,
-					customer_name: orderData.customer_name,
-					customer_phone: orderData.customer_phone || '',
-					customer_email: orderData.customer_email || '',
-					payment_method: orderData.payment_method,
-					orders: [
-						{
-							outlet: orderData.outlet_id,
-							items: orderData.items.map((item: any) => ({
-								product: item.product_id,
-								quantity: item.quantity,
-								modifiers: item.modifiers?.map((m: any) => m.modifier_id) || [],
-								special_instructions: item.special_instructions || ''
-							}))
-						}
-					]
-				})
+				body: JSON.stringify(checkoutData)
 			});
 
 			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({}));
+				const errorText = await response.text();
+				console.error('❌ Backend error response:', errorText);
+				let errorData = {};
+				try {
+					errorData = JSON.parse(errorText);
+				} catch {
+					errorData = { message: errorText };
+				}
 				throw new Error(`HTTP ${response.status}: ${JSON.stringify(errorData)}`);
+			}
+
+			// Mark as paid
+			const orderGroup = await response.json();
+			console.log('✅ Order group created:', orderGroup.group_number);
+			
+			const paymentResponse = await fetch(
+				`${PUBLIC_API_URL}/order-groups/${orderGroup.group_number}/mark-paid/`,
+				{
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Tenant-ID': String(orderData.tenant_id)
+					},
+					body: JSON.stringify({
+						payment_method: orderData.payment_method || 'cash',
+						amount_paid: orderData.total_amount || 0
+					})
+				}
+			);
+
+			if (!paymentResponse.ok) {
+				console.warn('⚠️ Failed to mark as paid, but order created');
 			}
 
 			return true;

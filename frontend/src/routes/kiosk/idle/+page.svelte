@@ -2,9 +2,14 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { kioskConfig } from '$lib/stores/kioskStore';
+	import { browser } from '$app/environment';
 	
 	let currentSlide = 0;
 	let autoSlideInterval: number;
+	
+	// Admin reset hotkey (press "R" 5 times within 2 seconds)
+	let resetKeyCount = 0;
+	let resetKeyTimeout: number;
 	
 	// Promotional carousel items
 	const promoSlides = [
@@ -36,10 +41,50 @@
 			currentSlide = (currentSlide + 1) % promoSlides.length;
 		}, 4000);
 		
+		// Add keyboard listener for admin reset hotkey
+		const handleKeyPress = (e: KeyboardEvent) => {
+			if (e.key === 'r' || e.key === 'R') {
+				resetKeyCount++;
+				console.log(`🔑 Reset key pressed (${resetKeyCount}/5)`);
+				
+				// Clear existing timeout
+				if (resetKeyTimeout) clearTimeout(resetKeyTimeout);
+				
+				// Reset counter after 2 seconds
+				resetKeyTimeout = setTimeout(() => {
+					resetKeyCount = 0;
+				}, 2000);
+				
+				// If pressed 5 times, reset configuration
+				if (resetKeyCount >= 5) {
+					resetConfiguration();
+				}
+			}
+		};
+		
+		window.addEventListener('keydown', handleKeyPress);
+		
 		return () => {
 			if (autoSlideInterval) clearInterval(autoSlideInterval);
+			if (resetKeyTimeout) clearTimeout(resetKeyTimeout);
+			window.removeEventListener('keydown', handleKeyPress);
 		};
 	});
+	
+	function resetConfiguration() {
+		if (confirm('⚠️ Reset kiosk configuration?\n\nThis will clear:\n- Store settings\n- Offline mode\n- All preferences\n\nYou will return to setup page.')) {
+			console.log('🔄 Resetting kiosk configuration...');
+			if (browser) {
+				localStorage.removeItem('kiosk_config');
+				localStorage.removeItem('offline_mode');
+				console.log('✅ Configuration cleared');
+			}
+			kioskConfig.reset();
+			window.location.href = '/kiosk';
+		} else {
+			resetKeyCount = 0; // Reset counter if cancelled
+		}
+	}
 	
 	function startOrder() {
 		goto('/kiosk/products');
@@ -117,6 +162,11 @@
 			</div>
 		</div>
 	</div>
+	
+	<!-- Reset Configuration Button (Admin) -->
+	<button class="reset-config-button" on:click={resetConfiguration} title="Reset Configuration">
+		⚙️ Reset
+	</button>
 	
 	<!-- Full-screen tap area -->
 	<button class="tap-overlay" on:click={startOrder} aria-label="Start order">
@@ -369,6 +419,46 @@
 		border: none;
 		cursor: pointer;
 		z-index: 1;
+		pointer-events: auto;
+	}
+	
+	/* Allow clicks through tap-overlay for specific elements */
+	.reset-config-button {
+		pointer-events: auto;
+	}
+	
+	/* Reset Configuration Button */
+	.reset-config-button {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		background: rgba(255, 255, 255, 0.15);
+		backdrop-filter: blur(10px);
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		color: white;
+		padding: 0.75rem 1.5rem;
+		border-radius: 12px;
+		font-size: 0.95rem;
+		font-weight: 600;
+		cursor: pointer;
+		z-index: 100;
+		transition: all 0.3s ease;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	}
+	
+	.reset-config-button:hover {
+		background: rgba(239, 68, 68, 0.9);
+		border-color: rgba(255, 255, 255, 0.5);
+		transform: translateY(-2px);
+		box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+	}
+	
+	.reset-config-button:active {
+		transform: translateY(0);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 	}
 	
 	.sr-only {

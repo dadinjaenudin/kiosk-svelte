@@ -121,6 +121,17 @@ class OfflineOrderService {
 			const id = await this.db.orders.add(offlineOrder);
 			console.log('💾 Order saved offline:', order.order_number, 'ID:', id);
 
+			// Broadcast to Local Sync Server for kitchen displays in LAN
+			if (typeof window !== 'undefined') {
+				try {
+					const { socketService } = await import('./socketService');
+					socketService.emitToLocal('order:created:offline', offlineOrder);
+					console.log('📡 Broadcasted offline order to Local Sync Server:', order.order_number);
+				} catch (err) {
+					console.warn('⚠️ Failed to broadcast offline order:', err);
+				}
+			}
+
 			// Add to sync queue
 			await this.addToSyncQueue({
 				type: 'ORDER_CREATE',
@@ -146,12 +157,13 @@ class OfflineOrderService {
 		if (!this.db) return [];
 
 		try {
-			const orders = await this.db.orders
-				.where('synced')
-				.equals(0) // false = 0 in IndexedDB
-				.toArray();
+			// Get all orders and filter for unsynced (handles 0, false, undefined, null)
+			const allOrders = await this.db.orders.toArray();
+			const unsyncedOrders = allOrders.filter(order => !order.synced);
 
-			return orders;
+			console.log(`📋 Found ${unsyncedOrders.length} unsynced orders (out of ${allOrders.length} total)`);
+			
+			return unsyncedOrders;
 		} catch (error) {
 			console.error('❌ Failed to get offline orders:', error);
 			return [];
@@ -241,12 +253,18 @@ class OfflineOrderService {
 	 * Get pending sync queue items (FIFO order, by priority)
 	 */
 	async getSyncQueue(): Promise<SyncQueueItem[]> {
-		if (!this.db) return [];
+		if (!this.db) {
+			console.log('❌ Database not initialized');
+			return [];
+		}
 
 		try {
+			// console.log('🔍 Checking sync queue...');
 			const items = await this.db.syncQueue
 				.orderBy('timestamp')
 				.toArray();
+
+			// console.log(`📊 Found ${items.length} items in sync queue:`, items);
 
 			// Sort by priority: critical > high > normal > low
 			const priorityOrder = { critical: 1, high: 2, normal: 3, low: 4 };
@@ -313,16 +331,22 @@ class OfflineOrderService {
 		failedSyncs: number;
 	}> {
 		try {
-			const [totalOrders, syncedOrders, syncQueueSize] = await Promise.all([
-				this.db.orders.count(),
-				this.db.orders.where('synced').equals(1).count(),
-				this.db.syncQueue.count()
-			]);
+			// Get all orders and count synced/unsynced properly
+			const allOrders = await this.db.orders.toArray();
+			const totalOrders = allOrders.length;
+			const syncedOrders = allOrders.filter(o => o.synced).length;
+			const pendingOrders = allOrders.filter(o => !o.synced).length;
+			const syncQueueSize = await this.db.syncQueue.count();
 
-			const pendingOrders = totalOrders - syncedOrders;
+			// Stats displayed in ConnectionStatus widget
+			// console.log('📊 IndexedDB Stats:', {
+			// 	totalOrders,
+			// 	syncedOrders,
+			// 	pendingOrders,
+			// 	syncQueueSize
+			// });
 
 			// Count failed syncs (sync_attempts > 3)
-			const allOrders = await this.db.orders.toArray();
 			const failedSyncs = allOrders.filter(o => !o.synced && (o.sync_attempts || 0) > 3).length;
 
 			return {
@@ -364,6 +388,50 @@ class OfflineOrderService {
 			return deleted;
 		} catch (error) {
 			console.error('❌ Failed to clear synced orders:', error);
+			return 0;
+		}
+	}
+
+	/**
+	 * Rebuild sync queue from unsynced orders
+	 * Use this to recover from sync queue being cleared
+	 */
+	async rebuildSyncQueue(): Promise<number> {
+		if (!this.db) return 0;
+
+		try {
+			console.log('🔧 Rebuilding sync queue from unsynced orders...');
+
+			// Get all unsynced orders
+			const unsyncedOrders = await this.getOfflineOrders();
+			
+			if (unsyncedOrders.length === 0) {
+				console.log('✅ No unsynced orders to rebuild');
+				return 0;
+			}
+
+			console.log(`📦 Found ${unsyncedOrders.length} unsynced orders`);
+
+			// Clear existing queue first
+			await this.db.syncQueue.clear();
+
+			// Add each order to sync queue
+			let added = 0;
+			for (const order of unsyncedOrders) {
+				await this.addToSyncQueue({
+					type: 'ORDER_CREATE',
+					order_number: order.order_number,
+					priority: 'high',
+					timestamp: new Date(order.created_at).getTime(),
+					retryCount: order.sync_attempts || 0
+				});
+				added++;
+			}
+
+			console.log(`✅ Rebuilt sync queue: ${added} items added`);
+			return added;
+		} catch (error) {
+			console.error('❌ Failed to rebuild sync queue:', error);
 			return 0;
 		}
 	}

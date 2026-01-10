@@ -144,116 +144,42 @@ function createKitchenConfigStore() {
 	};
 }
 
-// Kitchen orders store (pending, preparing, ready)
-function createKitchenOrdersStore() {
-	const { subscribe, set, update } = writable<{
-		pending: KitchenOrder[];
-		preparing: KitchenOrder[];
-		ready: KitchenOrder[];
-		loading: boolean;
-		error: string | null;
-	}>({
-		pending: [],
-		preparing: [],
-		ready: [],
-		loading: false,
-		error: null,
-	});
+// Kitchen orders store - SIMPLIFIED to plain writable
+const STORE_INSTANCE_ID = Math.random().toString(36).substring(7);
+console.log('🏭 kitchenOrders store created with ID:', STORE_INSTANCE_ID);
 
-	return {
-		subscribe,
-		
-		setPending: (orders: KitchenOrder[]) => {
-			update(state => ({ ...state, pending: orders }));
-		},
-		
-		setPreparing: (orders: KitchenOrder[]) => {
-			update(state => ({ ...state, preparing: orders }));
-		},
-		
-		setReady: (orders: KitchenOrder[]) => {
-			update(state => ({ ...state, ready: orders }));
-		},
-		
-		setAll: (pending: KitchenOrder[], preparing: KitchenOrder[], ready: KitchenOrder[]) => {
-			update(state => ({ ...state, pending, preparing, ready }));
-		},
-		
-		setLoading: (loading: boolean) => {
-			update(state => ({ ...state, loading }));
-		},
-		
-		setError: (error: string | null) => {
-			update(state => ({ ...state, error }));
-		},
-		
-		// Move order from one column to another
-		moveOrder: (orderId: number, from: 'pending' | 'preparing' | 'ready', to: 'pending' | 'preparing' | 'ready') => {
-			update(state => {
-				const order = state[from].find(o => o.id === orderId);
-				if (!order) return state;
-				
-				return {
-					...state,
-					[from]: state[from].filter(o => o.id !== orderId),
-					[to]: [...state[to], { ...order, status: to }],
-				};
-			});
-		},
-		
-		// Remove order from column
-		removeOrder: (orderId: number, column: 'pending' | 'preparing' | 'ready') => {
-			update(state => ({
-				...state,
-				[column]: state[column].filter(o => o.id !== orderId),
-			}));
-		},
-		
-		// Add single order to column (for Socket.IO real-time updates)
-		addOrder: (order: KitchenOrder, column: 'pending' | 'preparing' | 'ready') => {
-			update(state => {
-				// Check if order already exists
-				const exists = state[column].some(o => o.id === order.id || o.order_number === order.order_number);
-				if (exists) {
-					console.log('Order already exists in', column, ':', order.order_number);
-					return state;
-				}
-				
-				return {
-					...state,
-					[column]: [...state[column], order],
-				};
-			});
-		},
-		
-		// Update order in place (status change)
-		updateOrder: (orderId: number, updates: Partial<KitchenOrder>) => {
-			update(state => {
-				const columns: Array<'pending' | 'preparing' | 'ready'> = ['pending', 'preparing', 'ready'];
-				const newState = { ...state };
-				
-				for (const column of columns) {
-					const index = newState[column].findIndex(o => o.id === orderId);
-					if (index !== -1) {
-						newState[column][index] = { ...newState[column][index], ...updates };
-						break;
-					}
-				}
-				
-				return newState;
-			});
-		},
-		
-		clear: () => {
-			set({
-				pending: [],
-				preparing: [],
-				ready: [],
-				loading: false,
-				error: null,
-			});
-		}
-	};
+export const kitchenOrders = writable<{
+	pending: KitchenOrder[];
+	preparing: KitchenOrder[];
+	ready: KitchenOrder[];
+	loading: boolean;
+	error: string | null;
+}>({
+	pending: [],
+	preparing: [],
+	ready: [],
+	loading: false,
+	error: null,
+});
+
+// Helper functions to update store (NOT methods on store)
+export function setPendingOrders(orders: KitchenOrder[]) {
+	console.log('🔧 setPendingOrders called with', orders.length, 'orders', 'StoreID:', STORE_INSTANCE_ID);
+	kitchenOrders.update(state => {
+		console.log('🔧 Current state pending:', state.pending.length);
+		const newState = { ...state, pending: [...orders] };
+		console.log('🔧 New state pending:', newState.pending.length);
+		return newState;
+	});
+	console.log('🔧 update() completed');
+}
+
+export function setPreparingOrders(orders: KitchenOrder[]) {
+	kitchenOrders.update(state => ({ ...state, preparing: [...orders] }));
+}
+
+export function setReadyOrders(orders: KitchenOrder[]) {
+	kitchenOrders.update(state => ({ ...state, ready: [...orders] }));
 }
 
 /**
@@ -473,7 +399,7 @@ function createKitchenStatsStore() {
 }
 
 export const kitchenConfig = createKitchenConfigStore();
-export const kitchenOrders = createKitchenOrdersStore();
+// kitchenOrders now exported above as plain writable
 export const kitchenStats = createKitchenStatsStore();
 
 // Derived stores

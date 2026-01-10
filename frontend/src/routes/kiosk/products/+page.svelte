@@ -3,6 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { kioskConfig, multiCart } from '$lib/stores/kioskStore';
 	import { Search, Filter, ShoppingCart, X, Plus, Minus } from 'lucide-svelte';
+	import { networkStatus } from '$lib/services/networkService';
+	import { browser } from '$app/environment';
+	import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
 	
 	interface Product {
 		id: number;
@@ -33,6 +36,7 @@
 	let brands: Brand[] = [];
 	let loading = true;
 	let error = '';
+	let offlineWarning = '';
 	let searchQuery = '';
 	let showFilters = false;
 	let selectedCategory = '';
@@ -67,8 +71,67 @@
 	async function loadProducts() {
 		loading = true;
 		error = '';
+		offlineWarning = '';
+		
+		console.log('🔄 Loading products...');
+		console.log('📍 Store Code:', storeCode);
+		console.log('🌐 Network Status:', $networkStatus.isOnline ? 'Online' : 'Offline');
+		console.log('🖥️ Browser:', browser);
 		
 		try {
+			// Check if offline
+			if (!$networkStatus.isOnline) {
+				console.log('📴 Offline mode: Loading products from cache...');
+				
+				// Try to load from localStorage cache
+				if (browser) {
+					const cacheKey = `products_${storeCode}`;
+					console.log('🔑 Cache key:', cacheKey);
+					
+					const cached = localStorage.getItem(cacheKey);
+					console.log('💾 Cache found:', cached ? 'YES' : 'NO');
+					
+					if (cached) {
+						const data = JSON.parse(cached);
+						products = data.products || [];
+						console.log('📦 Loaded products from cache:', products.length);
+						
+						// Extract brands and categories
+						const brandMap = new Map<number, Brand>();
+						products.forEach(p => {
+							if (!brandMap.has(p.outlet_id)) {
+								brandMap.set(p.outlet_id, {
+									id: p.outlet_id,
+									name: p.brand_name,
+									color: p.tenant_color || '#3498db',
+									selected: true
+								});
+							}
+						});
+						brands = Array.from(brandMap.values());
+						
+						const categorySet = new Set(products.map(p => p.category_name).filter(Boolean));
+						categories = ['All', ...Array.from(categorySet)];
+						selectedCategory = 'All';
+						
+						applyFilters();
+						
+						// Show offline warning (not error!)
+						offlineWarning = '📴 Mode Offline: Menampilkan produk dari cache';
+						console.log('✅ Loaded', products.length, 'products from cache');
+						loading = false;
+						return;
+					} else {
+						console.log('❌ No cache found for key:', cacheKey);
+						throw new Error('Tidak ada data produk tersimpan. Harap hubungkan internet dan refresh halaman.');
+					}
+				} else {
+					console.log('❌ Not in browser environment');
+				}
+			}
+			
+			// ONLINE MODE: Fetch from backend
+			console.log('🌐 Online mode: Fetching from backend...');
 			const response = await fetch(
 				`/api/public/stores/${storeCode}/products/`
 			);
@@ -79,6 +142,18 @@
 			
 			const data = await response.json();
 			products = data.products || [];
+			console.log('📦 Fetched products:', products.length);
+			
+			// Cache products for offline use
+			if (browser && products.length > 0) {
+				const cacheKey = `products_${storeCode}`;
+				localStorage.setItem(cacheKey, JSON.stringify(data));
+				console.log('💾 Cached', products.length, 'products with key:', cacheKey);
+				
+				// Verify cache was saved
+				const verify = localStorage.getItem(cacheKey);
+				console.log('✅ Cache verification:', verify ? 'SUCCESS' : 'FAILED');
+			}
 			
 			// Extract unique brands
 			const brandMap = new Map<number, Brand>();
@@ -102,7 +177,9 @@
 			applyFilters();
 		} catch (err) {
 			console.error('Error loading products:', err);
-			error = 'Failed to load products. Please try again.';
+			error = err instanceof Error ? err.message : 'Failed to load products. Please try again.';
+			products = [];
+			filteredProducts = [];
 		} finally {
 			loading = false;
 		}
@@ -178,6 +255,9 @@
 <svelte:head>
 	<title>Browse Products - {$kioskConfig.storeName || 'Kiosk'}</title>
 </svelte:head>
+
+<!-- Connection Status Widget -->
+<ConnectionStatus position="top-right" />
 
 <div class="products-page-wrapper">
 	<!-- Header -->
@@ -296,6 +376,26 @@
 	
 	<!-- Products Grid -->
 	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+		<!-- Offline Warning Banner -->
+		{#if offlineWarning}
+			<div class="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center">
+						<svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						<span class="text-yellow-800 font-medium">{offlineWarning}</span>
+					</div>
+					<button
+						on:click={loadProducts}
+						class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+					>
+						Retry
+					</button>
+				</div>
+			</div>
+		{/if}
+		
 		{#if loading}
 			<div class="flex justify-center items-center py-20">
 				<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

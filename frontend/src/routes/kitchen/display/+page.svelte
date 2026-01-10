@@ -1,56 +1,232 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { kitchenConfig, kitchenOrders, kitchenStats, isKitchenConfigured } from '$lib/stores/kitchenStore';
+	import { get } from 'svelte/store';
+	import { kitchenConfig, kitchenOrders, kitchenStats, isKitchenConfigured, setPendingOrders, setPreparingOrders, setReadyOrders } from '$lib/stores/kitchenStore';
 	import KitchenOrderCard from '$lib/components/kitchen/KitchenOrderCard.svelte';
 	import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
-	import { networkService, networkStatus } from '$lib/services/networkService';
+	import { networkService, networkStatus, checkHealth } from '$lib/services/networkService';
+	import { socketService, socketStatus } from '$lib/services/socketService';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
 	// Offline mode detection
 	let offlineMode = false;
 	
+	// Offline orders storage (from Local Sync Server)
+	let offlineOrders: any[] = [];
+	
+	// WORKAROUND: Local copy for reactivity (since $store binding is broken)
+	let localPendingOrders: any[] = [];
+	let localPreparingOrders: any[] = [];
+	let localReadyOrders: any[] = [];
+	
+	// Cache corruption detection
+	let cacheCorruptionDetected = false;
+	
+	// Socket connection status (from socketService)
+	let socketConnected = false;
+	$: socketConnected = $socketStatus.localConnected;
+	
+	// Manual network status tracking (workaround for broken reactive binding)
+	let networkOnline = true;
+	let networkMode = 'checking';
+	let networkLatency: number | null = null;
+	let socketMode = 'none';
+	
+	// Status badge expand/collapse
+	let statusExpanded = false;
+	function toggleStatus() {
+		statusExpanded = !statusExpanded;
+	}
+	
+	// Polling function to force update from stores (ultimate workaround)
+	function updateNetworkStatus() {
+		const netStatus = get(networkStatus);
+		const sockStatus = get(socketStatus);
+		
+		networkOnline = netStatus.isOnline;
+		networkMode = netStatus.mode;
+		networkLatency = netStatus.latency;
+		socketMode = sockStatus.mode;
+	}
+	
+	// Subscribe manually to network status
+	let networkUnsubscribe: any;
+	let socketUnsubscribe: any;
+	let statusPollInterval: any;
+	
 	let polling: any = null;
 	let soundEnabled = false;
 	let lastPendingCount = 0;
 	let audioContext: AudioContext | null = null;
+	let unsubscribeOrders: (() => void) | undefined;
 	
 	// Subscribe to config for sound setting
 	$: soundEnabled = $kitchenConfig.soundEnabled;
 	
-	onMount(async () => {
-		// Check if kitchen is configured
-		if (!$isKitchenConfigured) {
-			goto('/kitchen/login');
-			return;
-		}
+	// Setup socket event listeners
+	function setupSocketListeners() {
+		console.log('🔌 Setting up socket event listeners for kitchen display...');
 		
-		console.log('🍳 Kitchen Display initialized:', {
-			store: $kitchenConfig.storeName,
-			outlet: $kitchenConfig.outletName,
+		// Listen for new order events (from Central Server)
+		socketService.onCentral('new_order', async (data) => {
+			console.log('🔔 New order received via Central Server:', data.order_number);
+			await fetchAllOrders();
+			playNewOrderSound();
+		});
+		
+		// Listen for order status updates (from Central Server)
+		socketService.onCentral('order_updated', async (data) => {
+			console.log('🔄 Order updated via Central Server:', data.order_number, '→', data.status);
+			await fetchAllOrders();
+		});
+		
+		// Listen for offline orders from kiosk (from Local Sync Server)
+		socketService.onLocal('order:created:offline', async (data) => {
+			console.log('🔔 Offline order received from kiosk:', data);
+			
+			// Transform offline order to match backend format
+			const offlineOrder = {
+				id: `offline-${Date.now()}`, // Temporary ID
+				order_number: data.order_number || `OFFLINE-${Date.now()}`,
+				order_group_id: null,
+				status: 'pending',
+				tenant: data.tenant_id,
+				tenant_name: data.tenant_name || 'Unknown',
+				outlet: data.checkout_data?.carts?.[0]?.outlet_id || null,
+				outlet_name: 'Unknown Outlet',
+				store: data.store_id,
+				store_name: 'Unknown Store',
+				customer_name: data.customer_name || 'Guest',
+				customer_phone: data.customer_phone || '',
+				table_number: '',
+				notes: '',
+				subtotal: (data.total_amount * 0.8).toFixed(2), // Rough estimate
+				tax_amount: (data.total_amount * 0.1).toFixed(2),
+				service_charge_amount: (data.total_amount * 0.1).toFixed(2),
+				total_amount: data.total_amount?.toFixed(2) || '0.00',
+				source: 'kiosk',
+				device_id: data.device_id || 'Unknown',
+				created_at: data.created_at || new Date().toISOString(),
+				updated_at: data.created_at || new Date().toISOString(),
+				completed_at: null,
+				items: data.checkout_data?.carts?.[0]?.items?.map((item: any) => ({
+					id: `item-${Date.now()}-${Math.random()}`,
+					product: item.product_id,
+					product_name: item.product_name || `Product ${item.product_id}`,
+					product_image: null,
+					quantity: item.quantity || 1,
+					unit_price: '0.00',
+					total_price: '0.00',
+					notes: item.notes || '',
+					modifiers: item.modifiers || [],
+					modifiers_display: []
+				})) || [],
+				wait_time: 0,
+				is_urgent: false,
+				is_offline: true // Flag to indicate this is offline order
+			};
+			
+			// Add to local pending orders for immediate display
+			localPendingOrders = [offlineOrder, ...localPendingOrders];
+			console.log('📱 Added offline order to kitchen display:', offlineOrder.order_number);
+			
+			// Play notification sound
+			playNewOrderSound();
+		});
+		
+		// Listen for when offline order is synced (from Local Sync Server)
+		socketService.onLocal('order:synced', async (data) => {
+			console.log('✅ Offline order synced:', data.order_number);
+			
+			// Remove from offline orders
+			offlineOrders = offlineOrders.filter(o => o.order_number !== data.order_number);
+			
+			// Refresh orders from backend
+			await fetchAllOrders();
+		});
+		
+		console.log('✅ Socket event listeners registered');
+	}
+
+
+onMount(async () => {
+	// Check if kitchen is configured
+	if (!$isKitchenConfigured) {
+		goto('/kitchen/login');
+		return;
+	}
+	
+	console.log('🍳 Kitchen Display initialized:', {
+		store: $kitchenConfig.storeName,
+		outlet: $kitchenConfig.outletName,
+		deviceId: $kitchenConfig.deviceId
+	});
+	console.log('🏭 Imported kitchenOrders store object:', kitchenOrders);
+	
+	// Manual subscription to network status (workaround for broken reactivity)
+	networkUnsubscribe = networkStatus.subscribe(status => {
+		networkOnline = status.isOnline;
+		networkMode = status.mode;
+		networkLatency = status.latency;
+		console.log('🌐 Network Status Updated (manual subscription):', { mode: networkMode, isOnline: networkOnline, latency: networkLatency });
+	});
+	
+	// Manual subscription to socket status
+	socketUnsubscribe = socketStatus.subscribe(status => {
+		socketMode = status.mode;
+	});
+	
+	// NUCLEAR WORKAROUND: Poll status every 2 seconds using get()
+	// Because even manual subscriptions are broken by HMR cache
+	statusPollInterval = setInterval(() => {
+		updateNetworkStatus();
+	}, 2000);
+	
+	try {
+		await socketService.connectLocal();
+		console.log('✅ Connected to Local Sync Server, joining kitchen room...');
+		
+		// Join kitchen room on Local Sync Server (after connected)
+		socketService.emitToLocal('join-kitchen', {
+			outletId: $kitchenConfig.outletId,
 			deviceId: $kitchenConfig.deviceId
 		});
+	} catch (error) {
+		console.warn('⚠️ Failed to connect to Local Sync Server:', error);
+	}
+	
+	try {
+		await socketService.connectCentral();
+		console.log('✅ Connected to Central Server, joining kitchen room...');
 		
-		// Subscribe to network status
-		networkStatus.subscribe(status => {
-			offlineMode = !status.isOnline;
-			console.log('📡 Network status:', status.isOnline ? 'Online' : 'Offline');
+		// Join kitchen room on Central Server (after connected)
+		socketService.emitToCentral('join-kitchen', {
+			outletId: $kitchenConfig.outletId,
+			deviceId: $kitchenConfig.deviceId
 		});
+	} catch (error) {
+		console.warn('⚠️ Failed to connect to Central Server:', error);
+	}
 		
-		// Initialize audio context (will be activated on first user interaction)
-		if (typeof window !== 'undefined' && window.AudioContext) {
-			audioContext = new AudioContext();
-		}
+		// Setup socket event listeners
+		setupSocketListeners();
 		
 		// Initial load
 		await fetchAllOrders();
-		await fetchStats();
 		
-		// Start polling every 10 seconds
-		polling = setInterval(async () => {
-			await fetchAllOrders();
-			await fetchStats();
+		
+// Start HTTP polling (runs every 10s to ensure data is fresh)
+	console.log('📡 Starting HTTP polling (10s interval)...');
+	polling = setInterval(async () => {
+		// Skip polling if offline to avoid error spam
+		if (!networkOnline) {
+			console.log('⏸️ Skipping poll - System offline');
+			return;
+		}
+		console.log('🔄 Polling: Fetching orders...');
+		await fetchAllOrders();
 		}, 10000);
 	});
 	
@@ -58,19 +234,51 @@
 		if (polling) {
 			clearInterval(polling);
 		}
+		if (statusPollInterval) {
+			clearInterval(statusPollInterval);
+		}
+		// Unsubscribe from stores
+		if (unsubscribeOrders) {
+			unsubscribeOrders();
+		}
+		if (networkUnsubscribe) {
+			networkUnsubscribe();
+		}
+		if (socketUnsubscribe) {
+			socketUnsubscribe();
+		}
+		// socketService manages socket cleanup automatically
 		if (audioContext) {
 			audioContext.close();
 		}
 	});
 	
 	async function fetchAllOrders() {
+		// Skip if offline
+		if (offlineMode) {
+			// Offline mode: Skip fetch (socket handles updates)
+			return;
+		}
+		
 		try {
 			const outletId = $kitchenConfig.outletId;
 			
+			// Fetch with timeout (5 seconds max)
+			const fetchWithTimeout = (url: string, timeout = 5000) => {
+				return Promise.race([
+					fetch(url),
+					new Promise<Response>((_, reject) =>
+						setTimeout(() => reject(new Error('Fetch timeout')), timeout)
+					)
+				]);
+			};
+			
 			// Fetch pending orders
-			const pendingRes = await fetch(`${API_BASE}/kitchen/orders/pending/?outlet=${outletId}`);
+			const pendingRes = await fetchWithTimeout(`${API_BASE}/kitchen/orders/pending/?outlet=${outletId}`);
 			if (pendingRes.ok) {
 				const pending = await pendingRes.json();
+				console.log('📥 Fetched pending orders:', pending.length, pending);
+				console.log('📋 First order structure:', JSON.stringify(pending[0], null, 2));
 				
 				// Play sound if new orders arrived
 				if (soundEnabled && pending.length > lastPendingCount) {
@@ -78,53 +286,51 @@
 				}
 				lastPendingCount = pending.length;
 				
-				kitchenOrders.setPending(pending);
-			}
+			// WORKAROUND: Update local variable directly (bypasses store reactivity issue)
+			localPendingOrders = [...pending];
+			console.log('✅ Updated localPendingOrders:', localPendingOrders.length);
 			
-			// Fetch preparing orders
-			const preparingRes = await fetch(`${API_BASE}/kitchen/orders/preparing/?outlet=${outletId}`);
-			if (preparingRes.ok) {
-				const preparing = await preparingRes.json();
-				kitchenOrders.setPreparing(preparing);
-			}
-			
-			// Fetch ready orders
-			const readyRes = await fetch(`${API_BASE}/kitchen/orders/ready/?outlet=${outletId}`);
-			if (readyRes.ok) {
-				const ready = await readyRes.json();
-				kitchenOrders.setReady(ready);
-			}
-			
-		} catch (err) {
-			console.error('Failed to fetch orders:', err);
-			kitchenOrders.update(state => ({ ...state, error: 'Failed to load orders' }));
+			// Still update store for consistency
+			kitchenOrders.update(state => ({ ...state, pending }));
 		}
-	}
-	
-	async function fetchStats() {
-		try {
-			const outletId = $kitchenConfig.outletId;
-			const response = await fetch(`${API_BASE}/kitchen/orders/stats/?outlet=${outletId}`);
-			
-			if (response.ok) {
-				const stats = await response.json();
-				kitchenStats.setStats(stats);
-			}
-		} catch (err) {
-			console.error('Failed to fetch stats:', err);
-		}
-	}
-	
-	function playNewOrderSound() {
-		if (!audioContext || !soundEnabled) return;
 		
-		try {
-			// Resume audio context if suspended (Chrome autoplay policy)
-			if (audioContext.state === 'suspended') {
-				audioContext.resume();
-			}
-			
-			// Generate beep sound (440Hz for 0.2s)
+		// Fetch preparing orders
+		const preparingRes = await fetchWithTimeout(`${API_BASE}/kitchen/orders/preparing/?outlet=${outletId}`);
+		if (preparingRes.ok) {
+			const preparing = await preparingRes.json();
+			console.log('📥 Fetched preparing orders:', preparing.length);
+			localPreparingOrders = [...preparing];
+			kitchenOrders.update(state => ({ ...state, preparing }));
+		}
+		
+		// Fetch ready orders
+		const readyRes = await fetchWithTimeout(`${API_BASE}/kitchen/orders/ready/?outlet=${outletId}`);
+		if (readyRes.ok) {
+			const ready = await readyRes.json();
+			localReadyOrders = [...ready];
+			kitchenOrders.update(state => ({ ...state, ready }));
+		}
+		
+		// Check for cache corruption after fetching
+		
+	} catch (err) {
+		// Silently handle fetch errors (offline mode handles this)
+		// Only log once to avoid console spam
+		if (networkOnline) {
+			console.warn('⚠️ Failed to fetch orders:', err);
+		}
+		// Trigger network health check on fetch failure
+		checkHealth();
+	}
+}
+
+// Play sound when new orders arrive
+function playNewOrderSound() {
+	try {
+		if (!audioContext) {
+			audioContext = new AudioContext();
+		}
+		
 			const oscillator = audioContext.createOscillator();
 			const gainNode = audioContext.createGain();
 			
@@ -157,8 +363,14 @@
 	
 	function handleLogout() {
 		if (confirm('Are you sure you want to logout?')) {
+			// Clear kitchen config
 			kitchenConfig.clear();
-			kitchenOrders.clear();
+			
+			// Clear all intervals
+			if (polling) clearInterval(polling);
+			if (statusPollInterval) clearInterval(statusPollInterval);
+			
+			// Redirect to login
 			goto('/kitchen/login');
 		}
 	}
@@ -176,18 +388,25 @@
 			const data = await response.json();
 			console.log(`✅ Order ${action}:`, data);
 			
-			// Optimistically move order to next column
+			// Optimistically update local arrays
 			if (action === 'start' && column === 'pending') {
-				kitchenOrders.moveOrder(orderId, 'pending', 'preparing');
+				const order = localPendingOrders.find(o => o.id === orderId);
+				if (order) {
+					localPendingOrders = localPendingOrders.filter(o => o.id !== orderId);
+					localPreparingOrders = [...localPreparingOrders, { ...order, status: 'preparing' }];
+				}
 			} else if (action === 'complete' && column === 'preparing') {
-				kitchenOrders.moveOrder(orderId, 'preparing', 'ready');
+				const order = localPreparingOrders.find(o => o.id === orderId);
+				if (order) {
+					localPreparingOrders = localPreparingOrders.filter(o => o.id !== orderId);
+					localReadyOrders = [...localReadyOrders, { ...order, status: 'ready' }];
+				}
 			} else if (action === 'serve' && column === 'ready') {
-				kitchenOrders.removeOrder(orderId, 'ready');
+				localReadyOrders = localReadyOrders.filter(o => o.id !== orderId);
 			}
 			
-			// Refresh data
+			// Refresh data from server
 			await fetchAllOrders();
-			await fetchStats();
 			
 		} catch (err) {
 			console.error(`Failed to ${action} order:`, err);
@@ -197,9 +416,6 @@
 </script>
 
 <div class="kitchen-display">
-	<!-- Connection Status Widget -->
-	<ConnectionStatus position="top-right" compact={false} />
-	
 	<!-- Header -->
 	<header class="kitchen-header">
 		<div class="header-left">
@@ -230,6 +446,32 @@
 		</div>
 		
 		<div class="header-actions">
+			<!-- Inline Connection Status (Collapsible) -->
+			<div class="inline-connection-status">
+				<button 
+					class="status-badge clickable" 
+					class:online={networkOnline} 
+					class:offline={!networkOnline}
+					class:expanded={statusExpanded}
+					on:click={toggleStatus}
+					title="Click to {statusExpanded ? 'hide' : 'show'} details"
+				>
+					<span class="status-dot"></span>
+					<div class="status-info">
+						<span class="status-label">{networkOnline ? 'Online' : 'Offline'}</span>
+						{#if statusExpanded}
+							<div class="status-details-inline">
+								<span class="detail-item">Socket: {socketMode}</span>
+								{#if networkLatency}
+									<span class="detail-item">{networkLatency}ms</span>
+								{/if}
+							</div>
+						{/if}
+					</div>
+					<span class="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
+				</button>
+			</div>
+			
 			<button 
 				class="btn-icon {soundEnabled ? 'active' : ''}"
 				on:click={toggleSound}
@@ -259,20 +501,39 @@
 			<div class="order-column pending-column">
 				<div class="column-header">
 					<h2>🆕 Pending</h2>
-					<span class="count-badge">{$kitchenOrders.pending.length}</span>
+					<span class="count-badge">{$kitchenOrders.pending.length + offlineOrders.length}</span>
 				</div>
 				<div class="order-list">
-					{#each $kitchenOrders.pending as order (order.id)}
+					<!-- Offline Orders (not yet synced) -->
+					{#each offlineOrders as order (order.order_number)}
+						<div class="offline-order-card">
+							<div class="offline-badge">📴 Pending Sync</div>
+							<div class="order-info">
+								<h3>{order.order_number}</h3>
+								<p class="customer">{order.customer_name}</p>
+								<p class="total">Rp {order.total_amount.toLocaleString()}</p>
+								<p class="payment">{order.payment_method}</p>
+							</div>
+							<div class="offline-note">
+								Waiting for sync to backend...
+							</div>
+						</div>
+					{/each}
+					
+					<!-- Online/Synced Orders -->
+					{#each localPendingOrders as order (order.id)}
 						<KitchenOrderCard 
 							{order}
 							column="pending"
 							on:action={(e) => handleOrderAction(order.id, e.detail.action, 'pending')}
 						/>
 					{:else}
-						<div class="empty-state">
-							<p>No pending orders</p>
-							<span class="emoji">✅</span>
-						</div>
+						{#if offlineOrders.length === 0}
+							<div class="empty-state">
+								<p>No pending orders</p>
+								<span class="emoji">✅</span>
+							</div>
+						{/if}
 					{/each}
 				</div>
 			</div>
@@ -281,10 +542,10 @@
 			<div class="order-column preparing-column">
 				<div class="column-header">
 					<h2>👨‍🍳 Preparing</h2>
-					<span class="count-badge">{$kitchenOrders.preparing.length}</span>
-				</div>
-				<div class="order-list">
-					{#each $kitchenOrders.preparing as order (order.id)}
+				<span class="count-badge">{localPreparingOrders.length}</span>
+			</div>
+			<div class="order-list">
+				{#each localPreparingOrders as order (order.id)}
 						<KitchenOrderCard 
 							{order}
 							column="preparing"
@@ -303,10 +564,10 @@
 			<div class="order-column ready-column">
 				<div class="column-header">
 					<h2>✅ Ready</h2>
-					<span class="count-badge">{$kitchenOrders.ready.length}</span>
-				</div>
-				<div class="order-list">
-					{#each $kitchenOrders.ready as order (order.id)}
+				<span class="count-badge">{localReadyOrders.length}</span>
+			</div>
+			<div class="order-list">
+				{#each localReadyOrders as order (order.id)}
 						<KitchenOrderCard 
 							{order}
 							column="ready"
@@ -330,6 +591,73 @@
 		background: #f3f4f6;
 		display: flex;
 		flex-direction: column;
+	}
+	
+	/* Cache Warning Banner */
+	.cache-warning-banner {
+		background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+		color: #78350f;
+		padding: 1rem 1.5rem;
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+		position: relative;
+		z-index: 100;
+		animation: slideDown 0.3s ease-out;
+	}
+	
+	@keyframes slideDown {
+		from {
+			transform: translateY(-100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+	
+	.warning-icon {
+		font-size: 2rem;
+		flex-shrink: 0;
+	}
+	
+	.warning-content {
+		flex: 1;
+	}
+	
+	.warning-content strong {
+		display: block;
+		font-size: 1rem;
+		margin-bottom: 0.25rem;
+	}
+	
+	.warning-content p {
+		margin: 0;
+		font-size: 0.875rem;
+		opacity: 0.9;
+	}
+	
+	.close-warning {
+		background: rgba(0, 0, 0, 0.1);
+		border: none;
+		color: #78350f;
+		width: 32px;
+		height: 32px;
+		border-radius: 50%;
+		cursor: pointer;
+		font-size: 1.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+		flex-shrink: 0;
+	}
+	
+	.close-warning:hover {
+		background: rgba(0, 0, 0, 0.2);
+		transform: scale(1.1);
 	}
 	
 	/* Header */
@@ -407,6 +735,103 @@
 		display: flex;
 		gap: 0.75rem;
 		align-items: center;
+	}
+	
+	/* Inline Connection Status */
+	.inline-connection-status {
+		margin-right: 0.5rem;
+	}
+	
+	.status-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		border-radius: 8px;
+		background: #f3f4f6;
+		transition: all 0.3s ease;
+		border: 1px solid transparent;
+	}
+	
+	.status-badge.clickable {
+		cursor: pointer;
+		border: none;
+	}
+	
+	.status-badge.clickable:hover {
+		transform: scale(1.02);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+	
+	.status-badge.expanded {
+		padding: 0.5rem 1rem;
+	}
+	
+	.status-badge.online {
+		background: #d1fae5;
+		border: 1px solid #10b981;
+	}
+	
+	.status-badge.offline {
+		background: #fee2e2;
+		border: 1px solid #ef4444;
+	}
+	
+	.status-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+	
+	.status-badge.online .status-dot {
+		background: #10b981;
+		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+		animation: pulse 2s ease-in-out infinite;
+	}
+	
+	.status-badge.offline .status-dot {
+		background: #ef4444;
+		box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3);
+	}
+	
+	.status-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 0;
+	}
+	
+	.status-label {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #1f2937;
+		white-space: nowrap;
+	}
+	
+	.status-details-inline {
+		display: flex;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		color: #6b7280;
+		margin-top: 0.25rem;
+		animation: slideDown 0.2s ease-out;
+	}
+	
+	.detail-item {
+		white-space: nowrap;
+	}
+	
+	.toggle-icon {
+		font-size: 0.625rem;
+		color: #6b7280;
+		margin-left: 0.25rem;
+		transition: transform 0.2s ease;
+	}
+	
+	@keyframes pulse {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50% { opacity: 0.6; transform: scale(0.95); }
 	}
 	
 	.btn-icon {
@@ -521,6 +946,68 @@
 	.empty-state .emoji {
 		font-size: 3rem;
 		opacity: 0.5;
+	}
+	
+	/* Offline Order Card */
+	.offline-order-card {
+		background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+		border: 2px dashed #f59e0b;
+		border-radius: 12px;
+		padding: 1rem;
+		margin-bottom: 1rem;
+		box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+	}
+	
+	.offline-badge {
+		display: inline-block;
+		background: #f59e0b;
+		color: white;
+		padding: 0.25rem 0.75rem;
+		border-radius: 6px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		margin-bottom: 0.5rem;
+	}
+	
+	.offline-order-card .order-info {
+		margin: 0.75rem 0;
+	}
+	
+	.offline-order-card h3 {
+		font-size: 1.125rem;
+		font-weight: 700;
+		color: #92400e;
+		margin: 0 0 0.5rem 0;
+	}
+	
+	.offline-order-card .customer {
+		font-size: 0.875rem;
+		color: #78350f;
+		margin: 0.25rem 0;
+	}
+	
+	.offline-order-card .total {
+		font-size: 1rem;
+		font-weight: 600;
+		color: #92400e;
+		margin: 0.25rem 0;
+	}
+	
+	.offline-order-card .payment {
+		font-size: 0.75rem;
+		color: #78350f;
+		margin: 0.25rem 0;
+	}
+	
+	.offline-note {
+		margin-top: 0.75rem;
+		padding: 0.5rem;
+		background: rgba(255, 255, 255, 0.6);
+		border-radius: 6px;
+		font-size: 0.75rem;
+		color: #78350f;
+		text-align: center;
+		font-style: italic;
 	}
 	
 	.error-message {

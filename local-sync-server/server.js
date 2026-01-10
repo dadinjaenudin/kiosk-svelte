@@ -29,7 +29,11 @@ const io = socketIo(httpServer, {
     origin: '*',
     methods: ['GET', 'POST']
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000, // 60 seconds before considering connection dead
+  pingInterval: 25000, // Send ping every 25 seconds
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e8
 });
 
 // Store connected clients and rooms
@@ -49,6 +53,29 @@ app.get('/health', (req, res) => {
     connections: clients.size,
     rooms: roomStats,
     uptime: process.uptime()
+  });
+});
+
+// HTTP endpoint to emit socket events (called by Django backend)
+app.post('/emit', (req, res) => {
+  const { event, data } = req.body;
+  
+  if (!event || !data) {
+    return res.status(400).json({ error: 'Missing event or data' });
+  }
+  
+  const outletId = data.outlet_id || data.tenant_id;
+  
+  console.log(`[${new Date().toISOString()}] 📡 HTTP emit: ${event} for outlet ${outletId}`);
+  
+  // Broadcast to outlet room
+  io.to(`outlet_${outletId}`).emit(event, data);
+  
+  res.json({
+    success: true,
+    event,
+    outletId,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -118,6 +145,34 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Kitchen joins room (alternative to subscribe_outlet)
+  socket.on('join-kitchen', (data) => {
+    const { outletId, deviceId } = data;
+    const client = clients.get(socket.id);
+    
+    if (client) {
+      client.outletId = outletId;
+      client.type = 'kitchen';
+      client.deviceId = deviceId;
+      
+      socket.join(`outlet_${outletId}`);
+      
+      // Track outlet room
+      if (!outletRooms.has(outletId)) {
+        outletRooms.set(outletId, new Set());
+      }
+      outletRooms.get(outletId).add(socket.id);
+      
+      console.log(`[${new Date().toISOString()}] 🍳 Kitchen ${socket.id} joined outlet_${outletId} (device: ${deviceId})`);
+      
+      socket.emit('kitchen-joined', {
+        outletId,
+        deviceId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Identify client type (POS or Kitchen)
   socket.on('identify', (data) => {
     const client = clients.get(socket.id);
@@ -142,6 +197,18 @@ io.on('connection', (socket) => {
       orderId: order.id || order.order_number,
       timestamp: new Date().toISOString()
     });
+  });
+
+  // Handle offline order created (from kiosk in offline mode)
+  socket.on('order:created:offline', (order) => {
+    const outletId = order.checkout_data?.carts?.[0]?.outlet_id || order.store_id;
+    
+    console.log(`[${new Date().toISOString()}] 📴 Offline order received: ${order.order_number} for outlet ${outletId}`);
+    
+    // Broadcast to all kitchen displays in the same outlet
+    io.to(`outlet_${outletId}`).emit('order:created:offline', order);
+    
+    console.log(`[${new Date().toISOString()}] ✅ Broadcasted offline order to outlet_${outletId} room`);
   });
 
   // Handle order status update from Kitchen
@@ -185,10 +252,10 @@ io.on('connection', (socket) => {
   });
 
   // Handle client disconnect
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
     const client = clients.get(socket.id);
     if (client) {
-      console.log(`[${new Date().toISOString()}] ❌ Client disconnected: ${socket.id} (${client.type || 'unknown'})`);
+      console.log(`[${new Date().toISOString()}] ❌ Client disconnected: ${socket.id} (${client.type || 'unknown'}) - Reason: ${reason}`);
       
       // Remove from outlet room
       if (client.outletId && outletRooms.has(client.outletId)) {
@@ -199,6 +266,8 @@ io.on('connection', (socket) => {
       }
       
       clients.delete(socket.id);
+    } else {
+      console.log(`[${new Date().toISOString()}] ❌ Unknown client disconnected: ${socket.id} - Reason: ${reason}`);
     }
   });
 

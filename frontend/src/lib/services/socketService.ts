@@ -110,29 +110,61 @@ class SocketService {
 
 	/**
 	 * Connect to Local Sync Server Socket.IO
+	 * Returns a Promise that resolves when connected
 	 */
-	connectLocal(): void {
-		if (!browser) {
-			console.warn('🔴 Cannot connect to Local Socket: Not in browser context');
-			return;
-		}
+	connectLocal(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			if (!browser) {
+				console.warn('🔴 Cannot connect to Local Socket: Not in browser context');
+				reject(new Error('Not in browser context'));
+				return;
+			}
 
-		if (this.localSocket?.connected) {
-			console.log('🟢 Local Socket: Already connected');
-			return;
-		}
+			if (this.localSocket?.connected) {
+				console.log('🟢 Local Socket: Already connected');
+				resolve();
+				return;
+			}
 
-		console.log('🔄 Connecting to Local Socket.IO:', this.LOCAL_URL);
+			console.log('🔄 Connecting to Local Socket.IO:', this.LOCAL_URL);
+			console.log('🔍 Connection config:', {
+				url: this.LOCAL_URL,
+				transports: ['websocket', 'polling'],
+				reconnection: true
+			});
 
-		this.localSocket = io(this.LOCAL_URL, {
-			transports: ['websocket', 'polling'],
-			reconnection: true,
-			reconnectionAttempts: this.RECONNECT_ATTEMPTS,
-			reconnectionDelay: this.RECONNECT_DELAY,
-			timeout: 5000
+			this.localSocket = io(this.LOCAL_URL, {
+				transports: ['websocket', 'polling'],
+				reconnection: true,
+				reconnectionAttempts: this.RECONNECT_ATTEMPTS,
+				reconnectionDelay: this.RECONNECT_DELAY,
+				timeout: 5000
+			});
+
+			// Setup handlers first
+			this.setupLocalHandlers();
+
+			// Wait for connection or timeout
+			const timeout = setTimeout(() => {
+				console.warn('⚠️ Local Socket: Connection timeout, resolving anyway (will retry in background)');
+				console.warn('   Check if Local Sync Server is running on port 3001');
+				resolve();
+			}, 6000); // 6 seconds timeout
+
+			// Resolve when connected
+			this.localSocket.once('connect', () => {
+				console.log('✅ Local Socket: Connected successfully!');
+				clearTimeout(timeout);
+				resolve();
+			});
+
+			// Reject on immediate error (but auto-reconnect will continue)
+			this.localSocket.once('connect_error', (error) => {
+				// Don't reject, just warn - socket.io will auto-retry
+				console.warn('⚠️ Local Socket: Initial connection error, will auto-retry:', error.message);
+				console.warn('   Make sure Local Sync Server is running: cd local-sync-server && npm run dev');
+			});
 		});
-
-		this.setupLocalHandlers();
 	}
 
 	/**
@@ -161,11 +193,15 @@ class SocketService {
 		});
 
 		this.centralSocket.on('connect_error', (error) => {
-			console.error('❌ Central Socket: Connection error', error.message);
-			this.status.update(s => ({
-				...s,
-				reconnectAttempts: s.reconnectAttempts + 1
-			}));
+			// Suppress repetitive WebSocket errors (expected when Django doesn't have Socket.IO)
+			this.status.update(s => {
+				const newAttempts = s.reconnectAttempts + 1;
+				// Only log on first attempt and every 10th attempt to reduce noise
+				if (newAttempts === 1 || newAttempts % 10 === 0) {
+					console.info('ℹ️ Central Server WebSocket unavailable (using HTTP polling instead)');
+				}
+				return { ...s, reconnectAttempts: newAttempts };
+			});
 		});
 
 		// Custom events
@@ -389,6 +425,64 @@ class SocketService {
 	 */
 	getStatus() {
 		return this.status;
+	}
+
+	/**
+	 * Emit event to Local Sync Server
+	 */
+	emitToLocal(event: string, data: any): void {
+		if (!this.localSocket) {
+			console.warn('⚠️ Cannot emit to Local Server: Socket not initialized');
+			return;
+		}
+		
+		if (!this.localSocket.connected) {
+			console.warn('⚠️ Cannot emit to Local Server: Not connected (state:', this.localSocket.io.readyState, ')');
+			console.warn('   Attempting to reconnect...');
+			this.localSocket.connect();
+			return;
+		}
+
+		// Emit to Local Sync Server
+		console.log('📤 Emitting to Local Server:', event, data);
+		this.localSocket.emit(event, data);
+	}
+
+	/**
+	 * Emit event to Central Server
+	 */
+	emitToCentral(event: string, data: any): void {
+		if (!this.centralSocket?.connected) {
+			console.warn('⚠️ Cannot emit to Central Server: Not connected');
+			return;
+		}
+
+		// Emit to Central Server
+		this.centralSocket.emit(event, data);
+	}
+
+	/**
+	 * Register event listener on Local Socket
+	 */
+	onLocal(event: string, handler: (data: any) => void): void {
+		if (!this.localSocket) {
+			console.warn(`⚠️ Cannot register listener for ${event}: Local Socket not initialized`);
+			return;
+		}
+
+		this.localSocket.on(event, handler);
+	}
+
+	/**
+	 * Register event listener on Central Socket
+	 */
+	onCentral(event: string, handler: (data: any) => void): void {
+		if (!this.centralSocket) {
+			console.warn(`⚠️ Cannot register listener for ${event}: Central Socket not initialized`);
+			return;
+		}
+
+		this.centralSocket.on(event, handler);
 	}
 
 	/**
