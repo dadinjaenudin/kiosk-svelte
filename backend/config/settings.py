@@ -27,6 +27,7 @@ ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',  # Django Channels ASGI server (must be first)
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,6 +44,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_celery_beat',
     'django_extensions',
+    'channels',  # Django Channels for WebSocket support
     
     # Local apps
     'apps.core',  # Core models and utilities
@@ -54,6 +56,7 @@ INSTALLED_APPS = [
     'apps.kitchen',
     'apps.promotions',  # Promotion management
     'apps.customers',  # Customer management
+    'apps.realtime',  # Real-time WebSocket support
 ]
 
 MIDDLEWARE = [
@@ -89,6 +92,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 DATABASES = {
@@ -106,6 +110,16 @@ CACHES = {
         'KEY_PREFIX': 'pos',
         'TIMEOUT': 300,
     }
+}
+
+# Django Channels Layer (Redis)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [env('REDIS_URL', default='redis://localhost:6379/0')],
+        },
+    },
 }
 
 # Password validation

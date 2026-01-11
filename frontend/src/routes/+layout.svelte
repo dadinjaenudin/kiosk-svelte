@@ -3,11 +3,16 @@
 	import { browser } from '$app/environment';
 	import '../app.css';
 	import { initializeTenantContext, currentTenant, tenantReady } from '$lib/stores/tenant.js';
+	import { masterDataService } from '$lib/services/masterDataService';
+	import { networkService } from '$lib/services/networkService';
 	
 	let loading = true;
 	
 	onMount(async () => {
 		if (browser) {
+			// Start network monitoring
+			networkService.startMonitoring();
+			
 			// Check if we have auth token
 			const hasToken = localStorage.getItem('access_token');
 			
@@ -17,6 +22,21 @@
 				if (!success) {
 					console.warn('Failed to initialize tenant context');
 				}
+			}
+			
+			// Pre-fetch master data if online
+			const status = networkService.getStatus();
+			if (status.mode === 'online') {
+				try {
+					console.log('🔄 Pre-fetching master data...');
+					await masterDataService.preFetchData();
+					console.log('✅ Master data synced successfully');
+				} catch (error) {
+					console.error('❌ Master data sync failed:', error);
+					// App tetap jalan, gunakan cached data
+				}
+			} else {
+				console.log('📴 Offline mode - using cached master data');
 			}
 			
 			loading = false;

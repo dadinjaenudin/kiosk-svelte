@@ -19,7 +19,7 @@ import { PUBLIC_API_URL } from '$env/static/public';
 import { browser } from '$app/environment';
 import type { KitchenOrder } from '$lib/stores/kitchenStore';
 
-export type SocketMode = 'central' | 'local' | 'dual' | 'none';
+export type SocketMode = 'central' | 'local' | 'dual' | 'polling' | 'none';
 
 export interface SocketStatus {
 	centralConnected: boolean;
@@ -27,6 +27,7 @@ export interface SocketStatus {
 	mode: SocketMode;
 	lastConnectTime: Date | null;
 	reconnectAttempts: number;
+	isPolling: boolean;
 }
 
 export interface OrderEventData {
@@ -67,6 +68,11 @@ class SocketService {
 	private readonly LOCAL_URL = 'http://localhost:3001'; // Local Sync Server
 	private readonly RECONNECT_ATTEMPTS = 5;
 	private readonly RECONNECT_DELAY = 3000;
+	
+	// Polling mechanism (fallback when WebSocket unavailable)
+	private pollingInterval: NodeJS.Timeout | null = null;
+	private readonly POLLING_INTERVAL = 3000; // Poll every 3 seconds
+	private lastPolledOrderId: number | null = null;
 
 	constructor() {
 		// Parse Central Server URL for Socket.IO
@@ -77,7 +83,8 @@ class SocketService {
 			localConnected: false,
 			mode: 'none',
 			lastConnectTime: null,
-			reconnectAttempts: 0
+			reconnectAttempts: 0,
+			isPolling: false
 		});
 	}
 
@@ -437,8 +444,7 @@ class SocketService {
 		}
 		
 		if (!this.localSocket.connected) {
-			console.warn('⚠️ Cannot emit to Local Server: Not connected (state:', this.localSocket.io.readyState, ')');
-			console.warn('   Attempting to reconnect...');
+		console.warn('⚠️ Cannot emit to Local Server: Not connected');
 			this.localSocket.connect();
 			return;
 		}
@@ -501,11 +507,114 @@ class SocketService {
 			this.localSocket = null;
 		}
 
+		this.stopPolling();
+
 		this.updateStatus({
 			centralConnected: false,
 			localConnected: false,
 			mode: 'none'
 		});
+	}
+
+	/**
+	 * Start polling to Local Server (fallback when WebSocket unavailable)
+	 */
+	startPolling(outletId: number): void {
+		if (!browser) {
+			console.warn('🔴 Cannot start polling: Not in browser context');
+			return;
+		}
+
+		if (this.pollingInterval) {
+			console.log('⚠️ Polling already active');
+			return;
+		}
+
+		console.log(`🔄 Starting polling to Local Server (outlet ${outletId}) every ${this.POLLING_INTERVAL}ms`);
+
+		this.status.update(s => ({ ...s, isPolling: true, mode: 'polling' }));
+
+		// Initial poll
+		this.pollLocalServer(outletId);
+
+		// Start interval
+		this.pollingInterval = setInterval(() => {
+			this.pollLocalServer(outletId);
+		}, this.POLLING_INTERVAL);
+	}
+
+	/**
+	 * Stop polling
+	 */
+	stopPolling(): void {
+		if (this.pollingInterval) {
+			console.log('🛑 Stopping polling to Local Server');
+			clearInterval(this.pollingInterval);
+			this.pollingInterval = null;
+			this.lastPolledOrderId = null;
+			this.status.update(s => ({ ...s, isPolling: false }));
+		}
+	}
+
+	/**
+	 * Poll Local Server for new orders
+	 */
+	private async pollLocalServer(outletId: number): Promise<void> {
+		try {
+			// Construct URL with last order ID if available
+			let url = `${this.LOCAL_URL}/api/orders?outlet_id=${outletId}`;
+			if (this.lastPolledOrderId) {
+				url += `&since_id=${this.lastPolledOrderId}`;
+			}
+
+			const response = await fetch(url, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+
+			if (!response.ok) {
+				console.warn(`⚠️ Polling failed: ${response.statusText}`);
+				return;
+			}
+
+			const orders: OrderEventData[] = await response.json();
+
+			// Emit new orders to handlers
+			if (orders.length > 0) {
+				console.log(`📦 Polled ${orders.length} new orders from Local Server`);
+
+				orders.forEach(order => {
+					// Update last polled ID
+					if (order.id > (this.lastPolledOrderId || 0)) {
+						this.lastPolledOrderId = order.id;
+					}
+
+					// Emit to handlers (simulate 'new_order' event)
+					this.emitToHandlers('new_order', order);
+				});
+			}
+
+		} catch (error) {
+			console.error('❌ Polling error:', error);
+		}
+	}
+
+	/**
+	 * Emit event to registered handlers
+	 */
+	private emitToHandlers(event: string, data: any): void {
+		const handlers = this.eventHandlers.get(event);
+		if (handlers) {
+			handlers.forEach(handler => {
+				try {
+					handler(data);
+				} catch (error) {
+					console.error(`Error in handler for ${event}:`, error);
+				}
+			});
+		}
 	}
 
 	/**

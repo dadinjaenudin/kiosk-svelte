@@ -29,5 +29,5 @@ RUN mkdir -p staticfiles media logs
 # Expose port
 EXPOSE 8000
 
-# Run migrations and start server
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+# Run migrations and start server with Daphne (ASGI for WebSocket support)
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]

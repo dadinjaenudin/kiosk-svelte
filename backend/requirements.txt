@@ -17,6 +17,11 @@ redis==5.0.1
 django-celery-beat==2.5.0
 django-redis==5.4.0
 
+# Django Channels (Real-time WebSocket)
+channels==4.0.0
+channels-redis==4.1.0
+daphne==4.0.0
+
 # Database & Migrations
 django-extensions==3.2.3
 

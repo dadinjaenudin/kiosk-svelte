@@ -68,6 +68,11 @@ app.post('/emit', (req, res) => {
   
   console.log(`[${new Date().toISOString()}] 📡 HTTP emit: ${event} for outlet ${outletId}`);
   
+  // Store order for polling fallback
+  if (event === 'new_order' || event === 'order_updated') {
+    storeOrderForPolling(data);
+  }
+  
   // Broadcast to outlet room
   io.to(`outlet_${outletId}`).emit(event, data);
   
@@ -102,6 +107,58 @@ app.get('/outlets', (req, res) => {
   });
   res.json({ outlets });
 });
+
+// Store recent orders for polling (in-memory cache)
+const recentOrders = new Map(); // outletId -> Array of orders
+const MAX_ORDERS_PER_OUTLET = 100; // Keep last 100 orders
+
+// Polling endpoint - Get new orders since last poll
+app.get('/api/orders', (req, res) => {
+  const { outlet_id, since_id } = req.query;
+  
+  if (!outlet_id) {
+    return res.status(400).json({ error: 'Missing outlet_id parameter' });
+  }
+
+  const outletId = parseInt(outlet_id);
+  const sinceId = since_id ? parseInt(since_id) : 0;
+
+  console.log(`[${new Date().toISOString()}] 📊 Polling request: outlet ${outletId}, since_id ${sinceId}`);
+
+  // Get orders for this outlet
+  const orders = recentOrders.get(outletId) || [];
+  
+  // Filter orders newer than since_id
+  const newOrders = orders.filter(order => order.id > sinceId);
+
+  console.log(`[${new Date().toISOString()}] 📦 Returning ${newOrders.length} new orders`);
+
+  res.json(newOrders);
+});
+
+// Store order for polling (called when order received via HTTP emit or WebSocket)
+function storeOrderForPolling(order) {
+  const outletId = order.outlet_id || order.tenant_id;
+  
+  if (!outletId) return;
+
+  if (!recentOrders.has(outletId)) {
+    recentOrders.set(outletId, []);
+  }
+
+  const orders = recentOrders.get(outletId);
+  orders.push({
+    ...order,
+    polled_at: new Date().toISOString()
+  });
+
+  // Keep only last MAX_ORDERS_PER_OUTLET orders
+  if (orders.length > MAX_ORDERS_PER_OUTLET) {
+    orders.shift(); // Remove oldest
+  }
+
+  console.log(`[${new Date().toISOString()}] 💾 Stored order ${order.id || order.order_number} for polling (${orders.length} total)`);
+}
 
 // Socket.IO connection handler
 io.on('connection', (socket) => {

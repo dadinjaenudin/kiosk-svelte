@@ -19,6 +19,14 @@ from apps.tenants.models import Outlet, Store
 from apps.products.models import Product
 from apps.core.permissions import IsManagerOrAbove
 
+# Real-time broadcasting
+try:
+    from apps.realtime.utils import broadcast_new_order
+    REALTIME_ENABLED = True
+except ImportError:
+    REALTIME_ENABLED = False
+    print('[WARNING] apps.realtime not available - real-time broadcasting disabled')
+
 
 class PublicOrderGroupViewSet(viewsets.ModelViewSet):
     """
@@ -139,6 +147,34 @@ class PublicOrderGroupViewSet(viewsets.ModelViewSet):
             # Calculate order totals
             order.calculate_totals()
             created_orders.append(order)
+            
+            # Broadcast new order to real-time channels
+            if REALTIME_ENABLED:
+                try:
+                    order_data = {
+                        'id': order.id,
+                        'order_number': order.order_number,
+                        'outlet_id': outlet.id,
+                        'tenant_id': outlet.tenant.id,
+                        'status': order.status,
+                        'customer_name': order.customer_name,
+                        'customer_phone': order.customer_phone,
+                        'total_amount': str(order.total_amount),
+                        'created_at': order.created_at.isoformat(),
+                        'items': [
+                            {
+                                'product_name': item.product_name,
+                                'quantity': item.quantity,
+                                'unit_price': str(item.unit_price),
+                                'kitchen_station_code': item.kitchen_station_code,
+                            }
+                            for item in order.items.all()
+                        ]
+                    }
+                    broadcast_new_order(order_data)
+                    print(f'[Broadcast] New order {order.order_number} to outlet {outlet.id}')
+                except Exception as e:
+                    print(f'[ERROR] Failed to broadcast order: {e}')
         
         # Calculate order group total
         order_group.calculate_total()
