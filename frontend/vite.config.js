@@ -8,6 +8,13 @@ export default defineConfig({
 		VitePWA({
 			registerType: 'autoUpdate',
 			includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+			// Use custom service worker with Workbox
+			srcDir: 'src',
+			filename: 'service-worker.js',
+			strategies: 'injectManifest',
+			injectManifest: {
+				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
+			},
 			manifest: {
 				name: 'POS F&B Kiosk',
 				short_name: 'POS Kiosk',
@@ -35,24 +42,9 @@ export default defineConfig({
 					}
 				]
 			},
-			workbox: {
-				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
-				runtimeCaching: [
-					{
-						urlPattern: /^https:\/\/api\./,
-						handler: 'NetworkFirst',
-						options: {
-							cacheName: 'api-cache',
-							expiration: {
-								maxEntries: 100,
-								maxAgeSeconds: 60 * 5 // 5 minutes
-							},
-							cacheableResponse: {
-								statuses: [0, 200]
-							}
-						}
-					}
-				]
+			devOptions: {
+				enabled: true,
+				type: 'module'
 			}
 		})
 	],

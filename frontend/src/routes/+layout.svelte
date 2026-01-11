@@ -5,11 +5,22 @@
 	import { initializeTenantContext, currentTenant, tenantReady } from '$lib/stores/tenant.js';
 	import { masterDataService } from '$lib/services/masterDataService';
 	import { networkService } from '$lib/services/networkService';
+	import { serviceWorkerManager } from '$lib/services/serviceWorkerManager';
 	
 	let loading = true;
 	
 	onMount(async () => {
 		if (browser) {
+			// Register Service Worker for offline support
+			try {
+				const swRegistered = await serviceWorkerManager.register();
+				if (swRegistered) {
+					console.log('✅ Service Worker registered');
+				}
+			} catch (error) {
+				console.error('❌ Service Worker registration failed:', error);
+			}
+			
 			// Start network monitoring
 			networkService.startMonitoring();
 			
