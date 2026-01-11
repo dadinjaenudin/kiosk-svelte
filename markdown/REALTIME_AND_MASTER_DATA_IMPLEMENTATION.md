@@ -1,8 +1,165 @@
 # Real-time Updates & Master Data Pre-fetching Implementation
 
+## ⚠️ CRITICAL ISSUES & ARCHITECTURAL REVIEW
+
+> **Status:** IMPLEMENTED - Requires refactoring based on F&B industry best practices
+
+### Issues Identified
+
+#### 🔴 Issue #1: Over-complicated Communication Channels
+**Problem:** Terlalu banyak channel komunikasi aktif bersamaan
+```
+Current Architecture (OVERLY COMPLEX):
+Kiosk
+ ├─ WebSocket (Django Channels - central)
+ ├─ WebSocket (Socket.IO - local)
+ ├─ HTTP Polling (fallback)
+ └─ Service Worker (background sync)
+```
+
+**Impact:**
+- Hard to debug (4 different communication paths)
+- Race conditions between channels
+- High cognitive load for maintenance
+- Unclear "single source of truth"
+
+**Recommended:**
+```
+Simplified Architecture:
+Kiosk
+ ├─ IndexedDB (PRIMARY SOURCE)
+ ├─ Service Worker (sync orchestrator)
+ ├─ Local Sync Server (LAN sync only)
+ └─ Cloud Backend (eventual consistency)
+```
+
+#### 🔴 Issue #2: Local Sync Server - Data Loss Risk
+**Problem:** In-memory storage only (100 orders/outlet)
+```javascript
+const orderCache = new Map<number, Order[]>(); // ❌ VOLATILE
+```
+
+**Impact:**
+- ⚡ PLN mati = data hilang
+- 🔄 Server restart = order hilang
+- 🔥 Raspberry Pi crash = data loss
+
+**Recommended:**
+```javascript
+// ✅ MUST USE PERSISTENT STORAGE
+Local Sync Server
+ ├─ SQLite / DuckDB
+ ├─ WAL mode (Write-Ahead Logging)
+ └─ Auto-backup every 5 minutes
+```
+
+#### 🔴 Issue #3: Non-deterministic Order IDs
+**Problem:** Order ID menggunakan `Date.now()` atau auto-increment
+```javascript
+// ❌ CURRENT (collision risk)
+order_id = Date.now(); // Multiple devices = collision
+order_id = Math.random(); // Not sortable
+```
+
+**Impact:**
+- Collision saat multiple devices offline
+- Tidak bisa sort by creation time
+- Sulit merge saat sync
+
+**Recommended:**
+```javascript
+// ✅ USE ULID (Universally Unique Lexicographically Sortable ID)
+import { ulid } from 'ulid';
+
+order_id = ulid(); // "01HTXK9Y9F3N7D4R8W5S1MZQ9C"
+// - Sortable by timestamp
+// - 128-bit unique (no collision)
+// - Offline-safe
+// - No central coordination needed
+```
+
+#### 🔴 Issue #4: No Single Source of Truth (Offline)
+**Problem:** Saat offline, data tersebar di:
+- IndexedDB (Kiosk)
+- Local Sync Server memory
+- Service Worker queue
+- Backend (unreachable)
+
+**Impact:**
+- Tidak jelas mana data yang "benar"
+- Sulit reconcile saat online kembali
+- Potential data inconsistency
+
+**Recommended:**
+```
+Golden Rule for F&B POS:
+┌─────────────────────────────────────────┐
+│ "IndexedDB is the SINGLE SOURCE OF      │
+│  TRUTH during offline mode"             │
+│                                         │
+│  Backend = eventual consistency sink    │
+│  Local Sync = broadcast only            │
+│  Service Worker = sync orchestrator     │
+└─────────────────────────────────────────┘
+```
+
+#### 🔴 Issue #5: No Conflict Resolution Strategy
+**Problem:** Tidak ada aturan jelas saat data conflict
+
+Example scenarios:
+```
+Scenario 1: Order dibuat offline di 2 devices dengan ID sama
+Scenario 2: Status update bersamaan (confirmed vs cancelled)
+Scenario 3: Price change saat order sedang di-process
+Scenario 4: Item out-of-stock saat offline order sync
+```
+
+**Impact:**
+- Data corruption possible
+- Lost orders
+- Wrong totals
+
+**Recommended: F&B Conflict Resolution Matrix**
+
+| Conflict Case | Resolution Strategy | Rationale |
+|---------------|---------------------|-----------|
+| **Order created offline** | Always ACCEPT | Customer already paid |
+| **Status update** | Last-write-wins (LWW) | Timestamp-based |
+| **Cancel vs Complete** | Complete > Cancel | Cannot un-cook food |
+| **Price change** | Snapshot at order time | Legal requirement |
+| **Modifier change** | Use order snapshot | Kitchen follows original |
+| **Duplicate order_id** | ULID prevents this | UUID collision = impossible |
+
+**Critical Rule:**
+```javascript
+// ✅ PRICE & PROMO MUST BE SNAPSHOT
+order = {
+  id: ulid(),
+  items: [
+    {
+      product_id: 123,
+      product_name: "Nasi Goreng", // snapshot
+      price: 25000,                 // snapshot (not reference!)
+      modifiers: [...],             // snapshot
+      promotions: [...]             // snapshot
+    }
+  ],
+  total_price: 50000, // calculated ONCE at order creation
+  created_at: new Date().toISOString(),
+  synced_at: null
+}
+
+// ❌ NEVER re-calculate price from product reference
+// ✅ Always use snapshot values
+```
+
+---
+
 ## Overview
 
 Implementasi **Offline-First Architecture** dengan triple-layer redundancy: WebSocket untuk real-time updates, HTTP Polling untuk fallback lokal, dan Service Worker untuk background sync. Sistem ini memastikan Kitchen dapat tetap beroperasi 100% offline dengan data integrity yang terjamin.
+
+> **⚠️ WARNING:** Current implementation memiliki beberapa architectural issues yang perlu diperbaiki sebelum production. Lihat section "CRITICAL ISSUES" di atas.
 
 ## Technology Stack
 
@@ -28,13 +185,17 @@ Implementasi **Offline-First Architecture** dengan triple-layer redundancy: WebS
 | **Workbox** | 7.0+ | Service Worker utilities |
 | **@vite-pwa/sveltekit** | - | PWA integration |
 
-### Local Sync Server Stack
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Node.js** | 18+ | Runtime environment |
-| **Express** | 4.18+ | HTTP server untuk polling |
-| **Socket.IO** | 4.6+ | WebSocket library untuk local sync |
-| **In-Memory Storage** | - | Order caching (100 orders/outlet) |
+### Local Sync Server Stack (⚠️ NEEDS UPGRADE)
+| Technology | Version | Purpose | Status |
+|------------|---------|---------|--------|
+| **Node.js** | 18+ | Runtime environment | ✅ OK |
+| **Express** | 4.18+ | HTTP server untuk polling | ✅ OK |
+| **Socket.IO** | 4.6+ | WebSocket library untuk local sync | ⚠️ Optional |
+| **In-Memory Storage** | - | Order caching (100 orders/outlet) | ❌ **MUST REPLACE** |
+| **SQLite / DuckDB** | - | Persistent local storage | 🔥 **REQUIRED** |
+| **better-sqlite3** | 9.0+ | Fast SQLite driver | 🔥 **REQUIRED** |
+
+> **🔴 CRITICAL:** In-memory storage TIDAK AMAN untuk production. Raspberry Pi restart = data loss. WAJIB upgrade ke SQLite dengan WAL mode.
 
 ### Communication Protocols
 | Protocol | Port | Use Case |
@@ -54,7 +215,281 @@ Implementasi **Offline-First Architecture** dengan triple-layer redundancy: WebS
 | **Client Cache** | IndexedDB | Offline orders queue (pending sync) |
 | **Static Cache** | Service Worker Cache API | App assets, static files |
 
-## Arsitektur
+---
+
+## 🎯 Recommended Architecture (F&B Best Practices)
+
+### Simplified Flow - Offline-First Priority
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                    F&B POS GOLDEN RULE                         ║
+║                                                                ║
+║  "Order ditulis ke IndexedDB DULU, baru sync ke cloud"        ║
+║                                                                ║
+║  IndexedDB = Single Source of Truth (offline)                 ║
+║  Backend = Eventual Consistency Sink                          ║
+╚═══════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────┐
+│                   SIMPLIFIED ARCHITECTURE                    │
+│                                                              │
+│  Kiosk Frontend                                              │
+│  ┌──────────────────────────────────────────┐               │
+│  │  1. Order Created                        │               │
+│  │     ↓                                    │               │
+│  │  2. Write to IndexedDB (PRIMARY)         │ ← MUST SUCCEED│
+│  │     ↓                                    │               │
+│  │  3. Trigger Service Worker Sync          │               │
+│  │     ├─ If Online → Backend (immediate)   │               │
+│  │     ├─ If Offline → Queue (retry later)  │               │
+│  │     └─ Broadcast to Local Sync (LAN)     │               │
+│  └──────────────────────────────────────────┘               │
+│                                                              │
+│  Communication Layers (Priority Order):                      │
+│  ┌────────────────────────────────────────┐                 │
+│  │ Priority 1: IndexedDB Write            │ ← PRIMARY       │
+│  │ Priority 2: Local Sync Broadcast (LAN) │ ← Kitchen sync  │
+│  │ Priority 3: Backend Sync (Cloud)       │ ← Eventual      │
+│  └────────────────────────────────────────┘                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Component Roles (Simplified)
+
+| Component | Role | Priority | Dependency |
+|-----------|------|----------|------------|
+| **IndexedDB** | Single source of truth | 🔥 P0 | None (always available) |
+| **Service Worker** | Sync orchestrator | 🔥 P0 | IndexedDB |
+| **Local Sync Server** | LAN broadcast only | ⚠️ P1 | IndexedDB |
+| **Backend API** | Eventual consistency | ✅ P2 | IndexedDB + Service Worker |
+| **WebSocket** | Optional real-time (nice-to-have) | 💡 P3 | Backend |
+
+### Order Creation Flow (Recommended)
+
+```javascript
+// ✅ RECOMMENDED: IndexedDB-First
+async function createOrder(orderData) {
+  // 1. Generate offline-safe ID
+  const orderId = ulid(); // sortable, unique, no collision
+  
+  // 2. Create order with snapshot (not references)
+  const order = {
+    id: orderId,
+    outlet_id: currentOutlet.id,
+    items: orderData.items.map(item => ({
+      product_id: item.product.id,
+      product_name: item.product.name,    // snapshot
+      price: item.product.price,          // snapshot (frozen)
+      quantity: item.quantity,
+      modifiers: item.modifiers.map(m => ({
+        id: m.id,
+        name: m.name,
+        price: m.price                    // snapshot
+      })),
+      subtotal: item.quantity * item.product.price
+    })),
+    subtotal: calculateSubtotal(orderData.items),
+    tax: calculateTax(orderData.items),
+    total: calculateTotal(orderData.items),
+    promotions: getActivePromotions(),   // snapshot
+    status: 'pending',
+    created_at: new Date().toISOString(),
+    synced_to_backend: false,
+    synced_to_local: false
+  };
+  
+  // 3. Write to IndexedDB (PRIMARY - MUST SUCCEED)
+  try {
+    await indexedDB.put('orders', order);
+  } catch (error) {
+    // ❌ CRITICAL: IndexedDB write failed
+    alert('CRITICAL: Order tidak bisa disimpan. Jangan lanjut transaksi!');
+    throw new Error('IndexedDB write failed');
+  }
+  
+  // 4. Trigger sync (non-blocking)
+  serviceWorker.postMessage({
+    type: 'SYNC_ORDER',
+    orderId: orderId
+  });
+  
+  // 5. Broadcast to local devices (best-effort)
+  if (navigator.onLine) {
+    fetch('http://192.168.1.100:3001/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ event: 'new_order', data: order })
+    }).catch(() => {}); // Ignore failure
+  }
+  
+  return order;
+}
+```
+
+### Order ID Strategy (ULID)
+
+```javascript
+// ✅ INSTALL ULID
+// npm install ulid
+
+import { ulid } from 'ulid';
+
+// Generate ID
+const orderId = ulid();
+// → "01HTXK9Y9F3N7D4R8W5S1MZQ9C"
+
+// Properties:
+// - 26 characters (Base32)
+// - Sortable by creation time
+// - 128-bit unique (1.21e+24 possible IDs)
+// - No collision (even across devices)
+// - Offline-safe (no coordination needed)
+// - Compatible with string databases
+
+// Usage in schema:
+interface Order {
+  id: string;              // ULID (not number!)
+  order_number: string;    // Human-readable (ORD-0001)
+  outlet_id: number;
+  items: OrderItem[];
+  total: number;
+  created_at: string;      // ISO 8601
+  synced_at: string | null;
+}
+```
+
+### Conflict Resolution Matrix
+
+```typescript
+// Conflict resolver for F&B POS
+class OrderConflictResolver {
+  resolve(localOrder: Order, remoteOrder: Order): Order {
+    // Rule 1: Order creation - always accept
+    if (!remoteOrder) {
+      return localOrder; // Local order is new
+    }
+    
+    // Rule 2: Status conflicts
+    const statusPriority = {
+      'completed': 5,
+      'cooking': 4,
+      'confirmed': 3,
+      'cancelled': 2,
+      'pending': 1
+    };
+    
+    if (localOrder.status !== remoteOrder.status) {
+      // Higher priority wins
+      if (statusPriority[localOrder.status] > statusPriority[remoteOrder.status]) {
+        return localOrder;
+      } else {
+        return remoteOrder;
+      }
+    }
+    
+    // Rule 3: Last-write-wins (timestamp)
+    const localTime = new Date(localOrder.updated_at).getTime();
+    const remoteTime = new Date(remoteOrder.updated_at).getTime();
+    
+    return localTime > remoteTime ? localOrder : remoteOrder;
+  }
+  
+  // Rule 4: Price & modifiers NEVER recalculated
+  validateSnapshot(order: Order): boolean {
+    // Ensure all prices are snapshot, not references
+    for (const item of order.items) {
+      if (typeof item.price !== 'number') {
+        throw new Error('Price must be snapshot number');
+      }
+      if (typeof item.subtotal !== 'number') {
+        throw new Error('Subtotal must be calculated');
+      }
+    }
+    return true;
+  }
+}
+```
+
+### Local Sync Server Upgrade (REQUIRED)
+
+```javascript
+// ❌ OLD: In-memory (data loss on restart)
+const orderCache = new Map();
+
+// ✅ NEW: SQLite with WAL mode
+import Database from 'better-sqlite3';
+
+const db = new Database('local-sync.db', {
+  verbose: console.log
+});
+
+// Enable WAL mode (Write-Ahead Logging)
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+
+// Create orders table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    outlet_id INTEGER NOT NULL,
+    order_data TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    synced_to_cloud INTEGER DEFAULT 0,
+    INDEX idx_outlet_created (outlet_id, created_at)
+  )
+`);
+
+// Insert order (replaces in-memory Map)
+function storeOrder(order) {
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO orders (id, outlet_id, order_data, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  
+  stmt.run(
+    order.id,
+    order.outlet_id,
+    JSON.stringify(order),
+    order.created_at
+  );
+}
+
+// Get orders for polling (replaces in-memory lookup)
+function getOrders(outletId, sinceId = null) {
+  let stmt;
+  
+  if (sinceId) {
+    stmt = db.prepare(`
+      SELECT order_data FROM orders
+      WHERE outlet_id = ? AND id > ?
+      ORDER BY created_at DESC
+      LIMIT 100
+    `);
+    return stmt.all(outletId, sinceId).map(row => JSON.parse(row.order_data));
+  } else {
+    stmt = db.prepare(`
+      SELECT order_data FROM orders
+      WHERE outlet_id = ?
+      ORDER BY created_at DESC
+      LIMIT 100
+    `);
+    return stmt.all(outletId).map(row => JSON.parse(row.order_data));
+  }
+}
+
+// Auto-backup every 5 minutes
+setInterval(() => {
+  db.backup(`backups/local-sync-${Date.now()}.db`)
+    .then(() => console.log('✅ Backup complete'))
+    .catch(err => console.error('❌ Backup failed:', err));
+}, 5 * 60 * 1000);
+```
+
+---
+
+## Arsitektur (Current Implementation - Needs Refactoring)
+
+> **⚠️ NOTE:** Arsitektur di bawah ini adalah implementasi saat ini yang PERLU DISEDERHANAKAN. Lihat "Recommended Architecture" di atas untuk best practices.
 
 ### System Architecture Overview
 
