@@ -1,11 +1,22 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-// import { VitePWA } from 'vite-plugin-pwa';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
 	plugins: [
-		sveltekit()
-		// PWA Plugin temporarily disabled
+		sveltekit(),
+		VitePWA({
+			strategies: 'injectManifest',
+			srcDir: 'src',
+			filename: 'service-worker.js',
+			injectManifest: {
+				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}']
+			},
+			devOptions: {
+				enabled: true,
+				type: 'module'
+			}
+		})
 	],
 	build: {
 		rollupOptions: {
