@@ -3,6 +3,33 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { ulid } from 'ulid';
 
+// ===== HELPER FUNCTIONS =====
+// Must be declared before usage to avoid hoisting issues
+
+function generateDeviceId(): string {
+	if (!browser || typeof window === 'undefined' || !window.localStorage) {
+		return 'KIOSK-TEMP';
+	}
+	
+	try {
+		const stored = localStorage.getItem('kiosk_device_id');
+		if (stored) return stored;
+
+		// Use ULID for unique, sortable device ID
+		const newId = `KIOSK-${ulid()}`;
+		localStorage.setItem('kiosk_device_id', newId);
+		return newId;
+	} catch (e) {
+		console.warn('Failed to access localStorage for device ID:', e);
+		return 'KIOSK-TEMP';
+	}
+}
+
+function generateSessionId(): string {
+	// Use ULID for session ID (sortable, unique)
+	return `SESS-${ulid()}`;
+}
+
 // ===== KIOSK CONFIGURATION =====
 
 export interface KioskConfig {
@@ -360,32 +387,6 @@ export const selectedOutlet = writable<SelectedOutlet>({
 	taxRate: 10,
 	serviceChargeRate: 5
 });
-
-// ===== HELPER FUNCTIONS =====
-
-function generateDeviceId(): string {
-	if (!browser || typeof window === 'undefined' || !window.localStorage) {
-		return 'KIOSK-TEMP';
-	}
-	
-	try {
-		const stored = localStorage.getItem('kiosk_device_id');
-		if (stored) return stored;
-
-		// Use ULID for unique, sortable device ID
-		const newId = `KIOSK-${ulid()}`;
-		localStorage.setItem('kiosk_device_id', newId);
-		return newId;
-	} catch (e) {
-		console.warn('Failed to access localStorage for device ID:', e);
-		return 'KIOSK-TEMP';
-	}
-}
-
-function generateSessionId(): string {
-	// Use ULID for session ID (sortable, unique)
-	return `SESS-${ulid()}`;
-}
 
 // ===== DERIVED STORES =====
 

@@ -61,7 +61,7 @@ registerRoute(
 // Order submission with Background Sync
 registerRoute(
   ({ url, request }) => 
-    url.pathname.includes('/api/public/order-groups/') && 
+    url.pathname.includes('/api/orders/order-groups/') && 
     request.method === 'POST',
   new NetworkFirst({
     cacheName: 'order-submissions',
@@ -137,7 +137,7 @@ async function syncOrders() {
     
     for (const order of orders) {
       try {
-        const response = await fetch('/api/public/order-groups/', {
+        const response = await fetch('/api/orders/order-groups/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

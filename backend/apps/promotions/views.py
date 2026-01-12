@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import models
@@ -22,7 +22,7 @@ class PromotionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Promotion CRUD operations
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Changed to AllowAny for Kiosk public access
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'promo_type', 'is_active', 'is_featured', 'tenant']
     search_fields = ['name', 'description', 'code']
@@ -35,8 +35,18 @@ class PromotionViewSet(viewsets.ModelViewSet):
         # Get tenant filter from query params (for admin users)
         tenant_id = self.request.query_params.get('tenant')
         
+        # PUBLIC ACCESS (Anonymous users - Kiosk Mode): Show all active promotions
+        if user.is_anonymous:
+            queryset = Promotion.objects.filter(is_active=True)
+            
+            # Optional: Filter by tenant_id from query params
+            if tenant_id:
+                try:
+                    queryset = queryset.filter(tenant_id=int(tenant_id))
+                except (ValueError, TypeError):
+                    pass
         # Super admins can see all promotions
-        if is_admin_user(user):
+        elif is_admin_user(user):
             queryset = Promotion.objects.all()
             
             # Apply tenant filter for admin if provided
@@ -46,7 +56,7 @@ class PromotionViewSet(viewsets.ModelViewSet):
                 except (ValueError, TypeError):
                     pass
         # Tenant owners/managers see their tenant's promos
-        elif user.tenant:
+        elif hasattr(user, 'tenant') and user.tenant:
             queryset = Promotion.objects.filter(tenant=user.tenant)
         else:
             queryset = Promotion.objects.none()

@@ -4,6 +4,28 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 
+// ===== HELPER FUNCTIONS =====
+// Must be declared before usage to avoid hoisting issues
+
+/**
+ * Get auth token from localStorage
+ */
+function getAuthToken() {
+	if (!browser) return '';
+	return localStorage.getItem('auth_token') || '';
+}
+
+/**
+ * Check if auth token exists
+ */
+export function hasToken() {
+	if (!browser) return false;
+	const token = localStorage.getItem('auth_token');
+	return token !== null && token !== '';
+}
+
+// ===== STORES =====
+
 // Core tenant stores
 export const currentTenant = writable(null);
 export const currentOutlet = writable(null);
@@ -14,6 +36,8 @@ export const tenantReady = derived(
 	[currentTenant, currentOutlet],
 	([$tenant, $outlet]) => $tenant !== null && $outlet !== null
 );
+
+// ===== API FUNCTIONS =====
 
 /**
  * Load current tenant information from API
@@ -180,14 +204,6 @@ export function getTenantId() {
 export function getOutletId() {
 	const outlet = get(currentOutlet);
 	return outlet?.id || null;
-}
-
-/**
- * Get auth token from localStorage
- */
-function getAuthToken() {
-	if (!browser) return '';
-	return localStorage.getItem('auth_token') || '';
 }
 
 /**

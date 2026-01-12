@@ -37,6 +37,7 @@ class TenantMiddleware(MiddlewareMixin):
         '/api/auth/refresh/',
         '/api/health/',
         '/api/public/',  # Public kiosk endpoints (tenants, etc)
+        '/api/tenants/public/',  # Public tenant/store endpoints for kiosk
         '/api/admin/tenants/',  # Admin tenant management (superuser only)
         '/api/admin/settings/',  # Admin settings management (admin access)
         '/api/admin/users/',  # User management (admin access)

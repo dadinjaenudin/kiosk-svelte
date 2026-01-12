@@ -2,32 +2,28 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import '../app.css';
-	import { initializeTenantContext, currentTenant, tenantReady } from '$lib/stores/tenant.js';
+	import { initializeTenantContext, currentTenant, tenantReady, hasToken } from '$lib/stores/tenant.js';
 	import { masterDataService } from '$lib/services/masterDataService';
 	import { networkService } from '$lib/services/networkService';
-	import { serviceWorkerManager } from '$lib/services/serviceWorkerManager';
+	// import { serviceWorkerManager } from '$lib/services/serviceWorkerManager';
 	
 	let loading = true;
 	
 	onMount(async () => {
 		if (browser) {
-			// Register Service Worker for offline support
-			try {
-				const swRegistered = await serviceWorkerManager.register();
-				if (swRegistered) {
-					console.log('✅ Service Worker registered');
-				}
-			} catch (error) {
-				console.error('❌ Service Worker registration failed:', error);
-			}
+			// TEMPORARILY DISABLED: Register Service Worker for offline support
+			// try {
+			// 	const swRegistered = await serviceWorkerManager.register();
+			// 	if (swRegistered) {
+			// 		console.log('✅ Service Worker registered');
+			// 	}
+			// } catch (error) {
+			// 	console.error('❌ Service Worker registration failed:', error);
+			// }
 			
-			// Start network monitoring
-			networkService.startMonitoring();
-			
-			// Check if we have auth token
-			const hasToken = localStorage.getItem('access_token');
-			
-			if (hasToken) {
+		// Network service starts monitoring automatically on initialization
+		// No need to call startMonitoring()
+			if (hasToken()) {
 				// Initialize tenant context
 				const success = await initializeTenantContext();
 				if (!success) {
