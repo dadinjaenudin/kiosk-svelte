@@ -100,13 +100,24 @@
 				throw new Error('Cart is empty');
 			}
 			
-			// Check network status
-			let isOnline = $networkStatus.isOnline;
-			console.log(`📡 Network status: ${isOnline ? 'Online' : 'Offline'}`);
+			// Check network status with multiple sources
+			// 1. Check browser navigator.onLine (instant, but not 100% reliable)
+			// 2. Check networkService status (health check based)
+			const navigatorOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+			const serviceOnline = $networkStatus.isOnline;
+			
+			// If EITHER says offline, treat as offline (safer approach)
+			let isOnline = navigatorOnline && serviceOnline;
+			
+			console.log(`📡 Network status check:`, {
+				navigator: navigatorOnline ? 'Online' : 'Offline',
+				service: serviceOnline ? 'Online' : 'Offline',
+				final: isOnline ? 'Online' : 'Offline'
+			});
 			
 			if (!isOnline) {
 				// OFFLINE MODE: Save to IndexedDB
-				console.log('📴 Offline mode: Saving order to local storage...');
+				console.log('📴 Offline mode detected: Saving order to local storage...');
 				
 				try {
 					// Save the complete checkout data as one offline order
@@ -196,15 +207,18 @@
 				}
 			}
 			
-			// ONLINE MODE: Send to backend
-			const response = await fetch(`${API_BASE}/order-groups/`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-Tenant-ID': $kioskConfig.tenantId?.toString() || ''
-				},
-				body: JSON.stringify(checkoutData)
-			});
+			// ONLINE MODE: Try to send to backend
+			console.log('🌐 Online mode: Sending order to backend...');
+			
+			try {
+				const response = await fetch(`${API_BASE}/order-groups/`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Tenant-ID': $kioskConfig.tenantId?.toString() || ''
+					},
+					body: JSON.stringify(checkoutData)
+				});
 			
 			if (!response.ok) {
 				const errorData = await response.json();
@@ -240,6 +254,82 @@
 			
 			// Navigate to success page
 			goto(`/kiosk/success/${orderGroup.group_number}`);
+			
+			} catch (networkError) {
+				// FALLBACK: If online POST fails, save to offline queue
+				console.warn('⚠️ Backend request failed, falling back to offline mode');
+				console.error('Network error:', networkError);
+				
+				// Save as offline order
+				try {
+					const orderId = ulid();
+					const offlineOrder = {
+						order_number: `OFFLINE-${orderId}`,
+						checkout_data: checkoutData,
+						store_id: checkoutData.store_id,
+						customer_name: checkoutData.customer_name,
+						customer_phone: checkoutData.customer_phone || '',
+						customer_email: checkoutData.customer_email || null,
+						payment_method: paymentMethod,
+						total_amount: totalAmount,
+						subtotal: totalAmount * 0.8,
+						tenant_id: $kioskConfig.tenantId,
+						status: 'pending',
+						created_at: new Date().toISOString(),
+						synced: false,
+						sync_attempts: 0,
+						items: checkoutData.carts.flatMap((cart: any) => 
+							cart.items.map((item: any) => ({
+								product_id: item.product_id,
+								product_name: item.product_name,
+								price: item.price,
+								quantity: item.quantity,
+								modifiers: item.modifiers,
+								modifiers_price: item.modifiers_price,
+								subtotal: item.subtotal
+							}))
+						)
+					};
+					
+					const validation = validateOrderSnapshot(offlineOrder);
+					if (!validation.valid) {
+						throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
+					}
+					
+					await offlineOrderService.saveOrder(offlineOrder);
+					console.log(`✅ Saved as offline order: ${offlineOrder.order_number}`);
+					
+					// Broadcast to local sync
+					socketService.emitToLocal('order:created:offline', {
+						order_number: offlineOrder.order_number,
+						store_id: offlineOrder.store_id,
+						customer_name: offlineOrder.customer_name,
+						total_amount: offlineOrder.total_amount,
+						payment_method: offlineOrder.payment_method,
+						created_at: offlineOrder.created_at,
+						status: 'pending'
+					});
+					
+					multiCart.clearAll();
+					
+					// Show offline success
+					offlineOrderData = {
+						orderNumber: offlineOrder.order_number,
+						payment: paymentMethod,
+						total: totalAmount,
+						cashGiven: cashAmount,
+						change: changeAmount,
+						customerName: customerName,
+						customerPhone: customerPhone
+					};
+					showOfflineSuccess = true;
+					return;
+					
+				} catch (offlineSaveError) {
+					console.error('❌ Failed to save offline order:', offlineSaveError);
+					throw new Error(`Network failed and offline save failed: ${offlineSaveError.message}`);
+				}
+			}
 			
 		} catch (err) {
 			console.error('❌ Checkout error:', err);
