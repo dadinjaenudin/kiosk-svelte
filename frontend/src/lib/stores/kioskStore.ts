@@ -86,15 +86,24 @@ export const kioskConfig = createKioskConfig();
 
 // ===== MULTI-OUTLET CART =====
 
+/**
+ * Cart Item Interface
+ * 
+ * ⚠️ IMPORTANT: All prices are SNAPSHOTS (frozen values)
+ * - price: Product price at time of adding to cart
+ * - modifiersPrice: Total modifier price at time of selection
+ * - NEVER recalculate from product reference after adding to cart
+ * - This ensures price consistency (F&B legal requirement)
+ */
 export interface CartItem {
-	id: string; // Unique ID for cart item
+	id: string; // Unique ID for cart item (ULID-based)
 	productId: number;
-	productName: string;
-	productSku: string;
-	price: number;
+	productName: string; // SNAPSHOT: Name frozen
+	productSku: string;  // SNAPSHOT: SKU frozen
+	price: number;       // SNAPSHOT: Product price frozen (not reference!)
 	quantity: number;
-	modifiers: any[];
-	modifiersPrice: number;
+	modifiers: any[];    // SNAPSHOT: Modifier details frozen
+	modifiersPrice: number; // SNAPSHOT: Total modifier price frozen
 	notes: string;
 	image?: string;
 }
@@ -295,6 +304,7 @@ function createMultiCart() {
 			const state = get({ subscribe });
 			const config = get(kioskConfig);
 
+			// ✅ SNAPSHOT STRATEGY: Freeze prices at order creation
 			return {
 				store_id: config.storeId,
 				customer_name: '',
@@ -306,9 +316,20 @@ function createMultiCart() {
 					outlet_id: cart.outletId,
 					items: cart.items.map(item => ({
 						product_id: item.productId,
+						product_name: item.productName, // SNAPSHOT: Name at order time
+						product_sku: item.productSku,   // SNAPSHOT: SKU at order time
+						price: item.price,              // SNAPSHOT: Price frozen (not reference!)
 						quantity: item.quantity,
-						modifiers: item.modifiers,
-						notes: item.notes
+						modifiers: item.modifiers.map(mod => ({
+							// SNAPSHOT: Modifier details frozen
+							id: mod.id,
+							name: mod.name,
+							price: mod.price || 0,      // SNAPSHOT: Modifier price frozen
+							price_adjustment: mod.price_adjustment || 0
+						})),
+						modifiers_price: item.modifiersPrice, // SNAPSHOT: Total modifiers price
+						notes: item.notes,
+						subtotal: (item.price + item.modifiersPrice) * item.quantity // SNAPSHOT: Calculated subtotal
 					}))
 				}))
 			};

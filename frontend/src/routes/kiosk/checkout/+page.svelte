@@ -4,7 +4,7 @@
 	import { browser } from '$app/environment';
 	import { multiCart, kioskConfig } from '$lib/stores/kioskStore';
 	import * as kioskStore from '$lib/stores/kioskStore';
-	import { offlineOrderService } from '$lib/services/offlineOrderService';
+	import { offlineOrderService, validateOrderSnapshot } from '$lib/services/offlineOrderService';
 	import { syncService, syncProgress } from '$lib/services/syncService';
 	import { networkStatus } from '$lib/services/networkService';
 	import { socketService } from '$lib/services/socketService';
@@ -120,12 +120,34 @@
 						customer_email: checkoutData.customer_email || null,
 						payment_method: paymentMethod,
 						total_amount: totalAmount,
+						subtotal: totalAmount * 0.8, // Rough estimate if not provided
 						tenant_id: $kioskConfig.tenantId,
 						status: 'pending',
 						created_at: new Date().toISOString(),
 						synced: false,
-						sync_attempts: 0
+						sync_attempts: 0,
+						// Extract items for validation (flatten from carts)
+						items: checkoutData.carts.flatMap((cart: any) => 
+							cart.items.map((item: any) => ({
+								product_id: item.product_id,
+								product_name: item.product_name,
+								price: item.price,
+								quantity: item.quantity,
+								modifiers: item.modifiers,
+								modifiers_price: item.modifiers_price,
+								subtotal: item.subtotal
+							}))
+						)
 					};
+					
+					// ✅ VALIDATE SNAPSHOT INTEGRITY
+					const validation = validateOrderSnapshot(offlineOrder);
+					if (!validation.valid) {
+						console.error('❌ Snapshot validation failed:', validation.errors);
+						error = `Order validation failed: ${validation.errors.join(', ')}`;
+						return;
+					}
+					console.log('✅ Snapshot validation passed');
 					
 					console.log('💾 Saving offline order:', offlineOrder.order_number);
 					await offlineOrderService.saveOrder(offlineOrder);

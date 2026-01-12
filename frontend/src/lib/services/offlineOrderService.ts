@@ -11,11 +11,92 @@
  * - FIFO order processing
  * - Conflict detection
  * - ULID for unique sortable IDs (offline-safe)
+ * - Price snapshot validation (F&B requirement)
  */
 
 import Dexie, { type Table } from 'dexie';
 import { browser } from '$app/environment';
 import { ulid } from 'ulid';
+
+/**
+ * Validate order snapshot integrity
+ * Ensures all prices are frozen values, not references
+ */
+export function validateOrderSnapshot(order: any): { valid: boolean; errors: string[] } {
+	const errors: string[] = [];
+
+	// Validate total_amount exists and is a number
+	if (typeof order.total_amount !== 'number' || isNaN(order.total_amount)) {
+		errors.push('total_amount must be a valid number');
+	}
+
+	// Validate subtotal exists
+	if (typeof order.subtotal !== 'number' || isNaN(order.subtotal)) {
+		errors.push('subtotal must be a valid number');
+	}
+
+	// Validate items exist
+	if (!order.items || !Array.isArray(order.items) || order.items.length === 0) {
+		errors.push('items array is required and must not be empty');
+	} else {
+		// Validate each item
+		order.items.forEach((item: any, index: number) => {
+			// Price must be snapshot (number), not reference
+			if (typeof item.price !== 'number' || isNaN(item.price)) {
+				errors.push(`Item ${index}: price must be a frozen number (snapshot)`);
+			}
+
+			// Quantity validation
+			if (typeof item.quantity !== 'number' || item.quantity <= 0) {
+				errors.push(`Item ${index}: quantity must be a positive number`);
+			}
+
+			// Product name must be snapshot
+			if (!item.product_name || typeof item.product_name !== 'string') {
+				errors.push(`Item ${index}: product_name is required (snapshot)`);
+			}
+
+			// Subtotal validation (if exists)
+			if (item.subtotal !== undefined) {
+				if (typeof item.subtotal !== 'number' || isNaN(item.subtotal)) {
+					errors.push(`Item ${index}: subtotal must be a number`);
+				}
+				// Verify subtotal calculation
+				const expectedSubtotal = (item.price + (item.modifiers_price || 0)) * item.quantity;
+				if (Math.abs(item.subtotal - expectedSubtotal) > 0.01) {
+					errors.push(`Item ${index}: subtotal mismatch (expected ${expectedSubtotal}, got ${item.subtotal})`);
+				}
+			}
+
+			// Validate modifiers snapshot
+			if (item.modifiers && Array.isArray(item.modifiers)) {
+				item.modifiers.forEach((mod: any, modIndex: number) => {
+					if (typeof mod.price !== 'number') {
+						errors.push(`Item ${index}, Modifier ${modIndex}: price must be a frozen number`);
+					}
+					if (!mod.name || typeof mod.name !== 'string') {
+						errors.push(`Item ${index}, Modifier ${modIndex}: name is required`);
+					}
+				});
+			}
+		});
+	}
+
+	// Validate payment_method
+	if (!order.payment_method || typeof order.payment_method !== 'string') {
+		errors.push('payment_method is required');
+	}
+
+	// Validate created_at timestamp
+	if (!order.created_at || typeof order.created_at !== 'string') {
+		errors.push('created_at timestamp is required');
+	}
+
+	return {
+		valid: errors.length === 0,
+		errors
+	};
+}
 
 export interface OfflineOrder {
 	id?: number; // Auto-increment local ID
