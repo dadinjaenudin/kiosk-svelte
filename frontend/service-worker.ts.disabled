@@ -1,0 +1,143 @@
+/**
+ * Service Worker for Kiosk PWA - SIMPLIFIED VERSION
+ * 
+ * Features:
+ * - Precaching build assets
+ * - Basic offline caching
+ * - Simple runtime caching strategies
+ * 
+ * Version: 1.0.0-simplified
+ * Date: 2026-01-12
+ */
+
+/// <reference lib="webworker" />
+declare const self: ServiceWorkerGlobalScope;
+
+import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
+import { registerRoute, NavigationRoute } from 'workbox-routing';
+import { NetworkFirst, CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
+import { ExpirationPlugin } from 'workbox-expiration';
+
+// ============================================================================
+// PRECACHING (Build assets)
+// ============================================================================
+
+// Precache all build assets (injected by build process)
+const manifest = self.__WB_MANIFEST || [];
+if (manifest.length > 0) {
+	precacheAndRoute(manifest);
+	console.log(`[SW] Precached ${manifest.length} assets`);
+} else {
+	console.warn('[SW] No manifest entries found');
+}
+
+console.log('[SW] Service Worker loaded');
+
+// ============================================================================
+// NAVIGATION HANDLING (Offline HTML)
+// ============================================================================
+
+// Serve precached HTML for navigation requests
+const handler = createHandlerBoundToURL('/');
+const navigationRoute = new NavigationRoute(handler, {
+	denylist: [/^\/api\//], // Don't use precache for API routes
+});
+registerRoute(navigationRoute);
+
+// ============================================================================
+// CACHING STRATEGIES
+// ============================================================================
+
+// Strategy 1: API Routes - NetworkFirst (try network, fallback to cache)
+registerRoute(
+	({ url }) => url.pathname.startsWith('/api/'),
+	new NetworkFirst({
+		cacheName: 'api-cache-v1',
+		plugins: [
+			new CacheableResponsePlugin({
+				statuses: [0, 200],
+			}),
+			new ExpirationPlugin({
+				maxEntries: 50,
+				maxAgeSeconds: 5 * 60, // 5 minutes
+			}),
+		],
+	})
+);
+
+// Strategy 2: Master Data - StaleWhileRevalidate
+registerRoute(
+	({ url }) => 
+		url.pathname.includes('/api/products/') ||
+		url.pathname.includes('/api/categories/') ||
+		url.pathname.includes('/api/promotions/'),
+	new StaleWhileRevalidate({
+		cacheName: 'master-data-cache-v1',
+		plugins: [
+			new CacheableResponsePlugin({
+				statuses: [0, 200],
+			}),
+			new ExpirationPlugin({
+				maxEntries: 100,
+				maxAgeSeconds: 60 * 60, // 1 hour
+			}),
+		],
+	})
+);
+
+// Strategy 3: Images - CacheFirst
+registerRoute(
+	({ request }) => request.destination === 'image',
+	new CacheFirst({
+		cacheName: 'images-cache-v1',
+		plugins: [
+			new CacheableResponsePlugin({
+				statuses: [0, 200],
+			}),
+			new ExpirationPlugin({
+				maxEntries: 200,
+				maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+			}),
+		],
+	})
+);
+
+// Strategy 4: Static Assets - CacheFirst
+registerRoute(
+	({ request }) => {
+		const dest = request.destination;
+		return dest === 'script' || dest === 'style' || dest === 'font';
+	},
+	new CacheFirst({
+		cacheName: 'static-assets-cache-v1',
+		plugins: [
+			new ExpirationPlugin({
+				maxEntries: 500,
+				maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+			}),
+		],
+	})
+);
+
+// ============================================================================
+// SERVICE WORKER LIFECYCLE
+// ============================================================================
+
+self.addEventListener('install', (event) => {
+	console.log('[SW] Installing...');
+	self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+	console.log('[SW] Activating...');
+	event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('message', (event) => {
+	if (event.data && event.data.type === 'SKIP_WAITING') {
+		self.skipWaiting();
+	}
+});
+
+console.log('[SW] Service Worker initialized successfully');

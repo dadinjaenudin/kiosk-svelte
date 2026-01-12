@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { kioskConfig, multiCart } from '$lib/stores/kioskStore';
 	import ModifierModal from '$lib/components/ModifierModal.svelte';
+	import SyncButton from '$lib/components/SyncButton.svelte';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -163,6 +164,11 @@
 				<span class="cart-badge">{cartItemsCount}</span>
 			</button>
 		{/if}
+		
+		<!-- Sync Button -->
+		<div style="margin-left: 12px;">
+			<SyncButton size="sm" variant="outline" showLabel={false} />
+		</div>
 	</header>
 	
 	<!-- Search Bar -->

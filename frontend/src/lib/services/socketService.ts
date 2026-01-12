@@ -90,6 +90,8 @@ class SocketService {
 
 	/**
 	 * Connect to Central Server Socket.IO
+	 * TEMPORARY: Disabled because Django Channels doesn't support Socket.IO protocol
+	 * TODO: Either use Django Channels native WebSocket or install python-socketio
 	 */
 	connectCentral(): void {
 		if (!browser) {
@@ -97,6 +99,21 @@ class SocketService {
 			return;
 		}
 
+		// TEMPORARY DISABLED: Django Channels doesn't support Socket.IO
+		console.log('ℹ️ Central Server WebSocket unavailable (using HTTP polling instead)');
+		console.log('   Django Channels uses native WebSocket, not Socket.IO protocol');
+		console.log('   Kitchen display will use HTTP polling for order updates');
+		
+		// Mark as unavailable and use polling mode
+		this.updateStatus({
+			centralConnected: false,
+			mode: 'polling',
+			isPolling: false // Will be set to true when polling starts
+		});
+		
+		return;
+
+		/* ORIGINAL CODE - Re-enable when Socket.IO is properly configured
 		if (this.centralSocket?.connected) {
 			console.log('🟢 Central Socket: Already connected');
 			return;
@@ -113,6 +130,7 @@ class SocketService {
 		});
 
 		this.setupCentralHandlers();
+		*/
 	}
 
 	/**

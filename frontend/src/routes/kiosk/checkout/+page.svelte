@@ -9,6 +9,7 @@
 	import { networkStatus } from '$lib/services/networkService';
 	import { socketService } from '$lib/services/socketService';
 	import { ulid } from 'ulid';
+	import SyncButton from '$lib/components/SyncButton.svelte';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -391,6 +392,9 @@
 				</svg>
 			</button>
 			<h1>Checkout</h1>
+			<div class="sync-button-container">
+				<SyncButton size="md" variant="outline" />
+			</div>
 		</div>
 		
 		<!-- Customer Info Form -->

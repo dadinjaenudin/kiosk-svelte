@@ -4,6 +4,7 @@
 	import KioskHeader from '$lib/components/kiosk/KioskHeader.svelte';
 	import { socketService } from '$lib/services/socketService';
 	import { networkStatus } from '$lib/services/networkService';
+	import { masterDataService } from '$lib/services/masterDataService';
 	
 	// Preload all kiosk routes when layout mounts
 	onMount(() => {
@@ -15,6 +16,14 @@
 		preloadCode('/kiosk/checkout');
 		preloadCode('/kiosk/success-offline');
 		console.log('✅ Kiosk routes preloaded');
+		
+		// Pre-fetch master data (async, non-blocking)
+		console.log('🔄 Pre-fetching master data...');
+		masterDataService.init().then(() => {
+			console.log('✅ Master data initialized');
+		}).catch((error) => {
+			console.error('❌ Master data initialization failed:', error);
+		});
 		
 		// Initialize Socket.IO connections
 		console.log('🔌 Initializing Socket.IO connections...');
@@ -43,6 +52,7 @@
 		
 		return () => {
 			unsubscribe();
+			masterDataService.stopBackgroundRefresh();
 		};
 	});
 </script>
