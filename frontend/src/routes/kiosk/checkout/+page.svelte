@@ -139,15 +139,16 @@
 						synced: false,
 						sync_attempts: 0,
 						// Extract items for validation (flatten from carts)
+						// Cart uses camelCase: productId, productName, modifiersPrice
 						items: checkoutData.carts.flatMap((cart: any) => 
 							cart.items.map((item: any) => ({
-								product_id: item.product_id,
-								product_name: item.product_name,
-								price: item.price,
-								quantity: item.quantity,
-								modifiers: item.modifiers,
-								modifiers_price: item.modifiers_price,
-								subtotal: item.subtotal
+								product_id: item.productId,           // CartItem.productId
+								product_name: item.productName,       // CartItem.productName
+								price: Number(item.price) || 0,       // CartItem.price (ensure number)
+								quantity: Number(item.quantity) || 1, // CartItem.quantity
+								modifiers: item.modifiers || [],      // CartItem.modifiers
+								modifiers_price: Number(item.modifiersPrice) || 0, // CartItem.modifiersPrice
+								subtotal: (Number(item.price) + Number(item.modifiersPrice || 0)) * Number(item.quantity)
 							}))
 						)
 					};
@@ -280,13 +281,13 @@
 						sync_attempts: 0,
 						items: checkoutData.carts.flatMap((cart: any) => 
 							cart.items.map((item: any) => ({
-								product_id: item.product_id,
-								product_name: item.product_name,
-								price: item.price,
-								quantity: item.quantity,
-								modifiers: item.modifiers,
-								modifiers_price: item.modifiers_price,
-								subtotal: item.subtotal
+								product_id: item.productId,           // CartItem.productId
+								product_name: item.productName,       // CartItem.productName
+								price: Number(item.price) || 0,       // CartItem.price (ensure number)
+								quantity: Number(item.quantity) || 1, // CartItem.quantity
+								modifiers: item.modifiers || [],      // CartItem.modifiers
+								modifiers_price: Number(item.modifiersPrice) || 0, // CartItem.modifiersPrice
+								subtotal: (Number(item.price) + Number(item.modifiersPrice || 0)) * Number(item.quantity)
 							}))
 						)
 					};
