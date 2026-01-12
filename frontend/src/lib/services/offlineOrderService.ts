@@ -10,10 +10,12 @@
  * - Sync queue with priority
  * - FIFO order processing
  * - Conflict detection
+ * - ULID for unique sortable IDs (offline-safe)
  */
 
 import Dexie, { type Table } from 'dexie';
 import { browser } from '$app/environment';
+import { ulid } from 'ulid';
 
 export interface OfflineOrder {
 	id?: number; // Auto-increment local ID

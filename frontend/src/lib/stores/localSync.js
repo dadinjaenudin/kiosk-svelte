@@ -6,6 +6,7 @@
 
 import { writable, get } from 'svelte/store';
 import { io } from 'socket.io-client';
+import { ulid } from 'ulid';
 
 // WebSocket connection state
 export const syncServerConnected = writable(false);
@@ -192,7 +193,7 @@ export function broadcastNewOrder(order) {
 		type: 'new_order',
 		timestamp: new Date().toISOString(),
 		data: {
-			order_number: order.order_number || `ORD-${Date.now()}`,
+			order_number: order.order_number || `ORD-${ulid()}`,
 			outlet_id: outletId, // Add outlet_id for kitchen display routing
 			tenant_id: tenantId,
 			tenant_name: order.tenant_name || 'Unknown Tenant',

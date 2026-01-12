@@ -3,6 +3,8 @@
  * Enhanced with Multi-Tenant Support
  */
 
+import { ulid } from 'ulid';
+
 // Get API URL - use environment variable or construct from window location
 const getAPIBaseURL = () => {
 	if (typeof window === 'undefined') {
@@ -132,11 +134,11 @@ class APIClient {
 			
 			headers['X-Source'] = source;
 			
-			// Add device ID (from localStorage or generate)
+			// Add device ID (from localStorage or generate using ULID)
 			let deviceId = localStorage.getItem('device_id');
 			if (!deviceId) {
-				// Generate device ID once
-				deviceId = `${source}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+				// Generate device ID once using ULID (sortable, unique)
+				deviceId = `${source}-${ulid()}`;
 				localStorage.setItem('device_id', deviceId);
 			}
 			headers['X-Device-ID'] = deviceId;

@@ -1,6 +1,7 @@
 // Kiosk Store - Manages kiosk configuration and multi-outlet cart
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { ulid } from 'ulid';
 
 // ===== KIOSK CONFIGURATION =====
 
@@ -206,9 +207,9 @@ function createMultiCart() {
 					// Update quantity
 					existingItem.quantity += quantity;
 				} else {
-					// Add new item
+					// Add new item with ULID-based cart item ID
 					const cartItem: CartItem = {
-						id: `${outletId}-${product.id}-${Date.now()}`,
+						id: `${outletId}-${product.id}-${ulid()}`,
 						productId: product.id,
 						productName: product.name,
 						productSku: product.sku,
@@ -350,7 +351,8 @@ function generateDeviceId(): string {
 		const stored = localStorage.getItem('kiosk_device_id');
 		if (stored) return stored;
 
-		const newId = `KIOSK-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+		// Use ULID for unique, sortable device ID
+		const newId = `KIOSK-${ulid()}`;
 		localStorage.setItem('kiosk_device_id', newId);
 		return newId;
 	} catch (e) {
@@ -360,7 +362,8 @@ function generateDeviceId(): string {
 }
 
 function generateSessionId(): string {
-	return `SESS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+	// Use ULID for session ID (sortable, unique)
+	return `SESS-${ulid()}`;
 }
 
 // ===== DERIVED STORES =====

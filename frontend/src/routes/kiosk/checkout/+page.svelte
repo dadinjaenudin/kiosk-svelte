@@ -8,6 +8,7 @@
 	import { syncService, syncProgress } from '$lib/services/syncService';
 	import { networkStatus } from '$lib/services/networkService';
 	import { socketService } from '$lib/services/socketService';
+	import { ulid } from 'ulid';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -108,8 +109,10 @@
 				
 				try {
 					// Save the complete checkout data as one offline order
+					// Generate ULID (sortable, unique, 128-bit, no collision)
+					const orderId = ulid();
 					const offlineOrder = {
-						order_number: `OFFLINE-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+						order_number: `OFFLINE-${orderId}`,
 						checkout_data: checkoutData, // Save complete checkout data for sync
 						store_id: checkoutData.store_id,
 						customer_name: checkoutData.customer_name,

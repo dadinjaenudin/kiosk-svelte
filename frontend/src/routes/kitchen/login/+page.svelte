@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { kitchenConfig } from '$lib/stores/kitchenStore';
+	import { ulid } from 'ulid';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -70,8 +71,8 @@
 				throw new Error('Invalid selection');
 			}
 			
-			// Generate device ID
-			const deviceId = `KITCHEN-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+			// Generate device ID using ULID (sortable, unique)
+			const deviceId = `KITCHEN-${ulid()}`;
 			
 			// Save configuration
 			kitchenConfig.setConfig({

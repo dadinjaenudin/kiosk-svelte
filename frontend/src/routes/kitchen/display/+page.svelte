@@ -7,6 +7,7 @@
 	import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
 	import { networkService, networkStatus, checkHealth } from '$lib/services/networkService';
 	import { socketService, socketStatus } from '$lib/services/socketService';
+	import { ulid } from 'ulid';
 	
 	const API_BASE = 'http://localhost:8001/api';
 	
@@ -78,9 +79,11 @@
 			console.log('🔔 Offline order received from kiosk:', data);
 			
 			// Transform offline order to match backend format
+			// Use ULID for temporary ID (sortable, unique)
+			const tempId = ulid();
 			const offlineOrder = {
-				id: `offline-${Date.now()}`, // Temporary ID
-				order_number: data.order_number || `OFFLINE-${Date.now()}`,
+				id: `offline-${tempId}`, // ULID-based temporary ID
+				order_number: data.order_number || `OFFLINE-${tempId}`,
 				order_group_id: null,
 				status: 'pending',
 				tenant: data.tenant_id,
@@ -102,18 +105,21 @@
 				created_at: data.created_at || new Date().toISOString(),
 				updated_at: data.created_at || new Date().toISOString(),
 				completed_at: null,
-				items: data.checkout_data?.carts?.[0]?.items?.map((item: any) => ({
-					id: `item-${Date.now()}-${Math.random()}`,
-					product: item.product_id,
-					product_name: item.product_name || `Product ${item.product_id}`,
-					product_image: null,
-					quantity: item.quantity || 1,
-					unit_price: '0.00',
-					total_price: '0.00',
-					notes: item.notes || '',
-					modifiers: item.modifiers || [],
-					modifiers_display: []
-				})) || [],
+				items: data.checkout_data?.carts?.[0]?.items?.map((item: any) => {
+					const itemId = ulid(); // Generate ULID for each item
+					return {
+						id: `item-${itemId}`,
+						product: item.product_id,
+						product_name: item.product_name || `Product ${item.product_id}`,
+						product_image: null,
+						quantity: item.quantity || 1,
+						unit_price: '0.00',
+						total_price: '0.00',
+						notes: item.notes || '',
+						modifiers: item.modifiers || [],
+						modifiers_display: []
+					};
+				}) || [],
 				wait_time: 0,
 				is_urgent: false,
 				is_offline: true // Flag to indicate this is offline order
